@@ -1,0 +1,6 @@
+test-results.txt
+ui-test-results.txt
+*.log
+build/
+/*.png
+!/compact-*.png
