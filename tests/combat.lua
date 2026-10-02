@@ -111,9 +111,43 @@ local function movement()
     check(g:move(p, 0, 1), "could not begin hop for queued input check")
     advance(g, .06)
     frame(g, {{kind = "face", dx = 1, dy = 0}, {kind = "step", dx = 1, dy = 0}})
+    check(p.grid.x == 5 and p.grid.y == 9, "new-direction tap stepped instead of only turning")
+    frame(g, {{kind = "face", dx = 1, dy = 0}, {kind = "step", dx = 1, dy = 0}})
     check(p.grid.x == 5 and p.grid.y == 9, "queued tap changed logical destination before landing")
     advance(g, .5)
     check(p.grid.x == 6 and p.grid.y == 9 and p.motion.remaining == 0, "movement buffer did not consume exactly one tap after landing")
+end
+
+local function turning()
+    -- A tap in a new direction only faces it; holding past a short delay starts walking.
+    local g = fixture("bow")
+    local p = g.player
+    local east = {{kind = "face", dx = 1, dy = 0}, {kind = "step", dx = 1, dy = 0}}
+    local south = {{kind = "face", dx = 0, dy = 1}, {kind = "step", dx = 0, dy = 1}}
+    frame(g, south, 0, 1)
+    check(p.grid.x == 4 and p.grid.y == 8 and p.facing.dx == 0 and p.facing.dy == 1,
+        "first press in a new direction moved instead of turning")
+    for _ = 1, 8 do frame(g, nil, 0, 1) end
+    check(p.grid.x == 4 and p.grid.y == 8, "held turned direction walked during the grace delay")
+    for _ = 1, 40 do if p.grid.y < 9 then frame(g, nil, 0, 1) end end
+    check(p.grid.x == 4 and p.grid.y == 9, "held turned direction never started walking after the delay")
+    advance(g, .3)
+    -- A tap that is released keeps the new facing without stepping later.
+    frame(g, {{kind = "release", dx = 0, dy = 1}})
+    p.facing.dx, p.facing.dy = 1, 0
+    frame(g, south)
+    advance(g, .4)
+    check(p.grid.x == 4 and p.grid.y == 9 and p.facing.dy == 1,
+        "released tap in a new direction stepped after the delay")
+    frame(g, south, 0, 1)
+    advance(g, .4)
+    check(p.grid.x == 4 and p.grid.y == 10, "press in faced direction did not step")
+    frame(g, east, 1, 0)
+    check(p.grid.x == 4 and p.grid.y == 10 and p.facing.dx == 1, "new direction stepped sideways instead of turning")
+    frame(g, east, 1, 0)
+    check(p.grid.x == 5 and p.grid.y == 10, "confirming press after a turn did not step")
+    for _ = 1, 90 do if p.grid.x < 7 then frame(g, nil, 1, 0) end end
+    check(p.grid.x == 7 and p.grid.y == 10, "held faced direction did not keep walking")
 end
 
 local function weapons()
@@ -353,16 +387,37 @@ function T.replay(weapon, seed, maxSeconds, practice, stopCleared, noTools)
             if noTools and g.rewardChoices[choice].id == "pickaxes" then choice = 2 end
             g:chooseReward(choice)
         end
+        while g.dialogue do
+            g:advanceDialogue()
+            if g.dialogue and g.dialogue.mode ~= "lines" then g:closeDialogue() end
+        end
         local p, danger, urgent, enemies = g.player.grid, {}, {}, {}
+        for _, cell in pairs(g.room.tiles) do
+            if cell.state == "falling" then
+                danger[Rooms.key(cell.x, cell.y)], urgent[Rooms.key(cell.x, cell.y)] = true, true
+                for _, c in ipairs(cell.cells or {}) do
+                    danger[Rooms.key(c.x, c.y)], urgent[Rooms.key(c.x, c.y)] = true, true
+                end
+            end
+        end
         for _, e in ipairs(g:entities()) do
             if e.enemy and e.health.current > 0 then
                 enemies[#enemies + 1] = e
-                if e.enemy.state == "warn" or e.enemy.state == "dash" then
+                if e.enemy.state == "warn" or e.enemy.state == "dash" or e.enemy.state == "volley" then
                     for _, c in ipairs(e.enemy.cells) do
                         local key = Rooms.key(c.x, c.y)
                         danger[key] = true
-                        if e.enemy.state == "dash" or e.enemy.timer < .4 then urgent[key] = true end
+                        if e.enemy.state ~= "warn" or e.enemy.timer < .4 then urgent[key] = true end
+                        if c.fall then
+                            for _, f in ipairs(c.fall) do danger[Rooms.key(f.x, f.y)] = true end
+                        end
                     end
+                end
+            elseif e.hazard then
+                for _, c in ipairs(e.hazard.cells) do
+                    local key = Rooms.key(c.x, c.y)
+                    danger[key] = true
+                    if e.hazard.timer < .45 then urgent[key] = true end
                 end
             elseif e.projectile and e.team.value == "enemy" then
                 for n = 0, 3 do
@@ -415,8 +470,12 @@ function T.replay(weapon, seed, maxSeconds, practice, stopCleared, noTools)
             if nextCell then
                 mx, my = nextCell.x - p.x, nextCell.y - p.y
                 if danger[Rooms.key(p.x, p.y)] then dodges = dodges + 1 end
-                -- Movement keys determine facing. Do not move and aim elsewhere simultaneously.
-                events = {{kind = "face", dx = mx, dy = my}, {kind = "step", dx = mx, dy = my}}
+                -- Movement keys determine facing: one tap turns, the next walks.
+                events = {{kind = "face", dx = mx, dy = my}}
+                local facing = g.player.facing
+                if facing.dx == mx and facing.dy == my then
+                    events[#events + 1] = {kind = "step", dx = mx, dy = my}
+                else mx, my = 0, 0 end
                 if w.state == "empty" then events[#events + 1] = {kind = "charge"} end
             end
         end
@@ -493,7 +552,7 @@ local function playability()
 end
 
 function T.run()
-    inputCallbacks(); movement(); weapons(); telegraphs(); shield(); upgradesAndEnvironment(); boss(); playability(); generation()
+    inputCallbacks(); movement(); turning(); weapons(); telegraphs(); shield(); upgradesAndEnvironment(); boss(); playability(); generation()
     check(require("src.progression").selfCheck(), "progression self-check failed")
     for _, weapon in ipairs({"bow"}) do
         local g, report = T.replay(weapon, 42042, 240, false, nil, true)

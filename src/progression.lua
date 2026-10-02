@@ -4,25 +4,41 @@ local colors = {bow = {.96, .73, .32},
 
 Progression.catalog = {
     {id = "bowPierce", weapon = "bow", title = "AGULHA DO SOL", color = colors.bow,
-        description = "ARCO: flechas atravessam inimigos. Custo: -1 dano por flecha."},
+        description = "Eco do arqueiro que nunca parou no primeiro alvo. ARCO: flechas atravessam inimigos. Custo: -1 dano por flecha."},
     {id = "bowQuick", weapon = "bow", title = "CORDA VIVA", color = colors.bow,
-        description = "ARCO: +35% velocidade de carga. Exige novos disparos manuais."},
+        description = "Memória de dedos que cantavam antes da flecha. ARCO: +35% velocidade de carga. Exige novos disparos manuais."},
     {id = "guardPulse", title = "MARÉ DE FERRO", color = colors.guard,
-        description = "ESCUDO: +1 dano no pulso. Precisa bloquear pela frente; consome energia."},
+        description = "Eco da muralha que devolvia o golpe ao mar. ESCUDO: +1 dano no pulso. Precisa bloquear pela frente; consome energia."},
     {id = "damage", repeatable = true, title = "AÇO DESPERTO", color = colors.universal,
-        description = "+1 dano no arco. A carga e a defesa não mudam."},
+        description = "Uma memória afiada empresta o fio. +1 dano no arco. A carga e a defesa não mudam."},
     {id = "heal", repeatable = true, title = "FÔLEGO VERDE", color = colors.heal,
-        description = "Recupera 3 de vida agora. Nenhum bônus permanente de dano."},
+        description = "Um eco gentil respira por você. Recupera 3 de vida agora. Nenhum bônus permanente de dano."},
     {id = "pickaxes", repeatable = true, title = "FERRO DE RESERVA", color = colors.universal,
-        description = "+3 picaretas para paredes, pilares e entradas secretas."}
+        description = "Memória do pedreiro que abria a pedra na terceira pancada. +3 picaretas para paredes, pilares e entradas secretas."}
 }
+
+Progression.xpSteps = {4, 10, 18, 28, 40}
 
 function Progression.start(game)
     game.upgrades, game.rewardChoices = {}, nil
 end
 
+function Progression.gainXp(game, amount)
+    if game.practice then return end
+    game.xp = game.xp + amount
+    while game.level <= #Progression.xpSteps and game.xp >= Progression.xpSteps[game.level] do
+        game.level = game.level + 1
+        game.pendingOffer = game.pendingOffer + 1
+    end
+end
+
+function Progression.xpLimit(game) return Progression.xpSteps[game.level or 1] end
+
 function Progression.offer(game)
-    local rng = love.math.newRandomGenerator(game.seed + game.roomId * 7919 + ((game.floorNumber or 1) - 1) * 104729)
+    local prior = (game.room and game.room.offers) or 0
+    if game.room then game.room.offers = prior + 1 end
+    local rng = love.math.newRandomGenerator(game.seed + game.roomId * 7919
+        + ((game.floorNumber or 1) - 1) * 104729 + prior * 31)
     local pool, matching, choices = {}, {}, {}
     for _, choice in ipairs(Progression.catalog) do
         if choice.repeatable or not game.upgrades[choice.id] then
@@ -60,7 +76,7 @@ end
 
 -- Run in LÖVE: require("src.progression").selfCheck(). No framework or assets needed.
 function Progression.selfCheck()
-    local g = {seed = 123, roomId = 1, damageBonus = 0, room = {},
+    local g = {seed = 123, roomId = 1, damageBonus = 0, room = {}, xp = 0, level = 1, pendingOffer = 0,
         player = {weapon = {name = "bow"}, health = {current = 8, max = 10}, grid = {x = 4, y = 5}},
         notify = function() end, effect = function() end}
     Progression.start(g)
@@ -75,6 +91,16 @@ function Progression.selfCheck()
     assert(Progression.choose(g, 1) and g.player.health.current == 10, "Healing respects max HP")
     g.reward, g.rewardChoices = true, {Progression.catalog[4]}
     assert(Progression.choose(g, 1) and g.damageBonus == 1, "Universal damage upgrade")
+    Progression.gainXp(g, Progression.xpSteps[1] - 1)
+    assert(g.xp == Progression.xpSteps[1] - 1 and g.level == 1 and g.pendingOffer == 0, "XP below the step does not level")
+    Progression.gainXp(g, Progression.xpSteps[2] + 1)
+    assert(g.level == 3 and g.pendingOffer == 2, "A burst of XP queues one offer per level")
+    assert(Progression.xpLimit(g) == Progression.xpSteps[3], "XP limit follows the current level")
+    g.level = #Progression.xpSteps + 1
+    assert(not Progression.xpLimit(g), "Max level has no next step")
+    g.practice = true; local xp = g.xp
+    Progression.gainXp(g, 99)
+    assert(g.xp == xp, "Practice never gains XP")
     return true
 end
 

@@ -14,6 +14,8 @@ function Input:pressed(key)
         self.order[#self.order + 1] = key
         self.queue[#self.queue + 1] = {kind = "face", dx = d[1], dy = d[2]}
         self.queue[#self.queue + 1] = {kind = "step", dx = d[1], dy = d[2]}
+    elseif key == "e" then
+        self.queue[#self.queue + 1] = {kind = "interact"}
     elseif key == "space" and not self.spaceHeld then
         self.spaceHeld = true
         self.queue[#self.queue + 1] = {kind = "charge"}

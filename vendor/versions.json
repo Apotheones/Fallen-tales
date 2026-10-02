@@ -23,5 +23,11 @@
     "name": "ripple",
     "repository": "https://github.com/tesselode/ripple",
     "commit": "e18db79b98546a12f560b817bfbc218d08b0fb13"
+  },
+  {
+    "name": "anim8",
+    "repository": "https://github.com/kikito/anim8",
+    "commit": "bd38defa844ab2dfa3bf416a10c45ce376ba4c50",
+    "version": "2.3.1"
   }
 ]

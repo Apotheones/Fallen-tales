@@ -24,14 +24,20 @@ opcional recupera **4 de vida uma vez**; salas vencidas podem ser revisitadas.
 
 ## Controles
 
+A trilha original tem oito músicas: exploração, três chefes, duas elites e
+desafios de combate/pontaria. Os encontros alternam as faixas com transições
+suaves; menu e pausa reduzem o volume. **M** silencia música e efeitos.
+
 | Tecla | Ação |
 | --- | --- |
 | WASD | Mover um bloco; um toque contra peça adjacente dá uma pancada; última direção define ataque/defesa |
 | SPACE, pressionar e segurar | Carregar o arco; mesmo pronta, a carga espera a soltura |
 | SPACE, soltar | Disparar uma vez se pronta; soltar cedo cancela |
 | SHIFT, segurado | Erguer escudo na direção em que olha; cancela a carga |
-| 1 / 2 / 3 | Escolher um dos três ecos somente na recompensa |
+| E | Falar, ler a inscrição ou abrir o selo adjacente; na conversa, completa e avança as falas |
+| 1 / 2 / 3 | Escolher um dos três ecos na recompensa ou um tópico na conversa |
 | TAB | Abrir/fechar guia; ESC ou ENTER também fecham |
+| C | Com o guia aberto, alternar entre guia e página CARTAS; W/S ou setas navegam as cartas |
 | ESC | Pausar/retomar; ENTER também retoma |
 | R | Na pausa ou ao terminar: reiniciar com a mesma seed |
 | N | No menu ou ao terminar: começar uma nova expedição |
@@ -84,10 +90,28 @@ Cada andar começa no centro de uma grade. Uma busca em largura cria **7 ou 8
 salas comuns/especiais no primeiro andar**, aumentando **2 ou 3** por andar.
 Essas salas formam uma árvore, sem ciclos. O chefe ocupa a ponta mais distante;
 loja, tesouro e refúgio ficam em outras pontas. O minimapa acompanha as portas
-reais e mostra salas visitadas e seus vizinhos conhecidos. As salas comuns têm
-**13×9 blocos**, e a arena do chefe **15×9**. A câmera mostra o retângulo inteiro.
+reais e mostra salas visitadas e seus vizinhos conhecidos. Cada andar é uma
+região das Ruínas com identidade própria — **Galerias da Superfície**, **Criptas
+dos Sacerdotes** e **Santuário Afundado** — anunciada na descida. As salas
+comuns sorteiam um **arquétipo** do tema do andar: nome de ficção no cabeçalho,
+retângulo variável dentro da faixa do catálogo (13×9 a 15×9 ou 13×11) e um
+interior montado por primitivos — linhas de parede com vãos, agrupamentos,
+filas, pares e anéis de pilares, faixas ou dispersão de buracos, campos de
+âmbar e cicatrizes de batalha. Um aviso curto na primeira entrada descreve a
+tática da sala. As portas saem do centro das bordas dentro de uma faixa segura;
+as chegadas recaem sobre o corredor protegido. A arena do chefe segue **15×9**
+com variantes por seed, e a prática continua 17×11. A câmera acompanha os pés,
+com limites da sala. O mundo usa 32 pixels por célula, ampliados em 2×, com
+filtro nearest.
 Um corredor na borda interna conecta todas as entradas e saídas; pilares param
-antes dessa faixa. **Chegar ao chefe nunca exige picaretas**, mesmo após quedas.
+antes dessa faixa. **Chegar ao chefe nunca exige picaretas**, mesmo após quedas:
+a geração poda qualquer pilar capaz de isolar um ator em alguma combinação de
+queda.
+
+Uma folha especial por andar — tesouro ou refúgio — fica atrás de um **portão
+selado violeta**. A passagem permanece trancada até **E** abrir a oferenda:
+**pagar 3 ouro** ou **forçar com 1 picareta**. O selo abre os dois lados da
+conexão e nunca fica na rota do chefe.
 
 Existem mais duas salas ocultas: **secreta** e **supersecreta**, adjacentes a
 várias salas, sem tocar o chefe ou uma à outra. As entradas parecem paredes:
@@ -100,9 +124,12 @@ dos alvos persiste em revisitas. Entrar abre as saídas por dentro, sem gasto
 extra; é possível desistir do desafio e voltar. Cada combate comum vencido
 rende **2 ouro**, uma vez.
 
-O tesouro oferece um eco uma vez. A compra de mapas foi retirada; a sala da
-loja está vazia. Vendas só entrarão junto dos NPCs comerciantes. O minimapa
-atual registra apenas descobertas durante a exploração.
+O tesouro oferece um eco uma vez. Na loja mora **Amâncio, o Andarilho**:
+**E** abre a conversa e a opção `COMPRAR` mostra a vitrine dentro do
+diálogo — mapa do andar (revela as salas comuns, nunca os segredos),
+picaretas e provisão, uma unidade cada por andar. **Odete, a Zeladora**
+mora no refúgio. O minimapa registra descobertas da exploração e do mapa
+comprado.
 Os interiores continuam retangulares; salas 2×2 e em L são uma etapa futura.
 
 Bruto e chefe possuem armadura frontal. Avisos congelam direção e área; use
@@ -118,12 +145,28 @@ mais rápida**, **pulso de escudo**, **dano**, **cura** e **três picaretas**. P
 dano por flecha. Escolher pausa a simulação; nenhum eco dispara automaticamente.
 O Guardião tem **24 de vida**, alterna cruz de flechas e dash. Avisos duram
 **1,15s**; com metade da vida ou menos, **0,95s**, e a armadura se rompe.
+A primeira entrada em cada arena abre uma introdução de uma linha com o nome
+do chefe.
+
+## Lore, XP e cartas
+
+A tentativa ganha **XP** ao derrotar inimigos (comum 1, elite 3, chefe 5) e
+ao concluir desafios secretos (2). Cada nível oferece um eco — a oferta
+espera se outra tela estiver aberta. A HUD mostra `NV · XP` junto a ouro e
+picaretas; XP, níveis e cartas zeram em nova tentativa.
+
+Dezoito **cartas** contam a história das Ruínas dos Ecos, coletadas em
+chefes, desafios, tesouro, primeira conversa com Odete e certas inscrições.
+As **inscrições** são lajes marcadas no piso de salas especiais: **E** ao
+lado lê o texto e escurece a runa. O guia (TAB) abre a página **CARTAS**
+com C: as encontradas aparecem por título e texto; as demais ficam `???`.
 
 ## Projeto e verificação
 
 Gameplay e sons sintetizados são originais. **Concord, Baton,
-hump.camera, Flux e Ripple** estão vendorizados; versões e licenças em
-[docs/LIBRARIES.md](docs/LIBRARIES.md). Células são dados da sala; Concord
+anim8, Flux e Ripple** estão vendorizados; versões e licenças em
+[docs/LIBRARIES.md](docs/LIBRARIES.md). O cenário e as spritesheets de referência são gerados por código em memória.
+Células são dados da sala; Concord
 mantém atores. A simulação usa passos de **1/120s**; animações não decidem regras.
 
 Execute `Testar.bat` ou:

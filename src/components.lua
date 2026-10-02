@@ -28,4 +28,9 @@ Concord.component("projectile", function(c, dx, dy, damage, interval, range, kin
     c.dx, c.dy, c.damage, c.interval = dx, dy, damage, interval
     c.range, c.kind, c.clock, c.steps = range, kind, 0, 0
 end)
+Concord.component("npc", function(c, id) c.id = id end)
+Concord.component("hazard", function(c, cells, fuse, damage, source)
+    c.cells, c.timer, c.duration = cells, fuse, fuse
+    c.damage, c.source = damage or 2, source
+end)
 return Concord

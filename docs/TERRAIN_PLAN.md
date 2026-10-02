@@ -107,7 +107,8 @@ O corredor a leste oferece inimigo, pilar (8,4) com queda leste de cinco célula
 segmentos para reabrir e buraco (11,8) com passagem lateral. Limpar os inimigos
 mantém a sala jogável; o portal leste (17,6) conclui explicitamente.
 
-Salas comuns são 13×9; chefe, 15×9. A borda interna reserva um corredor seguro:
+Salas comuns seguem a faixa do arquétipo (13×9 a 15×9 ou 13×11); chefe, 15×9.
+A borda interna reserva um corredor seguro:
 prévia e queda param antes dessa faixa. Todas as chegadas permanecem ligadas
 a todas as saídas normais após quedas, sem ferramentas. Segredos são desvios
 opcionais de combate/pontaria; o tijolo de entrada se mistura aos vizinhos e
@@ -118,7 +119,10 @@ Picaretas são finitas. As outras salas recebem peças, atalhos e armadilhas
 com desvio que não exige ferramentas. Queda não é desfeita porque mudou o
 melhor caminho. Spawn e chegadas/saídas não ficam em trajetórias fatais;
 busca cardinal valida direções de pilares, combinações de quedas, inimigos e
-rotas com zero ferramentas. Isso é garantia do layout.
+rotas com zero ferramentas. Isso é garantia do layout — e a geração a reforça:
+`pruneUnsafePillars` simula todas as combinações de queda dos pilares da sala
+e remove qualquer um capaz de isolar um ator; o portão selado violeta é o único
+custo de rota planejado (3 ouro ou 1 picareta) e nunca fica no caminho do chefe.
 
 ## Entregas e aceite
 

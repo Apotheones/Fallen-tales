@@ -1,6 +1,7 @@
 local Rooms = require("src.rooms")
 local Game = require("src.game")
 local Environment = require("src.environment")
+local Enemies = require("src.enemies")
 local T = {}
 local sides = {east = {1, 0}, west = {-1, 0}, north = {0, -1}, south = {0, 1}}
 local opposite = {east = "west", west = "east", north = "south", south = "north"}
@@ -48,6 +49,7 @@ function T.run()
         checks = checks + 1; assert(value, message)
     end
     local function adjacent(a, b) return math.abs(a.mapX - b.mapX) + math.abs(a.mapY - b.mapY) == 1 end
+    local seenArchetypes, doorOffsets = {[1] = {}, [2] = {}, [3] = {}}, {}
     for seed = 1, 128 do
         local previousCount
         for floorNumber = 1, 4 do
@@ -69,7 +71,25 @@ function T.run()
                 occupied[key] = room
                 kinds[room.kind] = (kinds[room.kind] or 0) + 1
                 check(Rooms.floor(room, room.spawn.x, room.spawn.y), "room spawn is not safe")
-                check(room.w == (room.kind == "boss" and 15 or 13) and room.h == 9, "generated room is not compact")
+                if room.archetype then
+                    seenArchetypes[math.min(floorNumber, 3)][room.archetype] = true
+                    local fits = false
+                    for _, s in ipairs(Rooms.archetypes[room.archetype].sizes) do
+                        if s[1] == room.w and s[2] == room.h then fits = true break end
+                    end
+                    check(fits, "archetype room escaped its size catalog")
+                else
+                    check(room.w == (room.kind == "boss" and 15 or 13) and room.h == 9,
+                        "special room is not compact")
+                end
+                if room.doorSlots then
+                    for side, slot in pairs(room.doorSlots) do
+                        local vertical = side == "east" or side == "west"
+                        local along = vertical and slot.y or slot.x
+                        local center = math.ceil((vertical and room.h or room.w) / 2)
+                        doorOffsets[along - center] = true
+                    end
+                end
                 local degree = 0
                 for _, door in ipairs(room.doors) do
                     check(sides[door.side] and (door.x == 1 or door.x == room.w or door.y == 1 or door.y == room.h),
@@ -103,6 +123,24 @@ function T.run()
                             "normal exit requires mining")
                     end
                 end
+                local mask = Rooms.reachable(room)
+                check(mask[Rooms.key(room.spawn.x, room.spawn.y)], "spawn is sealed off without tools")
+                for _, door in ipairs(room.doors) do
+                    if not door.hidden then
+                        check(mask[Rooms.key(door.x, door.y)], "exit sits outside the no-tool ring")
+                        local onSide = door.x == 1 or door.x == room.w
+                        check((onSide and door.y >= 3 and door.y <= room.h - 2)
+                            or (not onSide and door.x >= 3 and door.x <= room.w - 2), "door hugs a corner")
+                    end
+                end
+                for _, e in ipairs(room.enemies) do
+                    check(mask[Rooms.key(e.x, e.y)], string.format(
+                        "enemy in sealed pocket: seed %d floor %d room %d %s/%s at %d,%d",
+                        seed, floorNumber, room.id, room.kind, tostring(room.archetype), e.x, e.y))
+                end
+                for _, c in ipairs(room.crystals) do
+                    check(mask[Rooms.key(c.x, c.y)], "crystal spawned in a sealed pocket")
+                end
                 if room.id <= n then
                     local route = T.route(rooms, 1, room.id)
                     check(route and #route == room.distance, "regular room distance/reachability diverged")
@@ -120,8 +158,10 @@ function T.run()
                     end
                 end
                 if room.kind == "secret" then
-                    check(not room.cleared and room.challenge == "combat" and #room.enemies == 2 and #room.crystals == 0,
-                        "secret combat challenge is missing")
+                    local elite = room.enemies[1]
+                    check(not room.cleared and room.challenge == "combat" and #room.enemies >= 1 and #room.crystals == 0
+                        and elite and Enemies[elite.kind] and Enemies[elite.kind].elite,
+                        "secret elite lair is missing")
                 elseif room.kind == "supersecret" then
                     check(not room.cleared and room.challenge == "targets" and #room.enemies == 0 and #room.targets == 3,
                         "supersecret target challenge is missing")
@@ -134,6 +174,20 @@ function T.run()
                 and kinds.secret == 1 and kinds.supersecret == 1, "floor special counts changed")
             check(rooms[rooms.bossId].distance == maxDistance and rooms[rooms.bossId].kind == "boss", "boss is not farthest dead end")
             check(rooms[rooms.shopId].kind == "shop" and rooms[rooms.treasureId].kind == "treasure", "special IDs disagree with kinds")
+            check(rooms.sealedId == rooms.treasureId or rooms.sealedId == rooms.refugeId,
+                "seal escaped the special leaves")
+            local sealEnds = 0
+            for _, room in ipairs(rooms) do
+                for _, door in ipairs(room.doors) do
+                    if door.sealed then
+                        sealEnds = sealEnds + 1
+                        check(not door.hidden and door.sealCost == 3 and not door.unsealed
+                            and (room.id == rooms.sealedId or door.to == rooms.sealedId),
+                            "seal record is malformed or on the wrong link")
+                    end
+                end
+            end
+            check(sealEnds == 2, "seal did not mark both door endpoints")
             check((leaves >= 4 and rooms.refugeId and kinds.refuge == 1)
                 or (leaves == 3 and not rooms.refugeId and not kinds.refuge), "refuge does not match fourth leaf")
             local secret, super = rooms[rooms.secretId], rooms[rooms.superSecretId]
@@ -146,6 +200,14 @@ function T.run()
             end
         end
     end
+    for floorNumber, theme in pairs(Rooms.floorThemes) do
+        for _, id in ipairs(theme.pool) do
+            check(seenArchetypes[floorNumber][id], "archetype never rolled on floor " .. floorNumber .. ": " .. id)
+        end
+    end
+    local offsetCount = 0
+    for _ in pairs(doorOffsets) do offsetCount = offsetCount + 1 end
+    check(offsetCount >= 3, "door slots never left the center")
     for _, invalid in ipairs({0, -1, .5, "bow", math.huge, -math.huge}) do
         check(Rooms.generate(42, false, invalid).floorNumber == 1, "invalid floor was not normalized")
     end
@@ -192,7 +254,10 @@ function T.run()
     g:enter(g.rooms.shopId)
     check(g.room.cleared and g:enemyCount() == 0 and not g.reward and g.gold == 0,
         "quiet shop granted combat or loot")
-    check(g.interact == nil and g.mapReveal == nil and g.blueMap == nil, "removed shop/map machinery remains")
+    local merchant
+    for _, e in ipairs(g:entities()) do if e.npc then merchant = e end end
+    check(merchant and merchant.npc.id == "merchant" and not g.mapReveal and not g.blueMap,
+        "shop lost its merchant or leaked map machinery")
     for _, room in ipairs(g.rooms) do
         check((g:mapVisible(room) or false) == (room.visited or room.discovered or false), "minimap shows unexplored room")
     end
@@ -216,7 +281,7 @@ function T.run()
     for i = 2, #secret.doors do check(not secret.doors[i].revealed, "mining opened unrelated secret entrances") end
     local gold = g.gold
     g:enter(secret.id, door.arrival)
-    check(g.gold == gold and not g.reward and not g.room.cleared and g:enemyCount() == 2,
+    check(g.gold == gold and not g.reward and not g.room.cleared and g:enemyCount() == #secret.enemies,
         "entering secret granted loot before challenge")
     for _, exit in ipairs(g.room.doors) do
         check(exit.revealed and g:canLeave(exit) and Rooms.cell(g.room, exit.x, exit.y).piece == "portal",
@@ -233,6 +298,11 @@ function T.run()
     check(g.gold == gold + 4 and g.reward and #g.rewardChoices == 3 and g.room.lootTaken and g.room.cleared,
         "secret combat completion did not grant four gold and one reward")
     check(g:chooseReward(1), "secret reward could not be selected")
+    while g.pendingOffer > 0 do
+        frame(g)
+        check(g.reward and #g.rewardChoices == 3, "queued level-up offer did not fire after the challenge")
+        check(g:chooseReward(1), "queued level-up offer could not be selected")
+    end
     g:enter(1); g:enter(secret.id); frame(g)
     check(g.gold == gold + 4 and not g.reward and g:enemyCount() == 0, "completed secret revisit farmed loot")
 
@@ -296,6 +366,60 @@ function T.run()
     check(toolChoice and g:chooseReward(toolChoice) and g.pickaxes == tools + 3, "tool reward did not replenish three pickaxes")
     local practice = Game.new(42042, true); practice.state = "won"
     check(not practice:nextFloor() and practice.floorNumber == 1, "practice descended into an expedition")
+
+    -- Sealed door: the violet gate blocks traversal until paid or forced; both
+    -- door records open together and the passage then works like any other.
+    local function findSeal(game)
+        local leaf = game.rooms[game.rooms.sealedId]
+        for _, room in ipairs(game.rooms) do
+            for _, door in ipairs(room.doors) do
+                if door.sealed and door.to == leaf.id then return room, door end
+            end
+        end
+    end
+    local function sealDialogue(game)
+        while game.dialogue and game.dialogue.mode == "lines" do
+            game.dialogue.reveal = math.huge; game:advanceDialogue()
+        end
+        return game.dialogue and game.dialogue.mode == "options"
+    end
+    g = Game.new(7, false)
+    local host, door = findSeal(g)
+    check(host and door, "sealed entry missing on floor 1")
+    g:enter(host.id); g.room.cleared, g.room.inscriptions = true, {}
+    check(not g:canLeave(door), "sealed portal allowed traversal")
+    g.player.grid.x, g.player.grid.y = Rooms.arrival(g.room, door.side)
+    g.gold = 5
+    check(g:interact() and g.dialogue, "sealed portal ignored E")
+    check(sealDialogue(g), "seal never offered choices")
+    check(g:chooseDialogue(1) and g.gold == 2 and door.unsealed, "gold did not open the seal")
+    local twin
+    for _, candidate in ipairs(g.rooms[g.rooms.sealedId].doors) do
+        if candidate.to == host.id and candidate.side == door.arrival then twin = candidate end
+    end
+    check(twin and twin.unsealed, "seal opened only one side")
+    check(g:canLeave(door), "unsealed door stayed locked")
+    g.player.grid.x, g.player.grid.y, g.player.motion.remaining = door.x, door.y, 0
+    frame(g)
+    check(g.roomId == g.rooms.sealedId, "open seal did not lead anywhere")
+
+    g = Game.new(7, false)
+    host, door = findSeal(g)
+    g:enter(host.id); g.room.cleared, g.room.inscriptions = true, {}
+    g.gold, g.pickaxes = 0, 20
+    g.player.grid.x, g.player.grid.y = Rooms.arrival(g.room, door.side)
+    g:interact()
+    check(sealDialogue(g), "forced seal skipped the choices")
+    check(g:chooseDialogue(1) and g.pickaxes == 19 and door.unsealed, "pickaxe did not force the seal")
+
+    g = Game.new(7, false)
+    host, door = findSeal(g)
+    g:enter(host.id); g.room.cleared, g.room.inscriptions = true, {}
+    g.gold, g.pickaxes = 0, 0
+    g.player.grid.x, g.player.grid.y = Rooms.arrival(g.room, door.side)
+    g:interact()
+    check(sealDialogue(g) and #g.dialogue.node.options == 1, "empty-handed seal still offered a payment")
+    check(g:chooseDialogue(1) and not g.dialogue and not door.unsealed, "SAIR broke the seal")
     print(string.format("%d FLOOR ASSERTIONS PASSED", checks))
     return checks
 end

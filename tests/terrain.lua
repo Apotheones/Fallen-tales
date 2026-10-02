@@ -347,7 +347,8 @@ function T.run()
             routes(room)
             for mask = 0, 4 ^ #pillars - 1 do
                 local copy = {w = room.w, h = room.h, tiles = {}, doors = room.doors, spawn = room.spawn,
-                    enemies = room.enemies, crystals = room.crystals, targets = room.targets}
+                    enemies = room.enemies, crystals = room.crystals, targets = room.targets,
+                    doorSlots = room.doorSlots}
                 for key, t in pairs(room.tiles) do local c = {}; for k, v in pairs(t) do c[k] = v end; copy.tiles[key] = c end
                 local choice = mask
                 for _, p in ipairs(pillars) do

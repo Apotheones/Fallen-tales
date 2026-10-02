@@ -1,7 +1,14 @@
-local Camera = require('vendor.camera')
+local PixelWorld = require('src.pixel_world')
+local PixelActors = require('src.pixel_actors')
+local PixelFont = require('src.pixel_font')
 local Feedback = require('src.feedback')
 local Rooms = require('src.rooms')
+local Props = require('src.props')
 local Environment = require('src.environment')
+local Enemies = require('src.enemies')
+local Progression = require('src.progression')
+local Lore = require('src.lore')
+local utf8 = require('utf8')
 local Render = {}; Render.__index = Render
 local G = love.graphics
 local pi = math.pi
@@ -13,6 +20,7 @@ local C = {
 local function color(c, alpha) G.setColor(c[1], c[2], c[3], alpha or c[4] or 1) end
 local function text(font, value, x, y, c, limit, align)
     G.setFont(font); color(c or C.text)
+    value = PixelFont.clean(value)
     if limit then G.printf(value, x, y, limit, align or 'left') else G.print(value, x, y) end
 end
 local function panel(x, y, w, h, accent)
@@ -24,9 +32,16 @@ end
 local function diamond(x, y, r, c, mode)
     color(c); G.polygon(mode or 'fill', x, y - r, x + r, y, x, y + r, x - r, y)
 end
+local pixelLine = PixelWorld.pixelLine
 local function arrow(x, y, dx, dy, c, size)
-    G.push(); G.translate(x, y); G.rotate(math.atan2(dy, dx)); color(c)
-    G.setLineWidth(2); G.line(-size, -size, 0, 0, -size, size); G.pop()
+    color(c)
+    pixelLine(x - dx * size - dy * size, y - dy * size + dx * size, x, y)
+    pixelLine(x, y, x - dx * size + dy * size, y - dy * size - dx * size)
+end
+local function border(x, y, w, h, c, alpha)
+    color(c, alpha)
+    G.rectangle('fill', x, y, w, 1); G.rectangle('fill', x, y + h - 1, w, 1)
+    G.rectangle('fill', x, y, 1, h); G.rectangle('fill', x + w - 1, y, 1, h)
 end
 
 -- This interpolation is a view over committed grid positions; it never changes collision.
@@ -35,26 +50,22 @@ function Render.visualPosition(entity)
     if m and m.remaining > 0 then
         local t = 1 - m.remaining / m.duration
         local ease = t * t * (3 - 2 * t)
-        return ((m.fromX + (p.x - m.fromX) * ease) - .5) * 40,
-            ((m.fromY + (p.y - m.fromY) * ease) - .5) * 40, math.sin(t * pi) * 9 - (m.falling and t^3 * 28 or 0)
+        return ((m.fromX + (p.x - m.fromX) * ease) - .5) * 32,
+            ((m.fromY + (p.y - m.fromY) * ease) - .5) * 32, math.sin(t * pi) * 7 - (m.falling and t^3 * 22 or 0)
     end
-    return (p.x - .5) * 40, (p.y - .5) * 40, 0
+    return (p.x - .5) * 32, (p.y - .5) * 32, 0
 end
 
-function Render.secretHint(time, reducedMotion)
-    local phase = time % 4
-    if phase >= .30 then return 0 end
-    return (reducedMotion and .08 or .12) * math.sin(phase / .30 * pi)^2
-end
+Render.secretHint = PixelWorld.secretHint
 
 function Render.selfCheck()
     local e = {grid = {x = 4, y = 3}, motion = {fromX = 3, fromY = 3, duration = .16, remaining = .08}}
     local x, y, jump = Render.visualPosition(e)
-    assert(x == 120 and y == 100 and math.abs(jump - 9) < .0001, 'Hop interpolation is purely visual')
+    assert(x == 96 and y == 80 and math.abs(jump - 7) < .0001, 'Hop interpolation is purely visual')
     assert(e.grid.x == 4 and e.grid.y == 3, 'Rendering must not move the logical grid position')
     e.motion.remaining = 0
     x, y, jump = Render.visualPosition(e)
-    assert(x == 140 and y == 100 and jump == 0, 'Landing returns exactly to the committed grid center')
+    assert(x == 112 and y == 80 and jump == 0, 'Landing returns exactly to the committed grid center')
     local pillar = {x = 5, y = 4, piece = 'pillar', ground = 'floor', hits = 3, state = 'falling', timer = .31, duration = .62,
         dx = 1, dy = 0, cells = {{x = 6, y = 4}, {x = 7, y = 4}}}
     local crystal = {resonator = {state = 'primed', cells = {{x = 3, y = 4}}, walls = {{x = 4, y = 4}}}}
@@ -66,7 +77,7 @@ function Render.selfCheck()
         local key = Rooms.key(cx, cy)
         game.room.tiles[key] = game.room.tiles[key] or {x = cx, y = cy, ground = 'floor', hits = 0}
     end end
-    local view = setmetatable({time = 0, fonts = {tiny = G.newFont(11)}}, Render)
+    local view = setmetatable({time = 0, fonts = {tiny = PixelFont.new(1)}}, Render)
     local draws, drawWall = {}, view.wall
     view.wall = function(self, room, tile)
         draws[Rooms.key(tile.x, tile.y)] = true
@@ -86,11 +97,14 @@ function Render.selfCheck()
         'Hidden brick hint is brief and remains subtle with reduced motion')
     local hidden = {hidden = true, revealed = false}
     game.room.tiles['4:4'].secretDoor = hidden
+    local mark = {x = 3, y = 2, id = 'entrance'}
     G.push('all')
     view.time = .15; view:wall(game.room, game.room.tiles['4:4'])
+    view:inscription(mark)
     view:actor({grid = {x = 3, y = 3}, target = {data = {hit = false}}}, game)
     G.pop()
     assert(hidden.hidden and not hidden.revealed, 'Drawing a hidden brick never reveals its entrance')
+    assert(mark.x == 3 and mark.y == 2 and not mark.read, 'Drawing an inscription never marks it as read')
     local map = {roomId = 1, mapVisible = require('src.game').mapVisible, rooms = {
         {id = 1, kind = 'start', mapX = -2, mapY = 1, visited = true, doors = {{to = 2}}},
         {id = 2, kind = 'treasure', mapX = -1, mapY = 1, discovered = true, doors = {{to = 1}, {to = 3, hidden = true}}},
@@ -105,27 +119,81 @@ function Render.selfCheck()
     return true
 end
 
-function Render.new()
-    local self = setmetatable({camera = Camera(0, 0, 1), feedback = Feedback.new(), time = 0,
-        fonts = {}, muted = false, reducedMotion = false}, Render)
-    for name, size in pairs({tiny = 11, small = 13, body = 16, medium = 21, large = 30, title = 66}) do
-        self.fonts[name] = G.newFont(size)
-        self.fonts[name]:setFilter('linear', 'linear')
+local function round(n) return math.floor(n + .5) end
+
+-- left/top are integer presentation offsets, never simulation coordinates.
+function Render.layout(width, height, room, feetX, feetY, header)
+    header = header or 112
+    local scale = 2
+    scale = math.max(1, math.min(scale, math.floor(width / 256), math.floor(height / 192)))
+    local w, h = math.max(1, math.floor((width - 24) / scale)), math.max(1, math.floor((height - header - 80) / scale))
+    local rw, rh = room.w * 32, room.h * 32
+    local left = rw <= w and math.floor((rw - w) / 2) or math.max(0, math.min(rw - w, round(feetX - w / 2)))
+    local top = rh <= h and math.floor((rh - h) / 2) or math.max(0, math.min(rh - h, round(feetY - h / 2)))
+    return {scale = scale, w = w, h = h, x = math.floor((width - w * scale) / 2),
+        y = header + math.floor((height - header - 80 - h * scale) / 2), left = left, top = top}
+end
+
+function Render.mapHeight(game)
+    local minY,maxY=math.huge,-math.huge
+    for _,room in ipairs(game.rooms) do
+        if game:mapVisible(room) then minY,maxY=math.min(minY,room.mapY),math.max(maxY,room.mapY) end
     end
+    return minY==math.huge and 43 or math.max(43,math.min(96,(maxY-minY+1)*12+27))
+end
+
+function Render.new()
+    local self = setmetatable({feedback = Feedback.new(), actors = PixelActors.new(), time = 0,
+        fonts = {}, muted = false, reducedMotion = false, roomTime = 0}, Render)
+    -- One authored bitmap face at integer scales keeps every glyph crisp.
+    for name, scale in pairs({tiny = 1, small = 1, body = 2, medium = 2, large = 3, title = 6}) do
+        self.fonts[name] = PixelFont.new(scale)
+    end
+    local bitmap = self.fonts.tiny
+    self.worldFonts, self.hudFont = {tiny = bitmap, body = bitmap}, bitmap
     return self
 end
 
-function Render:update(dt, game)
+function Render:update(dt, game, screen)
     self.time = self.time + dt
+    self.actors:update(dt, game, screen, self.reducedMotion)
     self.feedback.muted, self.feedback.reducedMotion = self.muted, self.reducedMotion
-    self.feedback:update(dt, game)
-    local uiScale = math.min(G.getWidth() / 1120, G.getHeight() / 720)
-    local top, bottom = 224 * uiScale, 116 * uiScale
-    local room = game.room
-    local zoom = math.min(1.25, (G.getWidth() - 64 * uiScale) / (room.w * 40 + 20),
-        (G.getHeight() - top - bottom) / (room.h * 40 + 40))
-    self.camera:lookAt(room.w * 20, room.h * 20 - 8 - (top - bottom) / (2 * zoom))
-    self.camera:zoomTo(zoom)
+    self.feedback:update(dt, game, screen)
+    if self.room ~= game.room then self.room, self.roomTime = game.room, 2.5 end
+    if screen == 'playing' and not game.reward then self.roomTime = math.max(0, self.roomTime - dt) end
+    if self.gold ~= game.gold or self.pickaxes ~= game.pickaxes or self.xp ~= game.xp or self.level ~= game.level then
+        self.gold, self.pickaxes, self.xp, self.level = game.gold, game.pickaxes, game.xp, game.level
+        self.resourceTime = 3
+    else self.resourceTime = math.max(0, (self.resourceTime or 0) - dt) end
+    self:updateDialogueReveal(dt, game.dialogue)
+    local x, y = Render.visualPosition(game.player)
+    self.view = Render.layout(G.getWidth(), G.getHeight(), game.room, x, y, math.max(112, Render.mapHeight(game)*2+24))
+end
+
+-- Typewriter reveal + voice blips; shared by arcade and campaign dialogue.
+function Render:updateDialogueReveal(dt, d)
+    if not (d and d.mode == 'lines') then return end
+    if d.revealIndex ~= d.index then d.revealIndex, d.reveal, d.voiceChars = d.index, 0, 0 end
+    local line = d.lines[d.index]
+    local target = utf8.len(line) or #line
+    d.reveal = self.reducedMotion and target or math.min(target, (d.reveal or 0) + dt * 55)
+    local shown = math.floor(math.min(d.reveal, target))
+    local unheard = shown - (d.voiceChars or 0)
+    if unheard > 0 then
+        local pitch = (Lore.voices or {})[d.voice] or 1
+        if unheard > 4 or self.reducedMotion then
+            self.feedback:play('voice', pitch, .3)
+        else
+            for i = d.voiceChars + 1, shown do
+                local a, b = utf8.offset(line, i), utf8.offset(line, i + 1)
+                local ch = a and line:sub(a, (b or #line + 1) - 1) or ''
+                if not ch:match('^%s$') then
+                    self.feedback:play('voice', pitch * (0.92 + love.math.random() * .16), .3)
+                end
+            end
+        end
+        d.voiceChars = shown
+    end
 end
 
 function Render:weapon(name, x, y, size, tint)
@@ -145,148 +213,8 @@ function Render:weapon(name, x, y, size, tint)
     G.pop()
 end
 
-function Render:floor(game)
-    local room, t = game.room, self.time
-    local mood = room.refuge and {-.01, .025, .008} or room.final and {.035, -.005, .028} or room.id == 3 and {.025, .003, -.013} or {0, 0, 0}
-    color({.027, .038, .054}); G.rectangle('fill', -90, -90, room.w * 40 + 180, room.h * 40 + 180)
-    for y = 1, room.h do for x = 1, room.w do
-        local px, py = (x - 1) * 40, (y - 1) * 40
-        local tile = Rooms.cell(room, x, y)
-        if tile and tile.ground == 'hole' then
-            color({.009, .007, .019}); G.rectangle('fill', px, py, 40, 40)
-            local function rim(nx, ny, x1, y1, x2, y2)
-                local neighbor = Rooms.cell(room, nx, ny)
-                if not neighbor or neighbor.ground ~= 'hole' then
-                    color({.36, .43, .48}); G.setLineWidth(3); G.line(x1, y1, x2, y2)
-                    color({.14, .15, .23}); G.setLineWidth(2); G.line(x1, y1 + 5, x2, y2 + 5)
-                end
-            end
-            rim(x, y - 1, px + 1, py + 2, px + 39, py + 2)
-            rim(x, y + 1, px + 1, py + 37, px + 39, py + 37)
-            rim(x - 1, y, px + 2, py + 2, px + 2, py + 37)
-            rim(x + 1, y, px + 37, py + 2, px + 37, py + 37)
-            color({.23, .21, .34}, .3); G.setLineWidth(1)
-            G.line(px + 10, py + 12, px + 17, py + 16); G.line(px + 28, py + 23, px + 32, py + 27)
-        elseif tile then
-            local sink = self.feedback.landings[x .. ':' .. y]
-            py = py + (sink and sink.depth or 0)
-            color({.038, .058, .077}); G.rectangle('fill', px + 1, py + 5, 38, 35, 2)
-            local even = (x + y) % 2 == 0
-            color(even and {.116 + mood[1], .165 + mood[2], .188 + mood[3]} or {.085 + mood[1], .126 + mood[2], .15 + mood[3]})
-            G.rectangle('fill', px + 2, py + 2, 36, 33, 2)
-            color(even and {.18, .24, .25} or {.145, .205, .23}, .85)
-            G.line(px + 4, py + 3, px + 35, py + 3)
-            color(C.ink, .7); G.line(px + 3, py + 34, px + 36, py + 34)
-            color(C.muted, .15); G.points(px + 5, py + 6, px + 34, py + 6)
-            if (x * 7 + y * 13) % 23 == 0 then
-                color(C.muted, .13); G.line(px + 13, py + 18, px + 17, py + 14, px + 19, py + 19)
-            end
-            if tile.passage then
-                color(C.jade, .20); G.setLineWidth(1)
-                G.line(px + 5, py + 11, px + 5, py + 5, px + 11, py + 5)
-                G.line(px + 29, py + 29, px + 35, py + 29, px + 35, py + 23)
-            end
-        end
-    end end
-    -- A quiet entrance sigil anchors the room without disguising the board cells.
-    local sx, sy = (room.spawn.x - .5) * 40, (room.spawn.y - .5) * 40
-    color(room.refuge and C.jade or C.gold, .15); G.setLineWidth(1)
-    G.circle('line', sx, sy, 15); G.circle('line', sx, sy, 11)
-    for i = 0, 3 do local a = i * pi / 2; G.line(sx + math.cos(a) * 9, sy + math.sin(a) * 9, sx + math.cos(a) * 17, sy + math.sin(a) * 17) end
-    if room.refuge or room.final then
-        local cx, cy = math.floor(room.w / 2) * 40 + 20, math.floor(room.h / 2) * 40 + 20
-        color(room.refuge and C.jade or C.violet, .15); G.setLineWidth(1)
-        G.circle('line', cx, cy, 59); G.circle('line', cx, cy, 65)
-        for i = 0, 7 do
-            local a = i * pi / 4
-            diamond(cx + math.cos(a) * 62, cy + math.sin(a) * 62, 2, room.refuge and {.34, .91, .81, .18} or {.73, .66, 1, .18})
-        end
-    end
-    for _, door in ipairs(room.doors) do if not door.hidden or door.revealed then
-        local dx, dy = (door.x - .5) * 40, (door.y - .5) * 40
-        local open = game:canLeave(door)
-        local c = open and (door.finish and C.gold or C.jade) or C.red
-        color(c, .12 + (open and math.sin(t * 3) * .035 or 0)); G.rectangle('fill', dx - 19, dy - 19, 38, 38)
-        color(c, .75); G.setLineWidth(2); G.rectangle('line', dx - 16, dy - 16, 32, 32, 2)
-        if open then
-            local vx = door.side == 'east' and 1 or door.side == 'west' and -1 or 0
-            local vy = door.side == 'south' and 1 or door.side == 'north' and -1 or 0
-            arrow(dx + vx * 5, dy + vy * 5, vx, vy, c, 6)
-        else
-            color(c, .6); G.rectangle('fill', dx - 3, dy - 10, 6, 20)
-            for i = -1, 1 do G.line(dx - 14, dy + i * 10, dx + 14, dy + i * 10) end
-        end
-    end end
-end
-
-function Render:wall(room, tile)
-    local x, y, piece = tile.x, tile.y, tile.piece
-    local px, py = (x - 1) * 40, (y - 1) * 40
-    if piece == 'pillar' then
-        local lean = tile.state == 'falling' and not self.reducedMotion and
-            (1 - tile.timer / tile.duration) * 7 or 0
-        local cx, cy = px + 20 + (tile.dx or 0) * lean, py + 4 + (tile.dy or 0) * lean
-        color(C.ink, .8); G.ellipse('fill', px + 21, py + 32, 17, 8)
-        color({.21, .25, .28}); G.rectangle('fill', px + 5, py + 25, 30, 12, 3)
-        color({.28, .32, .34}); G.rectangle('fill', cx - 10, cy - 22, 20, 48, 2)
-        color(C.muted, .5); G.rectangle('fill', cx - 8, cy - 20, 3, 43, 1)
-        color({.35, .39, .40}); G.ellipse('fill', cx, cy - 22, 13, 5)
-        color(C.gold, .85); G.setLineWidth(1.5); G.ellipse('line', cx, cy - 22, 11, 4)
-        for side = -1, 1, 2 do
-            color(C.gold, .55); G.line(cx + side * 9, cy - 5, px + 20 + side * 14, py + 30)
-            for link = 0, 2 do G.circle('line', cx + side * (10 + link * 2), cy + 5 + link * 7, 2) end
-        end
-    else
-        local fallen = piece == 'fallen'
-        local hidden = tile.secretDoor and tile.secretDoor.hidden and not tile.secretDoor.revealed
-        local structural = tile.protected or hidden
-        local function joins(nx, ny)
-            local neighbor = Rooms.cell(room, nx, ny)
-            return neighbor and neighbor.piece == piece and
-                (not fallen or (neighbor.dx == tile.dx and neighbor.dy == tile.dy))
-        end
-        local north, south, west, east = joins(x, y - 1), joins(x, y + 1), joins(x - 1, y), joins(x + 1, y)
-        local left, right = px + (west and 0 or 2), px + 40 - (east and 0 or 2)
-        local top, face = py - (fallen and 3 or 14), py + (fallen and 25 or 21)
-        color(C.ink, .8); G.rectangle('fill', left + 3, py + 33, right - left, 9)
-        color(fallen and {.16, .20, .23} or {.12, .16, .19})
-        G.rectangle('fill', left, face, right - left, py + 39 - face)
-        color(structural and {.20, .25, .29} or fallen and {.26, .31, .33} or {.24, .25, .24})
-        G.rectangle('fill', left, top, right - left, face - top)
-        G.setLineWidth(2); color(structural and C.muted or fallen and {.44, .49, .48} or {.40, .37, .29}, .75)
-        if not north then G.line(left + 1, top + 1, right - 1, top + 1) end
-        if not west then G.line(left + 1, top + 2, left + 1, face) end
-        if not east then G.line(right - 1, top + 2, right - 1, face) end
-        if not south then color(C.ink, .8); G.line(left, py + 38, right, py + 38) end
-        color(C.ink, .22); G.setLineWidth(1)
-        G.line(px + 9, py + 3, px + 18, py + 6, px + 16, py + 10)
-        if structural then
-            diamond(px + 20, py + 5, 3, C.muted, 'line')
-        elseif fallen then
-            color(C.gold, .4)
-            if tile.dx ~= 0 then G.line(left + 2, py + 13, right - 2, py + 13)
-            else G.line(px + 20, top + 2, px + 20, py + 23) end
-        end
-    end
-    if tile.secretDoor and tile.secretDoor.hidden and not tile.secretDoor.revealed then
-        color(C.white, Render.secretHint(self.time, self.reducedMotion)); G.setLineWidth(1)
-        G.line(px + 13, py - 6, px + 26, py - 6)
-        G.line(px + 20, py - 10, px + 20, py - 2)
-    end
-    local hits = tile.hits or 0
-    if hits > 0 then
-        G.setLineWidth(3); color(C.ink)
-        G.line(px + 22, py - 8, px + 16, py + 2, px + 23, py + 8, px + 17, py + 22)
-        G.setLineWidth(1); color(C.gold, .8)
-        G.line(px + 22, py - 8, px + 16, py + 2, px + 23, py + 8, px + 17, py + 22)
-        if hits >= 2 then
-            G.setLineWidth(2); G.line(px + 16, py + 2, px + 7, py + 6)
-            G.line(px + 23, py + 8, px + 32, py + 15)
-        end
-        color(C.ink, .94); G.rectangle('fill', px + 9, py + 24, 23, 14, 2)
-        text(self.fonts.tiny, hits .. '/' .. Environment.constants.hits, px + 9, py + 25, C.gold, 23, 'center')
-    end
-end
+function Render:floor(game) PixelWorld.floor(self, game) end
+function Render:wall(room, tile) PixelWorld.wall(self, room, tile) end
 
 function Render:walls(game)
     for y = 1, game.room.h do for x = 1, game.room.w do
@@ -294,204 +222,254 @@ function Render:walls(game)
         if tile and tile.piece and tile.piece ~= 'portal' then self:wall(game.room, tile) end
     end end
 end
-function Render:fallWarning(tile, cells, preview)
-    local tint = preview and C.jade or C.gold
-    for _, cell in ipairs(cells) do
-        local x, y = (cell.x - 1) * 40, (cell.y - 1) * 40
-        color(cell.hole and C.red or tint, preview and .08 or .18)
-        G.rectangle('fill', x + 2, y + 2, 36, 36, 2)
-        color(cell.hole and C.red or tint, preview and .5 or .95); G.setLineWidth(preview and 1 or 2)
-        G.rectangle('line', x + 3, y + 3, 34, 34, 2)
-        arrow(x + 20 + tile.dx * 3, y + 20 + tile.dy * 3, tile.dx, tile.dy, cell.hole and C.red or tint, 6)
-        if not preview then
-            color(C.white, .45); G.setLineWidth(1)
-            G.line(x + 7, y + 30, x + 17, y + 20); G.line(x + 24, y + 17, x + 33, y + 8)
-        end
+local function warningCell(cell, tint, dx, dy, progress, overlay, kind)
+    local x, y = (cell.x - 1) * 32, (cell.y - 1) * 32
+    progress = math.max(0, math.min(1, progress or 0))
+    if not overlay then color(tint, .12 + progress * .18); G.rectangle('fill', x, y, 32, 32) end
+    border(x + 1, y + 1, 30, 30, tint, .8)
+    color(tint); G.rectangle('fill', x + 3, y + 28, math.floor(26 * progress + .5), 2)
+    if kind == 'blast' then
+        pixelLine(x + 8, y + 8, x + 23, y + 23); pixelLine(x + 23, y + 8, x + 8, y + 23)
+        border(x + 12, y + 12, 8, 8, tint)
+    elseif kind == 'fall' then
+        for i=0,2 do pixelLine(x + 4 + i * 9, y + 24, x + 10 + i * 9, y + 18) end
+        arrow(x + 16 + dx * 4, y + 12 + dy * 4, dx, dy, C.text, 4)
+    else
+        if kind == 'shot' then pixelLine(x + 16 - dx * 12, y + 16 - dy * 12, x + 16 + dx * 12, y + 16 + dy * 12) end
+        arrow(x + 16 + dx * 4, y + 16 + dy * 4, dx, dy, tint, 5)
     end
-    local x, y = (tile.x - .5) * 40, (tile.y - .5) * 40
-    color(C.ink, .9); G.rectangle('fill', x - 36, y - 48, 72, 19, 3)
-    text(self.fonts.tiny, (preview and 'QUEDA: ' or 'ESMAGA: ') .. #cells, x - 36, y - 46, tint, 72, 'center')
-    arrow(x + tile.dx * 15, y + tile.dy * 15, tile.dx, tile.dy, tint, 5)
+end
+
+function Render:fallWarning(tile, cells, preview)
+    local progress = preview and 0 or 1 - tile.timer / tile.duration
+    for _, cell in ipairs(cells) do
+        warningCell(cell, cell.hole and C.red or preview and C.jade or C.gold, tile.dx, tile.dy, progress, preview, 'fall')
+    end
     if not preview then
-        local progress = math.max(0, math.min(1, 1 - tile.timer / tile.duration))
-        color(C.gold); G.setLineWidth(2)
-        G.arc('line', 'open', x, y, 22, -pi / 2, -pi / 2 + math.max(.01, progress) * pi * 2)
-        G.rectangle('fill', x - 26, y - 31, 52 * progress, 2)
+        local x, y = (tile.x - .5) * 32, (tile.y - .5) * 32
+        color(C.ink); G.rectangle('fill', x - 12, y - 52, 24, 12)
+        color(C.gold); G.rectangle('fill', x - 11, y - 51, math.floor(22 * progress), 2)
+        arrow(x + tile.dx * 2, y - 45 + tile.dy * 2, tile.dx, tile.dy, C.gold, 3)
     end
 end
 
 function Render:terrainWarnings(game)
-    -- Pending hazards use the simulation's frozen cells; only the idle adjacent preview is recomputed.
     for _, tile in pairs(game.room.tiles) do
         if tile.state == 'falling' then self:fallWarning(tile, tile.cells, false) end
     end
     local p, facing = game.player.grid, game.player.facing
     local tile = Rooms.cell(game.room, p.x + facing.dx, p.y + facing.dy)
     if tile and tile.piece == 'pillar' and tile.state ~= 'falling' and game.state == 'playing' then
-        local preview = {x = tile.x, y = tile.y, dx = facing.dx, dy = facing.dy}
-        self:fallWarning(preview, Environment.fallCells(game.room, tile.x, tile.y, facing.dx, facing.dy), true)
+        self:fallWarning({x = tile.x, y = tile.y, dx = facing.dx, dy = facing.dy},
+            Environment.fallCells(game.room, tile.x, tile.y, facing.dx, facing.dy), true)
     end
     for _, e in ipairs(game:entities()) do
         if e.enemy and (e.enemy.state == 'warn' or e.enemy.state == 'dash') then
             for _, cell in ipairs(e.enemy.cells) do
                 if cell.impact then
-                    local x, y = (cell.x - 1) * 40, (cell.y - 1) * 40
-                    color(C.red, .85); G.setLineWidth(2); G.rectangle('line', x + 3, y - 9, 34, 37, 3)
-                    arrow(x + 20, y + 8, e.enemy.dx, e.enemy.dy, C.white, 5)
+                    local x, y = (cell.x - 1) * 32, (cell.y - 1) * 32
+                    border(x + 2, y - 9, 28, 36, C.red)
+                    arrow(x + 16, y + 5, e.enemy.dx, e.enemy.dy, C.text, 4)
                 end
             end
         end
         if e.resonator and e.resonator.state == 'primed' then
             for _, cell in ipairs(e.resonator.walls or {}) do
-                local x, y = (cell.x - 1) * 40, (cell.y - 1) * 40
-                color(C.gold, .20); G.rectangle('fill', x + 2, y - 9, 36, 36, 3)
-                color(C.gold); G.setLineWidth(2); G.rectangle('line', x + 2, y - 9, 36, 36, 3)
-                color(C.white, .85); G.line(x + 22, y - 7, x + 16, y + 3, x + 23, y + 9, x + 17, y + 23)
+                local x, y = (cell.x - 1) * 32, (cell.y - 1) * 32
+                border(x + 2, y - 9, 28, 36, C.gold)
+                color(C.gold); pixelLine(x + 18, y - 6, x + 13, y + 3); pixelLine(x + 13, y + 3, x + 20, y + 10)
             end
         end
     end
 end
 
-function Render:telegraphs(game)
+function Render:telegraphs(game, overlay)
     for _, e in ipairs(game:entities()) do
         if e.resonator and e.resonator.state == 'primed' then
             for _, cell in ipairs(e.resonator.cells) do
-                local x, y = (cell.x - 1) * 40, (cell.y - 1) * 40
-                color(C.gold, .2 + (self.reducedMotion and 0 or .06 * math.sin(self.time * 18)))
-                G.rectangle('fill', x + 3, y + 3, 34, 34, 2)
-                color(C.gold, .7); G.setLineWidth(1); G.rectangle('line', x + 4, y + 4, 32, 32, 2)
-                G.line(x + 8, y + 29, x + 29, y + 8); G.line(x + 8, y + 18, x + 18, y + 8)
+                warningCell(cell, C.gold, 0, 0, 1 - e.resonator.timer / Environment.constants.warning, overlay, 'blast')
             end
         end
-        if e.enemy and (e.enemy.state == 'warn' or e.enemy.state == 'dash') then
-            local a = e.enemy
-            local progress = a.state == 'dash' and 1 or 1 - a.timer / (a.warningDuration or 1)
-            local tint = a.kind == 'ranger' and C.gold or a.kind == 'warden' and C.violet or C.red
+        if e.hazard then
+            for _, cell in ipairs(e.hazard.cells) do
+                warningCell(cell, C.gold, 0, 0, 1 - e.hazard.timer / e.hazard.duration, overlay, 'blast')
+            end
+        end
+        local a = e.enemy
+        if a and (a.state == 'warn' or a.state == 'dash' or a.state == 'volley') then
+            local progress = a.state ~= 'warn' and 1 or 1 - a.timer / (a.warningDuration or 1)
+            local tint = (a.mode == 'shot' or a.mode == 'dual' or a.mode == 'mark' or a.mode == 'summon') and C.gold or C.red
             for i, cell in ipairs(a.cells) do
                 if a.state ~= 'dash' or i >= (a.dashIndex or 1) then
-                    local x, y = (cell.x - 1) * 40, (cell.y - 1) * 40
-                    local dx = a.mode == 'cross' and (cell.x == e.grid.x and 0 or cell.x > e.grid.x and 1 or -1) or a.dx
-                    local dy = a.mode == 'cross' and (cell.y == e.grid.y and 0 or cell.y > e.grid.y and 1 or -1) or a.dy
-                    if a.kind == 'ranger' then
-                        color(tint, .24 + progress * .32); G.setLineWidth(2)
-                        G.line(x + 20 - dx * 18, y + 20 - dy * 18, x + 20 + dx * 18, y + 20 + dy * 18)
-                    else
-                        color(tint, .13 + progress * .19); G.rectangle('fill', x + 3, y + 3, 34, 34, 2)
-                        color(tint, .55 + progress * .4); G.setLineWidth(1.5)
-                        G.rectangle('line', x + 4, y + 4, 32, 32, 2)
-                        color(tint, .25); G.line(x + 8, y + 28, x + 28, y + 8)
-                    end
-                    arrow(x + 20 + dx * 3, y + 20 + dy * 3, dx, dy, tint, 5)
+                    local dx = cell.dx or (a.mode == 'cross' and (cell.x == e.grid.x and 0 or cell.x > e.grid.x and 1 or -1)) or a.dx
+                    local dy = cell.dy or (a.mode == 'cross' and (cell.y == e.grid.y and 0 or cell.y > e.grid.y and 1 or -1)) or a.dy
+                    local kind = (a.mode == 'shot' or a.mode == 'dual') and 'shot' or (a.mode == 'mark' or a.mode == 'summon') and 'blast' or 'dash'
+                    warningCell(cell, tint, dx, dy, progress, overlay, kind)
+                    for _, f in ipairs(cell.fall or {}) do warningCell(f, C.jade, a.dx, a.dy, progress, overlay, 'fall') end
                 end
             end
-            local x, y = (e.grid.x - .5) * 40, (e.grid.y - .5) * 40
-            color(tint, .7); G.setLineWidth(2)
-            G.arc('line', 'open', x, y, 23, -pi / 2, -pi / 2 + math.max(.02, progress) * 2 * pi)
         end
     end
 end
+
+function Render:edgeThreats(game)
+    local v = self.view
+    for _, e in ipairs(game:entities()) do
+        local a = e.enemy
+        if a and (a.state == 'warn' or a.state == 'dash' or a.state == 'volley') then
+            local x, y = Render.visualPosition(e)
+            local sx, sy = x - v.left, y - v.top
+            if sx < 0 or sy < 0 or sx >= v.w or sy >= v.h then
+                local cx, cy = v.w / 2, v.h / 2
+                local dx, dy = sx - cx, sy - cy
+                local t = math.min((cx - 10) / math.max(1, math.abs(dx)), (cy - 10) / math.max(1, math.abs(dy)))
+                local ix, iy = round(cx + dx * t), round(cy + dy * t)
+                color(C.ink); G.rectangle('fill', ix - 6, iy - 6, 13, 13)
+                border(ix - 6, iy - 6, 13, 13, C.red)
+                if math.abs(dx) > math.abs(dy) then arrow(ix + (dx > 0 and 2 or -2), iy, dx > 0 and 1 or -1, 0, C.gold, 3)
+                else arrow(ix, iy + (dy > 0 and 2 or -2), 0, dy > 0 and 1 or -1, C.gold, 3) end
+                local progress = a.state == 'warn' and 1 - a.timer / (a.warningDuration or 1) or 1
+                color(C.gold); G.rectangle('fill', ix - 5, iy + 8, round(11 * progress), 1)
+            end
+        end
+    end
+end
+
+-- Each kind owns a silhouette; elites and bosses are shapes, not recolors.
+local sprites = {}
+sprites.warden = function(self, e, a, facing, recover)
+    color(a.phase2 and {.30, .12, .35} or {.18, .20, .28})
+    G.polygon('fill', -13, -12, 13, -12, 17, 13, 0, 19, -17, 13)
+    color(a.phase2 and C.red or C.violet)
+    G.polygon('fill', -14, -7, -20, -10, -19, 4, -9, 5)
+    G.polygon('fill', 14, -7, 20, -10, 19, 4, 9, 5)
+    color({.36, .36, .46}); G.polygon('fill', -10, -15, 0, -22, 10, -15, 8, 1, 0, 5, -8, 1)
+    color(C.gold); G.polygon('fill', -11, -13, -13, -25, -6, -21, 0, -29, 6, -21, 13, -25, 11, -13)
+    color(C.ink); G.rectangle('fill', -7, -12, 14, 5, 1)
+    color(a.phase2 and C.red or C.violet); G.rectangle('fill', -5 + facing.dx, -11 + facing.dy, 10, 2)
+    diamond(0, 10, 4, a.phase2 and C.red or C.violet)
+    if a.phase2 then color(C.red, .35); G.circle('line', 0, -8, 25 + math.sin(self.time * 4) * 2) end
+end
+sprites.dasher = function(self, e, a, facing, recover)
+    color({.43, .13, .16}); G.polygon('fill', -11, -9, 10, -9, 13, 10, -11, 13)
+    color(recover and C.muted or C.red); G.polygon('fill', -11, -4, -15, -7, -11, 5, -6, 4)
+    G.polygon('fill', 10, -4, 15, -7, 12, 5, 6, 4)
+    color({.65, .25, .23}); G.polygon('fill', -9, -10, -5, -16, 5, -16, 10, -9, 7, 2, -6, 2)
+    color(C.gold); G.polygon('fill', -8, -11, -13, -17, -10, -7); G.polygon('fill', 8, -11, 13, -17, 10, -7)
+    color(C.ink); G.rectangle('fill', -7 + facing.dx, -9 + facing.dy, 14, 4, 1)
+    color(C.red); G.rectangle('fill', -5 + facing.dx * 2, -8 + facing.dy * 2, 10, 1.5)
+    color(C.ink); G.rectangle('fill', -8, 10, 5, 5); G.rectangle('fill', 4, 10, 5, 5)
+    G.push(); G.rotate(math.atan2(facing.dy, facing.dx)); color(C.muted)
+    G.line(3, 11, 19, 11); color(C.red); G.polygon('fill', 20, 4, 26, 10, 19, 18, 15, 14); G.pop()
+end
+sprites.ranger = function(self, e, a, facing, recover)
+    color({.35, .25, .40}); G.polygon('fill', -8, -10, 9, -10, 15, 12, 0, 17, -14, 12)
+    color(recover and C.muted or C.gold); G.polygon('fill', -10, -6, -5, -13, 5, -13, 10, -6, 7, 4, -7, 4)
+    color(C.ink); G.ellipse('fill', facing.dx * 2, -5 + facing.dy * 2, 6, 5)
+    diamond(facing.dx * 3, -6 + facing.dy * 3, 3, C.gold)
+    color(C.gold, .5); G.line(-7, 4, -10, 11, 0, 14, 10, 11, 7, 4)
+    G.push(); G.rotate(math.atan2(facing.dy, facing.dx))
+    color(C.muted); G.line(15, -11, 15, 13); diamond(15, -13, 6, C.gold)
+    color(C.ink); G.circle('fill', 15, -13, 3); diamond(15, -13, 1.5, C.gold); G.pop()
+end
+sprites.crawler = function(self, e, a, facing, recover)
+    local low = a.state == 'exposed' and 3 or 0
+    color({.22, .34, .30}); G.ellipse('fill', 0, 4 + low, 15, 8)
+    color({.13, .24, .22}); G.ellipse('fill', -3, 1 + low, 11, 6)
+    for side = -1, 1, 2 do
+        color({.30, .44, .38}); G.setLineWidth(2)
+        G.line(side * 8, 0 + low, side * 15, 6); G.line(side * 5, 6, side * 13, 11)
+    end
+    color({.36, .52, .44}); G.circle('fill', facing.dx * 9, -2 + facing.dy * 5 + low, 6)
+    color(C.ink); G.circle('fill', facing.dx * 11 + facing.dy * 2, -3 + facing.dy * 6 + facing.dx * 0 + low, 2)
+    G.circle('fill', facing.dx * 11 - facing.dy * 2, -1 + facing.dy * 6 + low, 2)
+    color(C.red); G.line(facing.dx * 13 - facing.dy * 3, 2 + facing.dy * 8 + low,
+        facing.dx * 16 - facing.dy * 5, 5 + facing.dy * 9 + low)
+    G.line(facing.dx * 13 + facing.dy * 3, 2 + facing.dy * 8 + low,
+        facing.dx * 16 + facing.dy * 5, 5 + facing.dy * 9 + low)
+end
+sprites.sower = function(self, e, a, facing, recover)
+    color({.36, .26, .14}); G.polygon('fill', -9, -11, 9, -11, 14, 13, 0, 17, -14, 13)
+    color({.55, .38, .16}); G.polygon('fill', -8, -8, -3, -14, 6, -13, 10, -7, 6, 3, -6, 3)
+    color(C.ink); G.ellipse('fill', facing.dx * 2, -6 + facing.dy * 2, 5, 4)
+    local pulse = a.state == 'warn' and (1 - a.timer / (a.warningDuration or 1)) or 0
+    diamond(facing.dx * 14, -14 + facing.dy * 6, 4 + pulse * 2, C.gold)
+    diamond(facing.dx * 14, -14 + facing.dy * 6, 2 + pulse, {1, .88, .59, .8})
+    color(C.gold, .4); G.setLineWidth(1); G.line(-6, 4, -9, 11); G.line(6, 4, 9, 11)
+end
+sprites.watcher = function(self, e, a, facing, recover)
+    color({.20, .16, .32}); G.polygon('fill', -9, 12, -7, -14, 0, -20, 7, -14, 9, 12)
+    color({.30, .26, .44}); G.polygon('fill', -6, 10, -5, -11, 0, -16, 5, -11, 6, 10)
+    local open = a.state == 'warn' and 1 or .45
+    color(C.violet); G.ellipse('fill', 0, -6, 7, 4 * open + 1)
+    color(C.ink); G.circle('fill', facing.dx * 2, -6 + facing.dy * 2, 2.5)
+    color(C.white, .8); G.circle('fill', facing.dx * 2 - .5, -7 + facing.dy * 2, 1)
+    for i = 0, 3 do
+        local ang = i * pi / 2 + pi / 4
+        diamond(math.cos(ang) * 10, -6 + math.sin(ang) * 8, 1.5, C.violet)
+    end
+    color(C.violet, .4); G.setLineWidth(1); G.line(-9, 12, 9, 12)
+end
+sprites.husk = function(self, e, a, facing, recover)
+    local total = a.hatchTime or 3.5
+    local pulse = math.sin(self.time * 6) * 1.5
+    color({.30, .22, .12}); G.ellipse('fill', 0, 0, 11 + pulse * .4, 14 + pulse * .4)
+    color({.62, .42, .16}); G.ellipse('line', 0, 0, 11, 14)
+    color(C.gold); G.setLineWidth(1.5)
+    G.arc('line', 'open', 0, 0, 17, -pi / 2, -pi / 2 + math.max(.02, 1 - a.timer / total) * 2 * pi)
+    color(C.gold, .5); G.line(-5, -8, -2, 2); G.line(4, -10, 6, -3)
+end
+sprites.breaker = function(self, e, a, facing, recover)
+    sprites.dasher(self, e, a, facing, recover)
+    color({.24, .18, .14}); G.polygon('fill', -14, -14, 14, -14, 16, -8, -16, -8)
+    color(C.gold); G.setLineWidth(1.5)
+    G.line(-10, -13, -4, -9); G.line(9, -13, 3, -9)
+    diamond(0, -18, 3, C.red, 'line')
+end
+sprites.veteran = function(self, e, a, facing, recover)
+    sprites.ranger(self, e, a, facing, recover)
+    color(C.violet); G.polygon('fill', -10, -6, -5, -13, -1, -11, -6, -3)
+    G.push(); G.rotate(math.atan2(facing.dy, facing.dx))
+    color(C.violet); G.line(-15, -11, -15, 13); diamond(-15, -13, 5, C.violet)
+    G.pop()
+end
+sprites.demolisher = function(self, e, a, facing, recover)
+    color(a.phase2 and {.32, .14, .10} or {.22, .18, .16})
+    G.polygon('fill', -15, -13, 15, -13, 19, 14, 0, 20, -19, 14)
+    color({.34, .27, .22}); G.polygon('fill', -13, -15, -6, -24, 6, -24, 13, -15, 9, -3, -9, -3)
+    color({.42, .34, .26}); G.rectangle('fill', -18, -6, 6, 14, 1); G.rectangle('fill', 12, -6, 6, 14, 1)
+    color(C.ink); G.rectangle('fill', -8, -14, 16, 5, 1)
+    color(a.phase2 and C.red or C.gold); G.rectangle('fill', -6 + facing.dx * 2, -13 + facing.dy * 2, 12, 2)
+    color(C.gold, .55); G.setLineWidth(1)
+    G.line(-11, 0, -5, 6); G.line(11, 0, 5, 6); G.line(-3, -22, 0, -27); G.line(3, -22, 0, -27)
+end
+sprites.regent = function(self, e, a, facing, recover)
+    color(a.phase2 and {.40, .20, .10} or {.30, .22, .14})
+    G.polygon('fill', -11, -12, 11, -12, 16, 14, 0, 19, -16, 14)
+    color({.48, .34, .16}); G.polygon('fill', -9, -9, -4, -17, 4, -17, 9, -9, 6, 2, -6, 2)
+    color(C.gold); G.polygon('fill', -10, -15, -12, -26, -6, -21, 0, -28, 6, -21, 12, -26, 10, -15)
+    color(C.ink); G.ellipse('fill', facing.dx * 2, -8 + facing.dy * 2, 6, 4)
+    for i = 0, 2 do
+        local ang = self.time * 1.4 + i * (pi * 2 / 3)
+        diamond(math.cos(ang) * 15, -4 + math.sin(ang) * 11, 3, C.gold)
+    end
+    diamond(facing.dx * 13, -10 + facing.dy * 5, 2, {1, .88, .59, .7})
+end
+
 function Render:actor(e, game)
     local x, y, jump = Render.visualPosition(e)
+    x, y = math.floor(x + .5), math.floor(y + .5)
     if self.reducedMotion then jump = 0 end
-    color(C.ink, .65); G.ellipse('fill', x, y + 8, 13 - math.max(0, jump) * .2, 7 - math.max(0, jump) * .08)
+    if PixelWorld.object(self, e, game, x, y) then return end
+    if self.actors and self.actors:draw(self, e, game, x, y, jump) then return end
+    -- Existing cast remains rasterized on the same surface until stage 4.
+    if not e.enemy then return end
+    color(C.ink, .65); G.rectangle('fill', x - 9, y - 2, 18, 5)
     local facing = e.facing
-    local mining = e.player and (e.weapon.mineTimer or 0) > 0
-    local mineProgress = mining and 1 - e.weapon.mineTimer / Environment.constants.mineRecovery or 0
-    local nudge = mining and not self.reducedMotion and math.sin(mineProgress * pi) * 5 or 0
-    G.push(); G.translate(x + (mining and e.weapon.mineDx or 0) * nudge, y - jump + (mining and e.weapon.mineDy or 0) * nudge)
-    if e.motion and e.motion.falling and not self.reducedMotion then
-        G.scale(math.max(.3, 1 - (1 - e.motion.remaining / e.motion.duration) * .6))
-    end
-    local immune = e.health and e.health.immune > 0
-    local blink = immune and math.floor(self.time * 22) % 2 == 0
-    if e.target then
-        color({.32, .26, .20}); G.rectangle('fill', -3, -5, 6, 20, 1)
-        G.setLineWidth(2); G.line(-11, 14, 0, 9, 11, 14)
-        color(C.gold); G.circle('fill', 0, -9, 16)
-        color(C.text); G.circle('fill', 0, -9, 13)
-        color(C.red); G.circle('fill', 0, -9, 10)
-        color(C.text); G.circle('fill', 0, -9, 6)
-        color(C.red); G.circle('fill', 0, -9, 3)
-    elseif e.resonator then
-        local primed = e.resonator.state == 'primed'
-        local pulse = primed and math.sin(self.time * 22) * 2 or math.sin(self.time * 3) * .5
-        color(C.ink); G.ellipse('fill', 0, 6, 13, 7)
-        color({.27, .23, .20}); G.polygon('fill', -13, 5, -9, -1, 8, -1, 13, 5, 5, 10, -5, 10)
-        color({.80, .36, .13}); G.polygon('fill', 0, -22 - pulse, 9, -8, 5, 5, -5, 5, -9, -8)
-        color(C.gold); G.polygon('fill', 0, -22 - pulse, 1, -7, -5, 5, -9, -8)
-        color({1, .88, .59}); G.polygon('fill', 0, -22 - pulse, 9, -8, 1, -7)
-        color(C.white, .55); G.line(-3, -16, -6, -7)
-        if primed then
-            color(C.gold); G.setLineWidth(2)
-            G.arc('line', 'open', 0, 0, 21, -pi / 2, -pi / 2 + math.max(.01, 1 - e.resonator.timer / .62) * pi * 2)
-            text(self.fonts.tiny, '!', -3, -38, C.gold)
-        end
-    elseif e.player then
-        local w = e.weapon; local weaponColor = game.weapons.bow.color
-        if w.state == 'ready' then
-            color(weaponColor, .30 + .12 * math.sin(self.time * 7)); G.setLineWidth(1.5)
-            G.circle('line', 0, 0, 21); diamond(-16, -18, 3, weaponColor); diamond(16, -18, 3, weaponColor)
-        elseif w.state == 'charging' then
-            color(weaponColor, .85); G.setLineWidth(2)
-            G.arc('line', 'open', 0, 0, 21, -pi / 2, -pi / 2 + math.max(.01, w.charge / game.weapons.bow.chargeTime) * pi * 2)
-        end
-        color(blink and C.white or {.07, .28, .28}); G.polygon('fill', -8, -8, 8, -8, 12, 13, 0, 17, -12, 13)
-        color(C.jade, .8); G.polygon('fill', -9, -5, -4, -8, -5, 10, -9, 12)
-        color({.18, .52, .47}); G.polygon('fill', 5, -7, 10, -4, 9, 10, 5, 9)
-        color(C.ink); G.rectangle('fill', -7, 9, 5, 5, 1); G.rectangle('fill', 3, 9, 5, 5, 1)
-        color(C.gold); G.rectangle('fill', -7, 4, 14, 2); diamond(0, 5, 2, C.gold)
-        color(blink and C.white or {.24, .65, .59}); G.circle('fill', 0, -7, 10)
-        color(C.ink); G.ellipse('fill', facing.dx * 2, -7 + facing.dy * 2, 7, 5)
-        color(C.gold); G.rectangle('fill', -3 + facing.dx * 3, -8 + facing.dy * 2, 3, 2)
-        G.rectangle('fill', 2 + facing.dx * 3, -8 + facing.dy * 2, 3, 2)
-        color(C.jade); G.polygon('fill', -8, -2, -15, 1, -18, 9 + math.sin(self.time * 5) * 2, -10, 5)
-        G.push(); G.rotate(math.atan2(mining and w.mineDy or facing.dy, mining and w.mineDx or facing.dx))
-        if mining then
-            G.push(); G.translate(14, 4); G.rotate(-.8 + mineProgress * 1.5)
-            self:weapon('pickaxe', 0, 0, .8, C.gold); G.pop()
-        else self:weapon('bow', w.state == 'action' and 19 or 12, 5, .60, weaponColor) end
-        if e.guard.active then
-            color(C.jade, .17); G.arc('fill', 'pie', 0, 0, 27, -.8, .8)
-            color(C.jade); G.setLineWidth(3); G.arc('line', 'open', 0, 0, 24, -.8, .8)
-            color(C.white, .65); G.setLineWidth(1); G.arc('line', 'open', 0, 0, 27, -.65, .65)
-        end
-        G.pop()
-    else
+    G.push(); G.translate(x, math.floor(y - jump + .5)); G.scale(.8)
         local a = e.enemy
         local recover = a.state == 'recover'
-        if a.kind == 'warden' then
-            color(a.phase2 and {.30, .12, .35} or {.18, .20, .28})
-            G.polygon('fill', -13, -12, 13, -12, 17, 13, 0, 19, -17, 13)
-            color(a.phase2 and C.red or C.violet)
-            G.polygon('fill', -14, -7, -20, -10, -19, 4, -9, 5)
-            G.polygon('fill', 14, -7, 20, -10, 19, 4, 9, 5)
-            color({.36, .36, .46}); G.polygon('fill', -10, -15, 0, -22, 10, -15, 8, 1, 0, 5, -8, 1)
-            color(C.gold); G.polygon('fill', -11, -13, -13, -25, -6, -21, 0, -29, 6, -21, 13, -25, 11, -13)
-            color(C.ink); G.rectangle('fill', -7, -12, 14, 5, 1)
-            color(a.phase2 and C.red or C.violet); G.rectangle('fill', -5 + facing.dx, -11 + facing.dy, 10, 2)
-            diamond(0, 10, 4, a.phase2 and C.red or C.violet)
-            if a.phase2 then color(C.red, .35); G.circle('line', 0, -8, 25 + math.sin(self.time * 4) * 2) end
-        elseif a.kind == 'dasher' then
-            color({.43, .13, .16}); G.polygon('fill', -11, -9, 10, -9, 13, 10, -11, 13)
-            color(recover and C.muted or C.red); G.polygon('fill', -11, -4, -15, -7, -11, 5, -6, 4)
-            G.polygon('fill', 10, -4, 15, -7, 12, 5, 6, 4)
-            color({.65, .25, .23}); G.polygon('fill', -9, -10, -5, -16, 5, -16, 10, -9, 7, 2, -6, 2)
-            color(C.gold); G.polygon('fill', -8, -11, -13, -17, -10, -7); G.polygon('fill', 8, -11, 13, -17, 10, -7)
-            color(C.ink); G.rectangle('fill', -7 + facing.dx, -9 + facing.dy, 14, 4, 1)
-            color(C.red); G.rectangle('fill', -5 + facing.dx * 2, -8 + facing.dy * 2, 10, 1.5)
-            color(C.ink); G.rectangle('fill', -8, 10, 5, 5); G.rectangle('fill', 4, 10, 5, 5)
-            G.push(); G.rotate(math.atan2(facing.dy, facing.dx)); color(C.muted)
-            G.line(3, 11, 19, 11); color(C.red); G.polygon('fill', 20, 4, 26, 10, 19, 18, 15, 14); G.pop()
-        else
-            color({.35, .25, .40}); G.polygon('fill', -8, -10, 9, -10, 15, 12, 0, 17, -14, 12)
-            color(recover and C.muted or C.gold); G.polygon('fill', -10, -6, -5, -13, 5, -13, 10, -6, 7, 4, -7, 4)
-            color(C.ink); G.ellipse('fill', facing.dx * 2, -5 + facing.dy * 2, 6, 5)
-            diamond(facing.dx * 3, -6 + facing.dy * 3, 3, C.gold)
-            color(C.gold, .5); G.line(-7, 4, -10, 11, 0, 14, 10, 11, 7, 4)
-            G.push(); G.rotate(math.atan2(facing.dy, facing.dx))
-            color(C.muted); G.line(15, -11, 15, 13); diamond(15, -13, 6, C.gold)
-            color(C.ink); G.circle('fill', 15, -13, 3); diamond(15, -13, 1.5, C.gold); G.pop()
-        end
+        (sprites[a.kind] or sprites.ranger)(self, e, a, facing, recover)
         if a.frontalArmor then
             G.push(); G.rotate(math.atan2(facing.dy, facing.dx))
             color({.19, .23, .29}); G.polygon('fill', 13, -13, 19, -8, 21, 0, 19, 8, 13, 13, 9, 8, 9, -8)
@@ -500,66 +478,107 @@ function Render:actor(e, game)
             G.pop()
         end
         local hp = e.health
+        local barTints = {ranger = C.gold, sower = C.gold, watcher = C.violet,
+            veteran = C.violet, warden = C.violet, regent = C.gold}
         color(C.ink); G.rectangle('fill', -14, -25, 28, 4, 1)
-        color(a.kind == 'ranger' and C.gold or C.red); G.rectangle('fill', -13, -24, 26 * hp.current / hp.max, 2, 1)
-        if a.state == 'stunned' then
+        color(barTints[a.kind] or C.red); G.rectangle('fill', -13, -24, 26 * hp.current / hp.max, 2, 1)
+        if a.state == 'stunned' or a.state == 'exposed' then
             diamond(-6, -35, 2, C.violet); diamond(5, -33, 2, C.violet)
         elseif a.state == 'warn' then
             text(self.fonts.small, '!', -4, -43, C.white)
+        elseif a.state == 'volley' or (a.mode == 'summon' and a.state ~= 'idle') then
+            diamond(0, -37, 3, C.gold)
         elseif recover then
             color(C.muted, .65); G.circle('line', -4, -33, 1); G.circle('line', 1, -33, 1); G.circle('line', 6, -33, 1)
         end
-    end
     G.pop()
 end
 
 function Render:projectile(e)
-    local p, s = e.grid, e.projectile
-    -- Projectile interpolation is visual; the grid remains the damage authority.
-    local progress = math.min(1, s.clock / s.interval)
-    local x, y = (p.x - .5 + s.dx * progress) * 40, (p.y - .5 + s.dy * progress) * 40
-    G.push(); G.translate(x, y); G.rotate(math.atan2(s.dy, s.dx))
-    local c = s.kind == 'bolt' and C.red or C.gold
-    color(c, .28); G.setLineWidth(3); G.line(-25, 0, -7, 0)
-    if s.kind == 'bolt' then
-        diamond(0, 0, 5, c); color(C.white); G.line(-5, 0, 5, 0)
-    else
-        color(c); G.setLineWidth(1.5); G.line(-15, 0, 10, 0)
-        G.polygon('fill', 13, 0, 6, -3, 6, 3); G.line(-12, -3, -8, 0, -12, 3)
-    end
-    G.pop()
+    local p, a = e.grid, e.projectile
+    local progress = math.min(1, a.clock / a.interval)
+    local x, y = round((p.x - .5 + a.dx * progress) * 32), round((p.y - .5 + a.dy * progress) * 32)
+    local tint = a.kind == 'bolt' and C.red or C.gold
+    color(tint, .35); pixelLine(x - a.dx * 20, y - a.dy * 20, x - a.dx * 7, y - a.dy * 7)
+    color(tint); pixelLine(x - a.dx * 11, y - a.dy * 11, x + a.dx * 7, y + a.dy * 7)
+    arrow(x + a.dx * 9, y + a.dy * 9, a.dx, a.dy, C.text, 3)
 end
 
 function Render:effects()
+    -- Feedback stores legacy world units; convert its presentation only.
     for _, p in ipairs(self.feedback.rings) do
         local life = p.life / p.max
-        color(p.color, life * .8); G.setLineWidth(1 + life * 2)
-        G.circle('line', p.x, p.y, p.radius * (1 - life * life))
+        local r = round(p.radius * .8 * (1 - life * life))
+        border(round(p.x * .8) - r, round(p.y * .8) - r, r * 2 + 1, r * 2 + 1, p.color, life * .7)
     end
     for _, p in ipairs(self.feedback.particles) do
         local life = math.min(1, p.life / .3)
-        color(p.color, life); G.rectangle('fill', p.x, p.y, p.size * life, p.size * life)
+        color(p.color, life)
+        local x, y, size = round(p.x * .8), round(p.y * .8), math.max(1, round(p.size * life * .8))
+        if p.material == 'metal' then
+            pixelLine(x, y, x - (p.vx > 0 and 3 or -3), y - (p.vy > 0 and 1 or -1))
+        elseif p.material == 'crystal' then
+            pixelLine(x - size, y, x, y - size); pixelLine(x, y - size, x + size, y)
+            pixelLine(x + size, y, x, y + size); pixelLine(x, y + size, x - size, y)
+        else
+            G.rectangle('fill', x, y, size + (p.material == 'stone' and 1 or 0), size)
+            if p.material == 'stone' then color(C.muted, life * .5); G.rectangle('fill', x, y, size, 1) end
+        end
     end
     for _, p in ipairs(self.feedback.popups) do
-        G.push(); G.translate(p.x, p.y); G.scale(p.size)
-        G.setFont(self.fonts.medium); color(C.ink, p.alpha)
-        G.printf(p.text, -90 + 1, 1, 180, 'center'); color(p.color, p.alpha)
-        G.printf(p.text, -90, 0, 180, 'center'); G.pop()
+        local font = self.worldFonts.tiny
+        local width = font:getWidth(p.text)
+        text(font, p.text, round(p.x * .8 - width / 2), round(p.y * .8), p.color)
     end
 end
 
+-- A flat engraved slab on the floor, never readable as a mineable piece.
+function Render:inscription(mark)
+    if not mark.x or not mark.y then return end
+    local P = PixelWorld.palette
+    local px, py = (mark.x - 1) * 32, (mark.y - 1) * 32
+    color(P.ink, .55); G.rectangle('fill', px + 8, py + 11, 19, 14)
+    color(P.stoneDark); G.rectangle('fill', px + 7, py + 9, 18, 14)
+    color(P.stone); G.rectangle('fill', px + 8, py + 10, 16, 11)
+    color(P.stoneLight); G.rectangle('fill', px + 8, py + 10, 16, 1)
+    color(P.ink, .45); G.rectangle('fill', px + 8, py + 20, 16, 1)
+    -- Angular rune over carved text strokes; already-read slabs lose their jade.
+    local tint = mark.read and P.jadeDark or P.jade
+    pixelLine(px + 11, py + 15, px + 15, py + 12, tint)
+    pixelLine(px + 15, py + 12, px + 20, py + 15, tint)
+    pixelLine(px + 15, py + 12, px + 15, py + 17, tint)
+    color(P.joint)
+    G.rectangle('fill', px + 11, py + 19, 4, 1); G.rectangle('fill', px + 17, py + 19, 4, 1)
+    local glow = Render.secretHint(self.time, self.reducedMotion)
+    if glow > 0 then
+        pixelLine(px + 11, py + 15, px + 15, py + 12, P.jadeLight, glow * 2)
+        pixelLine(px + 15, py + 12, px + 20, py + 15, P.jadeLight, glow * 2)
+        color(P.white, glow); G.rectangle('fill', px + 15, py + 11, 1, 1)
+    end
+end
+
+local function interactPrompt(font, x, y, label)
+    local fw = font:getWidth(label)
+    local bx = round(x - fw / 2 - 3)
+    color(C.ink, .9); G.rectangle('fill', bx, y - 54, fw + 6, 11)
+    border(bx, y - 54, fw + 6, 11, C.gold)
+    text(font, label, bx + 3, y - 52, C.gold)
+end
+
 function Render:world(game)
-    self:floor(game); self:telegraphs(game)
+    self:floor(game)
+    for _, mark in ipairs(game.room.inscriptions or {}) do self:inscription(mark) end
+    self:telegraphs(game)
     local layers = {}
     for _, tile in pairs(game.room.tiles) do
         if tile.piece and tile.piece ~= 'portal' then
-            layers[#layers + 1] = {tile = tile, depth = tile.y * 40, x = tile.x * 40}
+            layers[#layers + 1] = {tile = tile, depth = tile.y * 32, x = tile.x * 32}
         end
     end
     for _, e in ipairs(game:entities()) do
-        if e.projectile or e.health and e.health.current > 0 then
+        if e.projectile or e.player or e.health and e.health.current > 0 then
             local x, y = Render.visualPosition(e)
-            layers[#layers + 1] = {entity = e, depth = y + (e.projectile and 4 or 17), x = x}
+            layers[#layers + 1] = {entity = e, depth = y, x = x}
         end
     end
     table.sort(layers, function(a, b)
@@ -572,132 +591,127 @@ function Render:world(game)
         elseif layer.entity.projectile then self:projectile(layer.entity)
         else self:actor(layer.entity, game) end
     end
-    self:terrainWarnings(game)
+    if self.actors then self.actors:drawDeaths(self, game) end
     self:effects()
+    self:telegraphs(game, true)
+    self:terrainWarnings(game)
+    if game.state == 'playing' and not game.dialogue and not game.reward then
+        local p = game.player.grid
+        local npcNear = false
+        for _, e in ipairs(game:entities()) do
+            if e.npc and math.abs(e.grid.x - p.x) + math.abs(e.grid.y - p.y) == 1 then
+                npcNear = true
+                interactPrompt(self.worldFonts.tiny, (e.grid.x - .5) * 32, (e.grid.y - .5) * 32, 'E · FALAR')
+            end
+        end
+        if not npcNear then
+            local prompted = false
+            for _, mark in ipairs(game.room.inscriptions or {}) do
+                if mark.x and mark.y and math.abs(mark.x - p.x) + math.abs(mark.y - p.y) == 1 then
+                    interactPrompt(self.worldFonts.tiny, (mark.x - .5) * 32, (mark.y - .5) * 32, 'E · LER')
+                    prompted = true
+                    break
+                end
+            end
+            if not prompted then
+                for _, door in ipairs(game.room.doors or {}) do
+                    if door.sealed and not door.unsealed
+                        and math.abs(door.x - p.x) + math.abs(door.y - p.y) == 1 then
+                        interactPrompt(self.worldFonts.tiny, (door.x - .5) * 32, (door.y - .5) * 32, 'E · SELO')
+                        break
+                    end
+                end
+            end
+        end
+    end
 end
 
 function Render:minimap(game, x, y, width, height)
     local visible, minX, maxX, minY, maxY = {}, math.huge, -math.huge, math.huge, -math.huge
     for _, room in ipairs(game.rooms) do
         if game:mapVisible(room) then
-            visible[#visible + 1] = room
+            visible[#visible+1] = room
             minX, maxX = math.min(minX, room.mapX), math.max(maxX, room.mapX)
             minY, maxY = math.min(minY, room.mapY), math.max(maxY, room.mapY)
         end
     end
     if #visible == 0 then return end
-    local step = math.min(25, (width - 14) / (maxX - minX + 1), (height - 12) / (maxY - minY + 1))
-    local ox, oy = x + width / 2 - (minX + maxX) * step / 2, y + height / 2 - (minY + maxY) * step / 2
-    G.setLineWidth(1.5)
+    local step = math.max(1, math.floor(math.min(12, (width-8)/(maxX-minX+1), (height-8)/(maxY-minY+1))))
+    local ox, oy = round(x+width/2-(minX+maxX)*step/2), round(y+height/2-(minY+maxY)*step/2)
     for _, room in ipairs(visible) do
         for _, door in ipairs(room.doors) do
             local other = game.rooms[door.to]
             if other and room.id < other.id and game:mapVisible(other) and (not door.hidden or door.revealed) then
-                color(C.line); G.line(ox + room.mapX * step, oy + room.mapY * step, ox + other.mapX * step, oy + other.mapY * step)
+                color(C.line); pixelLine(ox+room.mapX*step,oy+room.mapY*step,ox+other.mapX*step,oy+other.mapY*step)
             end
         end
     end
-    local icons = {treasure = 'T', shop = '$', refuge = '+', secret = '?', supersecret = '?'}
-    local rw, rh = step * .78, step * .65
+    local icons = {treasure='T',shop='$',refuge='+',secret='?',supersecret='?'}
+    local rw, rh = math.max(2,step-3), math.max(2,step-4)
     for _, room in ipairs(visible) do
-        local rx, ry = ox + room.mapX * step, oy + room.mapY * step
+        local rx, ry = ox+room.mapX*step, oy+room.mapY*step
         local current = game.roomId == room.id
-        local tint = current and C.jade or room.visited and C.gold or room.discovered and C.muted or {.35, .43, .47}
-        if not room.visited and (room.kind == 'secret' or room.kind == 'supersecret') then tint = C.violet end
-        color(C.ink); G.rectangle('fill', rx - rw / 2, ry - rh / 2, rw, rh, 1)
-        color(tint); G.rectangle(current and 'fill' or 'line', rx - rw / 2, ry - rh / 2, rw, rh, 1)
-        local icon = room.kind == 'boss' and room.visited and 'B' or icons[room.kind]
-        if icon then
-            G.push(); G.translate(rx, ry); G.scale(math.min(1, rh / 13))
-            text(self.fonts.tiny, icon, -10, -7, current and C.ink or tint, 20, 'center'); G.pop()
-        end
+        local tint = current and C.jade or room.visited and C.gold or C.muted
+        if not room.visited and (room.kind=='secret' or room.kind=='supersecret') then tint=C.violet end
+        local lx, ly = rx-math.floor(rw/2), ry-math.floor(rh/2)
+        color(C.ink); G.rectangle('fill',lx,ly,rw,rh)
+        if current then color(tint); G.rectangle('fill',lx,ly,rw,rh) else border(lx,ly,rw,rh,tint) end
+        local icon = room.kind=='boss' and room.visited and 'B' or icons[room.kind]
+        if icon and step>=10 then text(self.fonts.tiny,icon,rx-3,ry-5,current and C.ink or tint)
+        elseif icon then color(tint); G.rectangle('fill',rx,ry,1,1) end
     end
 end
-function Render:hud(game, w, h)
-    local f, e = self.fonts, game.player
-    local hp, guard, weapon = e.health, e.guard, e.weapon
-    panel(22, 20, 276, 136)
-    text(f.tiny, 'O VIAJANTE', 38, 30, C.muted)
-    text(f.small, math.ceil(hp.current) .. ' / ' .. hp.max, 211, 28, hp.current <= 3 and C.red or C.text, 66, 'right')
-    for i = 1, hp.max do
-        local alive = i <= hp.current
-        local c = alive and (hp.current <= 3 and C.red or C.jade) or C.line
-        color(c); G.rectangle('fill', 38 + (i - 1) * 23, 51, 19, 13, 2)
-        if alive then color(C.white, .25); G.rectangle('fill', 40 + (i - 1) * 23, 52, 15, 2) end
+function Render:hud(game, width, height)
+    local e, f = game.player, self.hudFont
+    local hp, guard = e.health, e.guard
+    G.push(); G.scale(2)
+    local w, h = math.floor(width / 2), math.floor(height / 2)
+    local function box(x, y, bw, bh, accent)
+        color(C.ink, .97); G.rectangle('fill', x, y, bw, bh)
+        border(x, y, bw, bh, accent or C.line)
+        color(C.gold, .7); G.rectangle('fill', x + 2, y + 2, 2, 2)
     end
-    text(f.tiny, 'ESCUDO', 38, 77, guard.exhausted and C.red or C.muted)
-    color(C.line); G.rectangle('fill', 103, 81, 121, 4, 2)
-    color(guard.exhausted and C.red or C.jade); G.rectangle('fill', 103, 81, 121 * guard.energy / guard.max, 4, 2)
-    text(f.tiny, 'SHIFT', 234, 77, guard.active and C.jade or C.text)
-    text(f.small, 'PICARETAS  ' .. game.pickaxes, 38, 98, game.pickaxes == 0 and C.red or C.gold)
-    text(f.tiny, '3 toques / peça', 173, 101, C.muted)
-    text(f.small, 'OURO  ' .. game.gold, 38, 122, C.gold)
-    local relics = {}
-    for _, choice in ipairs(require('src.progression').catalog) do
-        if game.upgrades[choice.id] then relics[#relics + 1] = choice end
+    box(8, 8, 154, 39)
+    text(f, 'VIDA', 14, 10, C.muted)
+    text(f, math.ceil(hp.current) .. '/' .. hp.max, 104, 10, hp.current <= 3 and C.red or C.text, 50, 'right')
+    for i=1,hp.max do
+        local x, y = 15 + (i-1)*14, 23
+        local tint = i <= hp.current and (hp.current <= 3 and C.red or C.jade) or C.line
+        color(tint); G.rectangle('fill', x, y, 9, 5); G.rectangle('fill', x+2, y-1, 5, 7)
+        if i<=hp.current then color(C.text, .4); G.rectangle('fill', x+1, y, 3, 1) end
     end
-    if #relics > 0 then
-        text(f.tiny, 'RELÍQUIAS', 29, 169, C.muted)
-        for i, relic in ipairs(relics) do
-            diamond(33, 193 + (i - 1) * 19, 2, relic.color)
-            text(f.tiny, relic.title, 43, 187 + (i - 1) * 19, relic.color)
-        end
+    text(f, 'ESCUDO', 14, 33, guard.exhausted and C.red or C.muted)
+    color(C.line); G.rectangle('fill', 60, 37, 95, 4)
+    color(guard.exhausted and C.red or C.jade); G.rectangle('fill', 60, 37, round(95 * guard.energy / guard.max), 4)
+    if (self.resourceTime or 0) > 0 or game.pickaxes == 0 then
+        text(f, 'PICARETAS ' .. game.pickaxes .. '  OURO ' .. game.gold ..
+            '  NV ' .. game.level .. ' · XP ' .. game.xp .. '/' .. (Progression.xpLimit(game) or 'MAX'), 14, 47, C.gold)
     end
-    panel(310, 20, w - 532, 112)
-    text(f.tiny, game.practice and 'SALA DE COMBATE' or 'ANDAR ' .. game.floorNumber, 326, 27, C.muted)
-    text(f.medium, game.room.name, 326, 45, C.text)
-    local status = game.room.challenge == 'targets' and 'ALVOS  ' .. (3 - game:targetCount()) .. ' / 3 · saída livre' or
-        game.room.challenge == 'combat' and 'Desafio opcional · ' .. game:enemyCount() .. ' inimigos · saída livre' or
-        game:enemyCount() > 0 and game:enemyCount() .. ' inimigos · leia o aviso e saia da linha' or
-        'Sala tranquila · explore e saia pelo portal'
-    text(f.small, status, 326, 75, game:enemyCount() > 0 and C.muted or C.jade, w - 566)
-    local tactic = game.room.challenge == 'targets' and 'Acerte os 3 alvos com o arco. Saída sempre livre.' or game.room.tactic
-    if tactic then text(f.tiny, tactic, 326, 98, C.gold, w - 566) end
-    panel(w - 206, 20, 184, game.practice and 91 or 194)
-    if game.practice then
-        text(f.tiny, 'EXPERIMENTE', w - 190, 31, C.muted)
-        text(f.body, '3 toques', w - 190, 49, C.gold)
-        text(f.tiny, '1 picareta por peça', w - 190, 79, C.muted, 154)
-    else
-        text(f.tiny, 'MAPA · ANDAR ' .. game.floorNumber, w - 190, 29, C.muted)
-        self:minimap(game, w - 194, 49, 160, 116)
-        text(f.tiny, '$ loja · T tesouro', w - 194, 176, C.muted, 160, 'center')
-        text(f.tiny, '+ refúgio · ? segredo', w - 194, 195, C.muted, 160, 'center')
+    local mapHeight = Render.mapHeight(game)
+    box(w-110, 8, 102, mapHeight)
+    text(f, game.practice and 'CÂMARA' or 'MAPA / ANDAR ' .. game.floorNumber, w-104, 10, C.muted)
+    local oldFont = self.fonts.tiny
+    self.fonts.tiny = f
+    self:minimap(game, w-106, 22, 94, mapHeight-19)
+    self.fonts.tiny = oldFont
+    if (self.roomTime or 0) > 0 then
+        text(f, game.room.name, 167, 10, C.gold, w-284, 'center')
     end
-    local d = game:weaponStats()
-    local cw, x, y = 360, w / 2 - 180, h - 111
-    panel(x, y, cw, 82, d.color)
-    self:weapon('bow', x + 36, y + 25, .8, d.color)
-    text(f.small, d.label, x + 69, y + 10, C.text)
-    text(f.tiny, d.damage .. ' dano / linha livre', x + 69, y + 32, C.muted)
-    local mining = (weapon.mineTimer or 0) > 0
-    local label = mining and 'MINERANDO' or weapon.state == 'ready' and 'SOLTE SPACE' or
-        weapon.state == 'charging' and 'CARREGANDO' or weapon.state == 'action' and 'EM AÇÃO' or 'SEGURE SPACE'
-    local ratio = weapon.state == 'charging' and weapon.charge / d.chargeTime or weapon.state == 'ready' and 1 or 0
-    text(f.small, label, x + 12, y + 53, d.color)
-    color(C.line); G.rectangle('fill', x + 12, y + 73, cw - 24, 3, 1)
-    color(d.color); G.rectangle('fill', x + 12, y + 73, (cw - 24) * ratio, 3, 1)
-    text(f.tiny, 'WASD mover / minerar    SPACE segurar e soltar    SHIFT escudo    TAB guia    ESC pausa', 20, h - 21, C.muted, w - 40, 'center')
-    if game.messageTime > 0 then
-        local width = math.min(w - 80, f.small:getWidth(game.message) + 42)
-        local messageY = game.room.final and game:enemyCount() > 0 and 182 or 122
-        panel((w - width) / 2, messageY, width, 37, C.jade)
-        text(f.small, game.message, (w - width) / 2 + 15, messageY + 9, C.text, width - 30, 'center')
-    elseif self.feedback.banner > .1 and not game.reward and game.state == 'playing' then
-        text(f.medium, 'SALA DOMINADA', w / 2 - 160, 128, C.jade, 320, 'center')
+    local message = game.messageTime > 0 and game.message or self.feedback.banner > .1 and 'SALA DOMINADA' or nil
+    if message and not game.reward then
+        local _, lines = f:getWrap(message, w-24)
+        text(f, message, 12, h-18-#lines*f:getHeight(), C.text, w-24, 'center')
     end
+    text(f, 'WASD MOVER / MINERAR · SPACE ARCO · SHIFT ESCUDO · TAB GUIA · ESC PAUSA', 8, h-14, C.muted, w-16, 'center')
     for _, boss in ipairs(game:entities()) do
-        if boss.enemy and boss.enemy.kind == 'warden' and boss.health.current > 0 then
-            local bx = w / 2 - 180
-            text(f.small, 'GUARDIÃO DOS ECOS', bx, 118, boss.enemy.phase2 and C.red or C.violet, 360, 'center')
-            color(C.ink); G.rectangle('fill', bx, 141, 360, 9, 2)
-            color(boss.enemy.phase2 and C.red or C.violet); G.rectangle('fill', bx + 1, 142, 358 * boss.health.current / boss.health.max, 7, 2)
-            text(f.tiny, boss.enemy.phase2 and 'SELO PARTIDO · saia da cruz' or 'SELO FRONTAL · ataque pelos flancos', bx, 157, C.muted, 360, 'center')
+        if boss.enemy and boss.enemy.boss and boss.health.current > 0 then
+            local label = (Enemies[boss.enemy.kind] or {}).label or 'CHEFE'
+            text(f, label, 170, 26, C.violet, w-288, 'center')
+            color(C.line); G.rectangle('fill', 172, 40, w-292, 3)
+            color(C.violet); G.rectangle('fill', 172, 40, round((w-292)*boss.health.current/boss.health.max), 3)
         end
     end
-    if hp.current <= 3 and game.state == 'playing' then
-        color(C.red, .14 + math.sin(self.time * 4) * .035); G.setLineWidth(3); G.rectangle('line', 3, 3, w - 6, h - 6)
-    end
+    G.pop()
 end
 
 function Render:button(key, label, desc, x, y, width, accent)
@@ -705,7 +719,7 @@ function Render:button(key, label, desc, x, y, width, accent)
     color(accent, .14); G.rectangle('fill', x + 12, y + 14, 52, 37, 4)
     text(self.fonts.small, key, x + 12, y + 23, accent, 52, 'center')
     text(self.fonts.body, label, x + 79, y + 13, C.text)
-    text(self.fonts.small, desc, x + 79, y + 36, C.muted)
+    text(self.fonts.small, desc, x + 79, y + 38, C.muted)
 end
 
 function Render:emblem(x, y, size)
@@ -742,34 +756,103 @@ function Render:title(game, w, h)
     text(self.fonts.small, 'Arco · segure SPACE, solte quando pronto', left + 4, top + 463, C.gold)
 end
 
-function Render:help(w, h)
+function Render:help(game, w, h)
     color(C.ink, .94); G.rectangle('fill', 0, 0, w, h)
     local width, x, y = 920, (w - 920) / 2, h / 2 - 311
+    if self.helpPage == 'cards' then
+        panel(x, y, width, 622, C.gold)
+        self:helpCards(game, x, y, width)
+        return
+    end
     panel(x, y, width, 622, C.jade)
     text(self.fonts.small, 'GUIA DO VIAJANTE', x + 32, y + 24, C.jade)
+    text(self.fonts.small, 'C  CARTAS', x + width - 152, y + 24, C.muted, 120, 'right')
     text(self.fonts.large, 'Leia o tabuleiro. Faça o próximo passo.', x + 32, y + 50, C.text)
+    local stats = game:weaponStats()
+    text(self.fonts.tiny, 'OURO ' .. game.gold .. '   /   PICARETAS ' .. game.pickaxes ..
+        '   /   NV ' .. game.level .. ' · XP ' .. game.xp .. '/' .. (Progression.xpLimit(game) or 'MAX') ..
+        '   /   ARCO ' .. stats.damage .. ' DANO   /   CARGA ' .. string.format('%.2fs', stats.chargeTime / stats.chargeSpeed), x + 32, y + 84, C.gold)
     local rows = {
-        {'WASD', 'Mova, mire ou dê uma pancada adjacente', 'A última direção aponta o arco e o escudo; mineração exige novos toques.'},
+        {'WASD', 'Toque para virar; segure ou repita para andar', 'A direção encarada também mira o arco e o escudo e dá pancada na peça à frente.'},
         {'PICARETAS', 'Três hits abrem uma peça', 'Hits 1 e 2 ficam marcados. O terceiro gasta uma picareta, sem avançar.'},
         {'PILARES', 'Escolha o lado da última pancada', 'O preview muda com seu lado; o terceiro hit trava cinco blocos de queda.'},
         {'BURACOS', 'O salto para o vazio é fatal', 'Não é possível voltar durante a queda. O aviso de pilar também pode matar.'},
-        {'SPACE', 'Segure para carregar o arco', 'Quando aparecer SOLTE SPACE, solte para disparar uma vez na direção da mira.'},
-        {'SOLTAR', 'Escolha o momento do tiro', 'Soltar cedo cancela; manter SPACE pressionado quando pronto não dispara.'},
-        {'SHIFT', 'Segure para defender de frente', 'O bloqueio solta uma onda. Levantar escudo cancela a carga. Evite os flancos.'},
+        {'SPACE', 'Segure para carregar o arco', game.upgrades.bowQuick and 'CORDA VIVA: carga 35% mais rápida. Solte SPACE quando pronta.' or 'Quando aparecer SOLTE SPACE, solte para disparar uma vez na direção da mira.'},
+        {'SOLTAR', 'Escolha o momento do tiro', game.upgrades.bowPierce and 'AGULHA DO SOL: atravessa inimigos, custa -1 dano. Soltar cedo cancela.' or 'Soltar cedo cancela; manter SPACE pressionado quando pronto não dispara.'},
+        {'SHIFT', 'Segure para defender de frente', game.upgrades.guardPulse and 'MARÉ DE FERRO: +1 dano no pulso frontal. Guarda cancela a carga.' or 'O bloqueio solta uma onda. Levantar escudo cancela a carga. Evite os flancos.'},
         {'1 / 2 / 3', 'Escolha uma relíquia na recompensa', 'O arco permanece equipado; números escolhem apenas cartas de recompensa.'},
         {'! / >>>', 'O aviso é uma promessa', 'Saia da investida, do tiro e da queda. Ataque o bruto pelos flancos.'},
         {'CENÁRIO', 'Abra passagem e linha de tiro', 'O cenário está sempre visível. Cristais e dash rompem peças; tiros param nelas.'},
         {'SEGREDOS', 'Combate ou três alvos com o arco', 'Brilho sutil marca entradas. Desafios dão relíquias; a saída fica sempre livre.'},
+        {'NÍVEL', 'XP da tentativa: inimigos 1, elites 3, chefes 5, desafios 2',
+            'Cada nível oferece um eco; se outra tela estiver aberta, a oferta espera.'},
     }
     for i, row in ipairs(rows) do
-        local ry = y + 103 + (i - 1) * 40
-        color(C.line, .5); G.line(x + 32, ry + 38, x + width - 32, ry + 38)
+        local ry = y + 98 + (i - 1) * 38
+        color(C.line, .5); G.line(x + 32, ry + 36, x + width - 32, ry + 36)
         text(self.fonts.small, row[1], x + 32, ry + 6, i == 9 and C.gold or C.jade, 120, 'center')
         text(self.fonts.body, row[2], x + 174, ry, C.text)
-        text(self.fonts.small, row[3], x + 174, ry + 21, C.muted)
+        text(self.fonts.small, row[3], x + 174, ry + 24, C.muted)
     end
     text(self.fonts.small, '7–8 salas iniciais + 2 segredos; cada andar acrescenta 2–3 salas. Vença o chefe para descer.', x + 32, y + 556, C.gold)
-    text(self.fonts.small, 'TAB / ESC voltar    ·    F2 reduzir movimento    ·    M áudio    ·    F11 tela cheia', x + 32, y + 589, C.text)
+    text(self.fonts.small, 'TAB / ESC voltar    ·    C cartas    ·    F2 reduzir movimento    ·    M áudio    ·    F11 tela cheia', x + 32, y + 589, C.text)
+end
+
+-- Collected cards are legible; the rest stay as '???' in catalog order.
+function Render:helpCards(game, x, y, width)
+    local cards = Lore.cards or {}
+    local owned = game.cards or {}
+    local found = 0
+    for _, card in ipairs(cards) do if owned[card.id] then found = found + 1 end end
+    text(self.fonts.small, 'CARTAS DO VIAJANTE', x + 32, y + 24, C.jade)
+    text(self.fonts.small, 'C  GUIA', x + width - 152, y + 24, C.muted, 120, 'right')
+    text(self.fonts.large, 'CARTAS ' .. found .. '/' .. #cards, x + 32, y + 50, C.text)
+    text(self.fonts.tiny, 'Bilhetes da primeira expedição e dos sacerdotes de jade, espalhados pelas Ruínas.',
+        x + 32, y + 84, C.gold)
+    local total = #cards
+    local sel = math.max(1, math.min(self.helpCard or 1, math.max(total, 1)))
+    self.helpCard = sel
+    local listX, listY, listW, rowH = x + 32, y + 106, 358, 25
+    local viewRows = math.floor((y + 578 - listY) / rowH)
+    local scroll = math.max(0, math.min(sel - viewRows, total - viewRows))
+    for row = 1, math.min(viewRows, total) do
+        local i = row + scroll
+        local card = cards[i]
+        local has = owned[card.id] == true
+        local ry = listY + (row - 1) * rowH
+        if i == sel then
+            color(C.jade, .13); G.rectangle('fill', listX - 8, ry - 2, listW + 16, rowH - 2, 3)
+            border(listX - 8, ry - 2, listW + 16, rowH - 2, C.jade, .8)
+        end
+        text(self.fonts.small, string.format('%02d', i), listX, ry + 5, i == sel and C.gold or C.muted)
+        text(self.fonts.small, has and card.title or '???', listX + 34, ry + 5, has and C.text or C.muted)
+        if has then diamond(listX + listW - 6, ry + 11, 3, i == sel and C.gold or C.jade) end
+    end
+    if scroll > 0 then text(self.fonts.small, '^', listX + listW + 4, listY - 4, C.muted) end
+    if scroll + viewRows < total then
+        text(self.fonts.small, 'v', listX + listW + 4, listY + viewRows * rowH - 14, C.muted)
+    end
+    local px, py, pw, ph = x + 428, y + 100, width - 460, 478
+    panel(px, py, pw, ph, C.gold)
+    local card = cards[sel]
+    local has = card and owned[card.id] == true
+    text(self.fonts.small, 'REGISTRO ' .. string.format('%02d', sel) .. ' / ' .. total, px + 20, py + 18, C.gold)
+    diamond(px + pw - 30, py + 27, 8, has and C.jade or C.line, 'line')
+    diamond(px + pw - 30, py + 27, 3, has and C.jade or C.line)
+    if has then
+        text(self.fonts.medium, card.title, px + 20, py + 44, C.text, pw - 70)
+        local cy = py + 92
+        for _, line in ipairs(card.lines or {}) do
+            local _, wrapped = self.fonts.body:getWrap(line, pw - 40)
+            text(self.fonts.body, line, px + 20, cy, C.muted, pw - 40)
+            cy = cy + math.max(1, #wrapped) * (self.fonts.body:getHeight() + 4) + 8
+        end
+    else
+        text(self.fonts.medium, '???', px + 20, py + 44, C.line)
+        text(self.fonts.body, 'Esta carta ainda não foi encontrada.\nInscrições, segredos e encontros nas Ruínas guardam os bilhetes da primeira expedição.',
+            px + 20, py + 92, C.muted, pw - 40)
+    end
+    text(self.fonts.small, 'W/S ou SETAS escolher    ·    C guia    ·    TAB / ESC voltar', x + 32, y + 589, C.text)
 end
 
 function Render:pause(w, h)
@@ -787,19 +870,24 @@ end
 
 function Render:ending(game, w, h)
     local won = game.state == 'won'
+    local worldDone = won and game.worldComplete
     local c = won and C.gold or C.red
     color(C.ink, .86); G.rectangle('fill', 0, 0, w, h)
     local x, y = w / 2 - 270, h / 2 - 210
     panel(x, y, 540, 420, c)
     diamond(w / 2, y + 54, 13, c, 'line'); diamond(w / 2, y + 54, 5, c)
-    text(self.fonts.small, won and 'O TABULEIRO É SEU.' or 'A QUEDA DEIXA MARCAS.', x + 28, y + 89, c, 484, 'center')
-    text(self.fonts.large, won and (game.practice and 'Câmara dominada.' or 'Andar ' .. game.floorNumber .. ' dominado.') or 'Um novo passo. Outra chance.', x + 28, y + 118, C.text, 484, 'center')
+    text(self.fonts.small, worldDone and 'AS RUÍNAS SILENCIAM.' or won and 'O TABULEIRO É SEU.' or 'A QUEDA DEIXA MARCAS.', x + 28, y + 89, c, 484, 'center')
+    text(self.fonts.large, worldDone and 'Mundo dominado.' or won and (game.practice and 'Câmara dominada.' or 'Andar ' .. game.floorNumber .. ' dominado.') or 'Um novo passo. Outra chance.', x + 28, y + 118, C.text, 484, 'center')
     local lesson = game.deathCause == 'hole' and 'O salto para o buraco não tem volta. Escolha um piso seguro.' or
         game.deathCause == 'crushed' and 'O pilar esmaga quem fica no corredor. Saia durante o aviso.' or
         'Saia da linha durante o aviso. Ataque na recuperação.'
-    text(self.fonts.body, won and 'Use o arco e o cenário para inventar outra maneira de vencer.' or lesson, x + 35, y + 176, C.muted, 470, 'center')
+    local body = worldDone and 'A Regente caiu e os ecos descansam. As Ruínas dos Ecos são suas.' or
+        won and 'Use o arco e o cenário para inventar outra maneira de vencer.' or lesson
+    text(self.fonts.body, body, x + 35, y + 176, C.muted, 470, 'center')
     text(self.fonts.small, game.kills .. ' inimigos vencidos    ·    ' .. math.floor(game.time) .. 's de combate', x + 28, y + 222, c, 484, 'center')
-    if won and not game.practice then
+    if worldDone then
+        text(self.fonts.small, 'N  Nova expedição    ·    R  Recomeçar    ·    ENTER  Menu', x + 30, y + 372, C.text, 480, 'center')
+    elseif won and not game.practice then
         self:button('ENTER', 'Próximo andar', 'Preserve seu arco, relíquias e ouro', x + 30, y + 269, 480, c)
         text(self.fonts.small, 'R  Recomeçar    ·    N  Nova expedição    ·    Q  Menu', x + 30, y + 372, C.text, 480, 'center')
     else
@@ -827,33 +915,266 @@ function Render:reward(game, w, h)
     text(self.fonts.tiny, 'Depois da escolha, explore o andar e siga pelos portais abertos. Seu arco permanece equipado.', x + 28, y + 387, C.muted, width - 56, 'center')
 end
 
+function Render:dialogue(game, w, h)
+    local d = game.dialogue
+    local width = math.min(700, w - 120)
+    local rows = d.mode == 'options' and #d.node.options
+        or d.mode == 'shop' and #d.shop or 1
+    local boxH, x = math.max(176, 88 + rows * 30), (w - width) / 2
+    local y = h - boxH - 42
+    panel(x, y, width, boxH, C.gold)
+    text(self.fonts.small, d.title, x + 26, y + 20, C.gold)
+    color(C.line); G.setLineWidth(1); G.line(x + 26, y + 42, x + width - 26, y + 42)
+    if d.mode == 'shop' then
+        text(self.fonts.small, 'OURO: ' .. game.gold, x + width - 140, y + 20, C.gold)
+        for i, item in ipairs(d.shop) do
+            text(self.fonts.body, i .. '   ' .. item.label .. '   ·   '
+                .. (item.sold and 'VENDIDO' or item.price .. ' OURO'),
+                x + 26, y + 58 + (i - 1) * 30, item.sold and C.muted or C.text)
+        end
+        text(self.fonts.small, 'Número compra   ·   E voltar   ·   ESC fechar', x + 26, y + boxH - 26, C.muted)
+    elseif d.mode == 'options' then
+        for i, option in ipairs(d.node.options) do
+            text(self.fonts.body, i .. '   ' .. option.label, x + 26, y + 58 + (i - 1) * 30, C.text)
+        end
+        text(self.fonts.small, 'Número escolhe   ·   ESC fechar', x + 26, y + boxH - 26, C.muted)
+    else
+        local line = d.lines[d.index]
+        local len = utf8.len(line) or #line
+        local shown = math.floor(math.min(len, d.reveal or len))
+        local boundary = utf8.offset(line, shown + 1) or (#line + 1)
+        text(self.fonts.body, line:sub(1, boundary - 1), x + 26, y + 60, C.text, width - 52)
+        text(self.fonts.small, shown < len and 'E >' or 'E >>', x + width - 70, y + boxH - 26, C.muted)
+    end
+end
+
+-- Campaign presentation: same canvas/camera pipeline, authored maps instead of
+-- generated rooms, continuous feet positions instead of hop interpolation.
+local titleFacade = {state = 'menu', room = {}, events = {},
+    entities = function() return {} end, player = {grid = {x = 0, y = 0}}}
+
+function Render:updateCampaign(dt, campaign, screen)
+    self.time = self.time + dt
+    if not campaign then
+        self.feedback.muted, self.feedback.reducedMotion = self.muted, self.reducedMotion
+        self.feedback:update(dt, titleFacade, screen)
+        return
+    end
+    self.actors:update(dt, campaign, screen == 'campaign' and 'playing' or screen, self.reducedMotion)
+    self.feedback.muted, self.feedback.reducedMotion = self.muted, self.reducedMotion
+    self.feedback:update(dt, campaign, screen)
+    if self.room ~= campaign.room then self.room, self.roomTime = campaign.room, 2.5 end
+    if screen == 'campaign' then self.roomTime = math.max(0, (self.roomTime or 0) - dt) end
+    self:updateDialogueReveal(dt, campaign.dialogue)
+    local map = campaign.scene == 'battle' and campaign.battle.room or campaign.room
+    local x, y = Render.visualPosition(campaign.player)
+    self.view = Render.layout(G.getWidth(), G.getHeight(), map, x, y, 76)
+end
+
+function Render:worldCampaign(campaign)
+    local map = campaign.room
+    self:floor(campaign)
+    local layers = {}
+    for _, tile in pairs(map.tiles) do
+        if tile.piece and tile.piece ~= 'portal' then
+            layers[#layers + 1] = {tile = tile, depth = tile.y * 32, x = tile.x * 32}
+        end
+    end
+    for _, prop in ipairs(map.props) do
+        if prop.state ~= 'taken' then
+            layers[#layers + 1] = {prop = prop, depth = (prop.y + (prop.h or 1) - 1) * 32, x = prop.x * 32}
+        end
+    end
+    for _, e in ipairs(campaign:entities()) do
+        local x, y = Render.visualPosition(e)
+        layers[#layers + 1] = {entity = e, depth = y, x = x}
+    end
+    table.sort(layers, function(a, b)
+        if a.depth ~= b.depth then return a.depth < b.depth end
+        return (a.x or 0) < (b.x or 0)
+    end)
+    for _, layer in ipairs(layers) do
+        if layer.tile then self:wall(map, layer.tile)
+        elseif layer.prop then
+            for dy = 0, (layer.prop.h or 1) - 1 do
+                for dx = 0, (layer.prop.w or 1) - 1 do
+                    Props.draw(layer.prop, (layer.prop.x + dx - 1) * 32, (layer.prop.y + dy - 1) * 32)
+                end
+            end
+        else self:actor(layer.entity, campaign) end
+    end
+    self:effects()
+    if campaign.state == 'playing' and not campaign.dialogue and campaign.scene == 'explore' then
+        local npc = campaign:nearNpc()
+        if npc then
+            interactPrompt(self.worldFonts.tiny, (npc.grid.x - .5) * 32, (npc.grid.y - .5) * 32, 'E · FALAR')
+        else
+            local spot = campaign:nearHotspot()
+            if spot then
+                interactPrompt(self.worldFonts.tiny, (spot.x - .5) * 32, (spot.y - .5) * 32, 'E · ' .. spot.label)
+            end
+        end
+    end
+end
+
+function Render:worldArena(campaign)
+    local battle = campaign.battle
+    self:floor({room = battle.room, seed = campaign.seed})
+    for _, tile in pairs(battle.room.tiles) do
+        if tile.piece and tile.piece ~= 'portal' then self:wall(battle.room, tile) end
+    end
+    for _, e in ipairs(battle.enemies or {}) do self:actor(e, campaign) end
+    self:actor(battle.player, campaign)
+    local x, y = Render.visualPosition(battle.player)
+    text(self.worldFonts.body, 'ARENA EM CONSTRUÇÃO', x - self.worldFonts.body:getWidth('ARENA EM CONSTRUÇÃO') / 2,
+        (battle.room.h) * 32 - 24, C.gold)
+end
+
+function Render:campaignHud(campaign, w, h)
+    G.push(); G.scale(2)
+    local hw = math.floor(w / 2)
+    local function box(x, y, bw, bh, accent)
+        color(C.ink, .97); G.rectangle('fill', x, y, bw, bh)
+        border(x, y, bw, bh, accent or C.line)
+        color(C.gold, .7); G.rectangle('fill', x + 2, y + 2, 2, 2)
+    end
+    box(8, 8, 150, 30)
+    text(self.hudFont, campaign.room.name, 14, 11, C.jade)
+    text(self.hudFont, campaign.scene == 'battle' and 'ENCONTRO' or 'EXPLORAÇÃO', 14, 25, C.muted)
+    if campaign.messageTime > 0 then
+        text(self.hudFont, campaign.message, 12, hw - 16, C.text, hw - 24, 'center')
+    end
+    text(self.hudFont, 'WASD ANDAR · E INTERAGIR · ESC PAUSA', 8, hw - 4, C.muted, hw - 16, 'center')
+    G.pop()
+end
+
+function Render:campaignTitle(hasSave, w, h)
+    color(C.ink, .85); G.rectangle('fill', 0, 0, w, h)
+    local left = math.max(58, (w - 1120) / 2)
+    local top = h / 2 - 243
+    text(self.fonts.small, 'A CIDADE QUE TE GUARDOU.', left + 4, top, C.jade)
+    text(self.fonts.title, 'ARROW', left, top + 25, C.text)
+    text(self.fonts.title, 'FALLEN', left, top + 85, C.gold)
+    color(C.gold); G.rectangle('fill', left + 4, top + 173, 59, 2)
+    text(self.fonts.body, 'Você saiu da própria sepultura.', left + 4, top + 193, C.muted)
+    text(self.fonts.body, 'A cidade que o enterrou ainda está de pé.', left + 4, top + 219, C.muted)
+    if hasSave then
+        self:button('ENTER', 'Continuar', 'Volte à campanha de onde parou', left, top + 264, 490, C.jade)
+        self:button('N', 'Nova campanha', 'Recomeça do zero — apaga o save', left, top + 342, 490, C.gold)
+    else
+        self:button('ENTER', 'Nova campanha', 'A Cidade Que Me Enterrou', left, top + 264, 490, C.jade)
+    end
+    text(self.fonts.small, 'TAB  Como jogar', left + 4, top + 433, C.text)
+    self:emblem(w - math.max(230, (w - 1000) / 2), h / 2 - 7, math.min(1.20, w / 1050))
+    for i, line in ipairs({'DEZ REGIÕES.', 'DOIS FINAIS.', 'A CIDADE QUE ME ENTERROU.'}) do
+        text(self.fonts.small, line, w - 382, h / 2 + 185 + (i - 1) * 16, C.muted, 305, 'center')
+    end
+    text(self.fonts.tiny, 'WASD andar    /    E interagir    /    ESC pausar', 40, h - 36, C.muted, w - 80, 'center')
+end
+
+function Render:campaignPause(w, h)
+    color(C.ink, .82); G.rectangle('fill', 0, 0, w, h)
+    local x, y = w / 2 - 246, h / 2 - 206
+    panel(x, y, 492, 412, C.jade)
+    text(self.fonts.small, 'A CIDADE ESPERA.', x + 28, y + 29, C.jade)
+    text(self.fonts.large, 'Pausa.', x + 28, y + 61, C.text)
+    self:button('ESC', 'Continuar', 'Volte exatamente onde parou', x + 26, y + 123, 440, C.jade)
+    self:button('TAB', 'Guia da viagem', 'Controles e o que a campanha guarda', x + 26, y + 203, 440, C.gold)
+    text(self.fonts.body, 'Q  Salvar e voltar ao título', x + 28, y + 295, C.text)
+    text(self.fonts.small, 'O progresso é gravado a cada passagem e cada decisão.', x + 28, y + 338, C.muted)
+end
+
+function Render:campaignHelp(w, h)
+    color(C.ink, .94); G.rectangle('fill', 0, 0, w, h)
+    local width, x, y = 920, (w - 920) / 2, h / 2 - 280
+    panel(x, y, width, 560, C.jade)
+    text(self.fonts.small, 'GUIA DA CAMPANHA', x + 32, y + 24, C.jade)
+    text(self.fonts.large, 'A Cidade Que Me Enterrou', x + 32, y + 50, C.text)
+    local rows = {
+        {'WASD', 'Andar livre', 'O mundo é contínuo: atravesse a colina e o refúgio a pé.'},
+        {'E', 'Interagir', 'Fale com moradores, leia marcas, pegue o que era seu.'},
+        {'PASSAGENS', 'As portas do fundo', 'No refúgio, a casa das passagens liga as dez regiões.'},
+        {'ENCONTROS', 'Criaturas visíveis viram duelos', 'O combate acontece numa arena própria, por turnos — em construção nesta etapa.'},
+        {'MORTE', 'Você volta para a cova', 'Nada se desfaz: mapas, decisões e itens permanecem.'},
+        {'SAVE', 'Automático', 'Cada travessia e cada decisão grave grava a campanha em disco.'},
+    }
+    for i, row in ipairs(rows) do
+        local ry = y + 96 + (i - 1) * 64
+        color(C.line, .5); G.line(x + 32, ry + 52, x + width - 32, ry + 52)
+        text(self.fonts.small, row[1], x + 32, ry + 6, i == 4 and C.gold or C.jade, 150, 'center')
+        text(self.fonts.body, row[2], x + 200, ry, C.text)
+        text(self.fonts.small, row[3], x + 200, ry + 30, C.muted)
+    end
+    text(self.fonts.small, 'TAB / ESC voltar    ·    F2 reduzir movimento    ·    M áudio', x + 32, y + 522, C.text)
+end
+
+function Render:drawCampaign(campaign, screen, hasSave)
+    G.push('all')
+    G.clear(C.ink)
+    local w, h = G.getDimensions()
+    if campaign and screen ~= 'title' then
+        local map = campaign.scene == 'battle' and campaign.battle.room or campaign.room
+        local actor = campaign.scene == 'battle' and campaign.battle.player or campaign.player
+        local feetX, feetY = Render.visualPosition(actor)
+        local v = Render.layout(w, h, map, feetX, feetY, 76)
+        self.view = v
+        if not self.canvas or self.canvas:getWidth() ~= v.w or self.canvas:getHeight() ~= v.h then
+            if self.canvas then self.canvas:release() end
+            self.canvas = G.newCanvas(v.w, v.h, {dpiscale = 1})
+            self.canvas:setFilter('nearest', 'nearest')
+        end
+        G.push('all')
+        G.setCanvas(self.canvas); G.clear(C.ink); G.setLineStyle('rough')
+        G.translate(-v.left, -v.top)
+        if campaign.scene == 'battle' then self:worldArena(campaign)
+        else self:worldCampaign(campaign) end
+        G.pop()
+        color(C.white); G.draw(self.canvas, v.x, v.y, 0, v.scale, v.scale)
+        self:campaignHud(campaign, w, h)
+    end
+    local scale = math.min(w / 1120, h / 720)
+    G.scale(scale); w, h = w / scale, h / scale
+    if screen == 'title' then self:campaignTitle(hasSave, w, h)
+    elseif screen == 'help' then self:campaignHelp(w, h)
+    elseif screen == 'paused' then self:campaignPause(w, h) end
+    if campaign and campaign.dialogue and screen ~= 'title' then self:dialogue(campaign, w, h) end
+    G.pop()
+end
+
 function Render:draw(game, screen)
     G.push('all')
     G.clear(C.ink)
     local w, h = G.getDimensions()
-    local trauma = self.reducedMotion and 0 or self.feedback.trauma^2
-    local baseX, baseY = self.camera:position()
-    self.camera:lookAt(baseX + math.sin(self.time * 51) * trauma * 6, baseY + math.sin(self.time * 67) * trauma * 4)
-    self.camera:attach(); self:world(game); self.camera:detach()
-    self.camera:lookAt(baseX, baseY)
-    if self.feedback.flash > 0 and not self.reducedMotion then color(C.red, self.feedback.flash * .8); G.rectangle('fill', 0, 0, w, h) end
-    local scale = math.min(w / 1120, h / 720)
-    G.scale(scale)
-    w, h = w / scale, h / scale
-    if screen == 'title' then self:title(game, w, h)
-    elseif screen == 'help' then self:help(w, h)
-    else
-        self:hud(game, w, h)
-        if screen == 'paused' then self:pause(w, h)
-        elseif game.state == 'dead' or game.state == 'won' then self:ending(game, w, h)
-        elseif game.reward then self:reward(game, w, h) end
+    local feetX, feetY = Render.visualPosition(game.player)
+    local v = Render.layout(w, h, game.room, feetX, feetY, math.max(112,Render.mapHeight(game)*2+24))
+    self.view = v
+    if not self.canvas or self.canvas:getWidth() ~= v.w or self.canvas:getHeight() ~= v.h then
+        if self.canvas then self.canvas:release() end
+        self.canvas = G.newCanvas(v.w, v.h, {dpiscale = 1})
+        self.canvas:setFilter('nearest', 'nearest')
     end
+    local trauma = self.reducedMotion and 0 or self.feedback.trauma^2
+    local shakeX, shakeY = round(math.sin(self.time * 51) * trauma * 4), round(math.sin(self.time * 67) * trauma * 3)
+    G.push('all')
+    G.setCanvas(self.canvas); G.clear(C.ink); G.setLineStyle('rough')
+    G.translate(-v.left + shakeX, -v.top + shakeY)
+    self:world(game)
+    G.pop()
+    color(C.white); G.draw(self.canvas, v.x, v.y, 0, v.scale, v.scale)
+    if self.feedback.flash > 0 and not self.reducedMotion then color(C.red, self.feedback.flash * .8); G.rectangle('fill', 0, 0, w, h) end
+    if screen ~= 'title' and screen ~= 'help' then
+        self:hud(game, w, h)
+        G.push('all'); G.translate(v.x,v.y); G.scale(v.scale); self:edgeThreats(game); G.pop()
+    end
+    local scale = math.min(w / 1120, h / 720)
+    G.scale(scale); w, h = w / scale, h / scale
+    if screen == 'title' then self:title(game, w, h)
+    elseif screen == 'help' then self:help(game, w, h)
+    elseif screen == 'paused' then self:pause(w, h)
+    elseif game.state == 'dead' or game.state == 'won' then self:ending(game, w, h)
+    elseif game.reward then self:reward(game, w, h) end
+    if game.dialogue and screen ~= 'title' then self:dialogue(game, w, h) end
     G.pop()
 end
 
 return Render
-
-
-
-
-

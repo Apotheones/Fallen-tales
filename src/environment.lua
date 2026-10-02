@@ -4,7 +4,7 @@ local directions = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 Concord.component("resonator", function(c)
     c.state, c.timer, c.cells, c.walls = "idle", 0, {}, {}
 end)
-local Environment = Concord.system({crystals = {"resonator", "grid", "health"}})
+local Environment = Concord.system({crystals = {"resonator", "grid", "health"}, hazards = {"hazard", "grid"}})
 Environment.constants = {pickaxes = 20, hits = 3, fallLength = 5, mineRecovery = .16, warning = .62, crushFatal = true}
 
 local function cardinal(dx, dy) return math.abs(dx) + math.abs(dy) == 1 and (dx == 0 or dy == 0) end
@@ -167,6 +167,22 @@ function Environment:update(dt)
         return a.x < b.x
     end)
     for _, cell in ipairs(falls) do fall(game, cell) end
+    for _, entity in ipairs(self.hazards) do
+        local z, p = entity.hazard, entity.grid
+        z.timer = math.max(0, z.timer - dt)
+        if z.timer == 0 then
+            game:effect("markBlast", p.x, p.y, z.cells)
+            for _, cell in ipairs(z.cells) do
+                for _, target in ipairs(game:entities()) do
+                    if target ~= entity and target.health and target.health.current > 0
+                        and target.grid.x == cell.x and target.grid.y == cell.y then
+                        game:damage(target, z.damage, p.x, p.y)
+                    end
+                end
+            end
+            entity:destroy()
+        end
+    end
     for _, entity in ipairs(self.crystals) do
         local r, p = entity.resonator, entity.grid
         if r.state == "primed" and entity.health.current > 0 then

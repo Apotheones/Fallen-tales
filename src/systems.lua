@@ -1,6 +1,7 @@
 local Concord = require("vendor.concord")
 local Rooms = require("src.rooms")
 local Environment = require("src.environment")
+local Enemies = require("src.enemies")
 local Systems = {}
 local function game(system) return system:getWorld():getResource("game") end
 
@@ -44,12 +45,22 @@ function Systems.Player:update(dt)
         guard.energy = math.max(0, guard.energy - dt)
         if guard.energy == 0 then guard.active, guard.exhausted = false, true end
     end
+    -- One press only turns; a press in the faced direction walks. A turned direction
+    -- stays locked briefly, so a quick tap aims without stepping while keeping the
+    -- key held starts walking after a short delay.
+    local wasX, wasY = f.dx, f.dy
     for _, event in ipairs(input.events) do
-        if event.kind == "face" then f.dx, f.dy = event.dx, event.dy
+        if event.kind == "face" then
+            wasX, wasY = f.dx, f.dy
+            f.dx, f.dy = event.dx, event.dy
         elseif event.kind == "release" then m.blocked[Rooms.key(event.dx, event.dy)] = nil
+        elseif event.kind == "interact" then g:interact()
         elseif event.kind == "step" and math.abs(event.dx) + math.abs(event.dy) == 1 and (event.dx == 0 or event.dy == 0) then
-            m.blocked[Rooms.key(event.dx, event.dy)] = nil
-            m.bufferDx, m.bufferDy, m.bufferTime = event.dx, event.dy, .18
+            local key = Rooms.key(event.dx, event.dy)
+            if wasX == event.dx and wasY == event.dy then
+                m.blocked[key] = nil
+                m.bufferDx, m.bufferDy, m.bufferTime = event.dx, event.dy, .18
+            else m.blocked[key] = g.time + .10 end
         elseif event.kind == "charge" and w.state == "empty" and not guard.active and w.mineTimer == 0 then
             w.state, w.charge, w.triggerHeld = "charging", 0, true
         elseif event.kind == "fire" then
@@ -69,7 +80,8 @@ function Systems.Player:update(dt)
     local mx, my = input.dx, input.dy
     local tapped = m.bufferTime > 0
     if tapped then mx, my = m.bufferDx, m.bufferDy end
-    if not tapped and m.blocked[Rooms.key(mx, my)] then return end
+    local lock = not tapped and m.blocked[Rooms.key(mx, my)]
+    if lock == true or type(lock) == "number" and lock > g.time then return end
     if not g.reward and m.remaining == 0 and w.mineTimer == 0 and math.abs(mx) + math.abs(my) == 1 then
         local x, y = e.grid.x + mx, e.grid.y + my
         if Rooms.blocksAttack(g.room, x, y) then
@@ -96,78 +108,16 @@ function Systems.Player:fire(g, e)
 end
 
 Systems.Enemy = Concord.system({enemies = {"enemy", "grid", "motion", "health"}})
-local function cardinal(dx, dy)
-    if math.abs(dx) >= math.abs(dy) then return dx >= 0 and 1 or -1, 0 end
-    return 0, dy >= 0 and 1 or -1
-end
-local function aligned(a, b) return a.x == b.x or a.y == b.y end
-local function visible(room, a, b)
-    if not aligned(a, b) then return false end
-    local dx, dy = cardinal(b.x - a.x, b.y - a.y)
-    local cells = Rooms.line(room, a.x, a.y, dx, dy, math.abs(b.x - a.x) + math.abs(b.y - a.y))
-    local last = cells[#cells]
-    return last and last.x == b.x and last.y == b.y
-end
 function Systems.Enemy:update(dt)
     local g = game(self)
     if g.state ~= "playing" then return end
     for _, e in ipairs(self.enemies) do
-        if e.health.current > 0 and not e.motion.falling and e.enemy.kind ~= "warden" then self:tick(g, e, dt) end
-    end
-end
-function Systems.Enemy:tick(g, e, dt)
-    local a, p, target = e.enemy, e.grid, g.player.grid
-    a.timer = math.max(0, a.timer - dt)
-    if a.state == "warn" and a.timer == 0 then
-        if a.kind == "ranger" then
-            g:shoot(e, a.dx, a.dy, 2, .13, #a.cells, "bolt")
-            a.state, a.timer = "recover", .75
-        else a.state, a.timer, a.dashIndex = "dash", 0, 0 end
-    elseif a.state == "dash" and a.timer == 0 and e.motion.remaining == 0 then
-        a.dashIndex = a.dashIndex + 1
-        local cell = a.cells[a.dashIndex]
-        if not cell then a.state, a.timer = "recover", .85; return end
-        if cell.impact or Rooms.blocksAttack(g.room, cell.x, cell.y) then
-            Environment.impact(g, cell.x, cell.y, a.dx, a.dy)
-            a.state, a.timer = "recover", .85
-            return
-        end
-        local occupant = g:occupant(cell.x, cell.y, e)
-        if occupant then
-            if occupant.player and occupant.grid.x == cell.x and occupant.grid.y == cell.y then
-                g:damage(occupant, 2, p.x, p.y)
-            elseif occupant.resonator then g:damage(occupant, 2, p.x, p.y)
-            end
-            a.state, a.timer = "recover", .85
-        elseif not g:move(e, a.dx, a.dy, .065, true) then a.state, a.timer = "recover", .85
-        else a.timer = .065 end
-    elseif a.state == "recover" and a.timer == 0 then
-        a.state, a.timer, a.cells = "seek", .12, {}
-    elseif a.state == "seek" and a.timer == 0 and e.motion.remaining == 0 then
-        local distance = math.abs(p.x - target.x) + math.abs(p.y - target.y)
-        if visible(g.room, p, target) and (a.kind == "ranger" or distance <= 4) then
-            a.dx, a.dy = cardinal(target.x - p.x, target.y - p.y)
-            a.cells = a.kind == "ranger" and Rooms.line(g.room, p.x, p.y, a.dx, a.dy, math.max(g.room.w, g.room.h))
-                or Environment.dashLine(g, p.x, p.y, a.dx, a.dy, 4)
-            a.state, a.timer, a.warningDuration = "warn", a.kind == "ranger" and 1.05 or .85, a.kind == "ranger" and 1.05 or .85
-            e.facing.dx, e.facing.dy = a.dx, a.dy
-            g:effect("warn", p.x, p.y)
-        else
-            local path = Rooms.path(g.room, p.x, p.y, function(x, y)
-                local d = math.abs(x - target.x) + math.abs(y - target.y)
-                if a.kind == "ranger" then return d >= 3 and d <= 8 and visible(g.room, {x = x, y = y}, target) end
-                return d == 1 or (d <= 4 and visible(g.room, {x = x, y = y}, target))
-            end, function(x, y) return not g:walkable(x, y, e) end)
-            if path and path[1] then
-                local dx, dy = path[1].x - p.x, path[1].y - p.y
-                e.facing.dx, e.facing.dy = dx, dy
-                g:move(e, dx, dy)
-            end
-            a.timer = a.kind == "ranger" and .34 or .28
+        local def = Enemies[e.enemy.kind]
+        if def and not def.boss and e.health.current > 0 and not e.motion.falling then
+            Enemies.step(g, e, dt)
         end
     end
 end
-
 Systems.Projectile = Concord.system({shots = {"projectile", "grid", "team"}})
 function Systems.Projectile:update(dt)
     local g = game(self)

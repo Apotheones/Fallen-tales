@@ -87,6 +87,15 @@ function Ui.run(getState)
             if command and command.step == tick then
                 for _, event in ipairs(command.events) do
                     if event.kind == "step" then press(keys[Rooms.key(event.dx, event.dy)])
+                    elseif event.kind == "face" then
+                        -- A face event alone means the bot turned; a real press only turns too.
+                        local stepped = false
+                        for _, other in ipairs(command.events) do
+                            if other.kind == "step" and other.dx == event.dx and other.dy == event.dy then
+                                stepped = true; break
+                            end
+                        end
+                        if not stepped then press(keys[Rooms.key(event.dx, event.dy)]) end
                     elseif event.kind == "charge" then down("space")
                     elseif event.kind == "fire" then up("space") end
                 end
@@ -98,13 +107,19 @@ function Ui.run(getState)
             and game.kills == simulated.kills and game.player.health.current == simulated.player.health.current,
             "real combat callbacks did not clear practice and leave exploration active")
         up("space"); advance(.18)
+        local function faceDirection(dx, dy)
+            local f = game.player.facing
+            if f.dx ~= dx or f.dy ~= dy then press(keys[Rooms.key(dx, dy)]); advance(.03) end
+        end
         local function walk(x, y)
             local p = game.player.grid
             local path = Rooms.path(game.room, p.x, p.y, function(nx, ny) return nx == x and ny == y end,
                 function(nx, ny) return not game:walkable(nx, ny, game.player) end)
             check(path, "real callback sequence has no safe route to " .. x .. "," .. y)
             for _, c in ipairs(path) do
-                press(keys[Rooms.key(c.x - p.x, c.y - p.y)]); advance(.18)
+                local dx, dy = c.x - p.x, c.y - p.y
+                faceDirection(dx, dy)
+                press(keys[Rooms.key(dx, dy)]); advance(.18)
                 check(p.x == c.x and p.y == c.y, "real callback sequence failed cardinal step")
             end
         end
@@ -116,20 +131,24 @@ function Ui.run(getState)
         check(wall, "reference room has no remaining mineable divider")
         walk(wall.x - 1, wall.y)
         local before = game.pickaxes
+        faceDirection(1, 0)
         for _ = 1, 3 - wall.hits do press("d"); advance(.18) end
         check(not wall.piece and game.pickaxes == before - 1, "real callback sequence did not mine reference wall")
         local pillar = Rooms.cell(game.room, 8, 4)
         check(pillar.piece == "pillar", "reference pillar was lost before the interaction sequence")
         walk(7, 4)
         before = game.pickaxes
+        faceDirection(1, 0)
         for _ = 1, 3 - pillar.hits do press("d"); advance(.18) end
         check(pillar.state == "falling" and game.pickaxes == before - 1, "real callbacks failed to announce pillar")
         advance(.7)
         walk(8, 4)
+        faceDirection(1, 0)
         for _ = 1, 3 do press("d"); advance(.18) end
         check(not Rooms.cell(game.room, 9, 4).piece and Rooms.cell(game.room, 10, 4).piece == "fallen",
             "real callbacks did not open one fallen segment")
         walk(10, 8)
+        faceDirection(1, 0)
         press("d"); advance(.02)
         check(game.player.motion.falling and game.state == "playing", "real callback did not commit hole landing")
         advance(.2)
@@ -174,7 +193,29 @@ function Ui.run(getState)
         press("1"); press("2"); press("3"); game = getState()
         check(game.player.weapon.name == "bow", "title controls equipped removed weapon")
         press("return", true); expectScreen("title")
-        press("tab"); expectScreen("help"); press("return"); expectScreen("title")
+        press("tab"); expectScreen("help")
+        check(renderer.helpPage == "guide" and renderer.helpCard == 1, "help did not open on the guide page")
+        press("c"); love.draw()
+        check(renderer.helpPage == "cards", "C did not switch the guide to the cards page")
+        local totalCards = #require("src.lore").cards
+        press("w"); press("up")
+        check(renderer.helpCard == 1, "W/UP scrolled above the first card")
+        press("s"); press("down")
+        check(renderer.helpCard == 3, "S/DOWN did not walk the card list")
+        for _ = 1, totalCards + 2 do press("s") end
+        check(renderer.helpCard == totalCards, "card selection passed the last catalog entry")
+        press("c")
+        check(renderer.helpPage == "guide", "C did not toggle back to the guide page")
+        press("c")
+        game.cards = {carta_cartografo_i = true}
+        love.draw()
+        check(renderer.helpPage == "cards" and game.cards.carta_cartografo_i,
+            "page with a collected card failed to render")
+        game.cards = {}
+        press("escape"); expectScreen("title")
+        press("tab"); expectScreen("help")
+        check(renderer.helpPage == "guide" and renderer.helpCard == 1, "reopened help kept the cards page")
+        press("tab"); expectScreen("title")
         press("return"); expectScreen("playing"); game = getState()
         local seed = game.seed
         check(game.practice and game.player.weapon.name == "bow", "ENTER did not start bow practice")
@@ -182,8 +223,10 @@ function Ui.run(getState)
         check(game.player.grid.x == 3, "movement ran before simulation step")
         love.update(.0085)
         check(game.player.grid.x == 4 and game.player.grid.y == 6, "released callback tap lost")
+        press("w"); advance(.02)
+        check(game.player.grid.y == 6 and game.player.facing.dy == -1, "new-direction tap moved instead of turning")
         press("w"); advance(.4)
-        check(game.player.grid.y == 5 and game.player.facing.dy == -1, "queued cardinal callback lost")
+        check(game.player.grid.y == 5 and game.player.facing.dy == -1, "faced-direction callback did not step")
         arena(game)
         press("i"); press("1"); press("2"); press("3"); advance(.02)
         check(game.player.weapon.name == "bow" and game.player.weapon.state == "empty", "removed keys affected combat")
@@ -238,22 +281,50 @@ function Ui.run(getState)
         game.state = "won"; press("n"); game = getState()
         check(not game.practice and game.rooms.regularCount >= 7 and game.floorNumber == 1
             and game.player.weapon.name == "bow", "N did not start first generated floor")
+        -- Park away from doors/NPCs/marks: a sealed leaf may border the start room.
+        local far
+        for y = 2, game.room.h - 1 do for x = 2, game.room.w - 1 do
+            if Rooms.floor(game.room, x, y) then
+                local near = false
+                for _, door in ipairs(game.room.doors) do
+                    if math.abs(door.x - x) + math.abs(door.y - y) <= 1 then near = true end
+                end
+                for _, e in ipairs(game:entities()) do
+                    if e.npc and math.abs(e.grid.x - x) + math.abs(e.grid.y - y) <= 1 then near = true end
+                end
+                for _, mark in ipairs(game.room.inscriptions or {}) do
+                    if math.abs(mark.x - x) + math.abs(mark.y - y) <= 1 then near = true end
+                end
+                if not near then far = {x = x, y = y} end
+            end
+            if far then break end
+        end if far then break end end
+        game.player.grid.x, game.player.grid.y = far.x, far.y
         local gold = game.gold
         press("e"); advance(.02)
-        check(game.gold == gold and not game.mapReveal, "E outside shop altered economy")
+        check(game.gold == gold and not game.dialogue and not game.mapReveal,
+            "E far from a character changed the run")
         game:enter(game.rooms.shopId)
         game.gold = 10
+        local merchant
+        for _, e in ipairs(game:entities()) do if e.npc then merchant = e end end
+        check(merchant and merchant.npc.id == "merchant", "shop merchant missing")
+        game.player.grid.x, game.player.grid.y = merchant.grid.x, merchant.grid.y + 1
         local known = {}
         for _, room in ipairs(game.rooms) do known[room.id] = game:mapVisible(room) end
         down("space"); advance(1)
-        check(game.player.weapon.state == "ready", "could not prepare inert E callback")
-        press("e"); press("e"); advance(.02)
-        check(game.gold == 10 and game.mapReveal == nil and game.blueMap == nil and game.player.weapon.state == "ready",
-            "removed E control purchased a map or cancelled a charge")
+        check(game.player.weapon.state == "ready", "could not prepare a charge beside the merchant")
+        press("e"); advance(.02)
+        check(game.dialogue and game.player.weapon.state == "empty",
+            "E beside the merchant did not open dialogue and cancel the charge")
+        check(game.gold == 10 and not game.mapReveal, "talking spent gold or revealed the map")
+        press("escape"); up("space"); advance(.02)
+        check(not game.dialogue and game.player.weapon.state == "empty",
+            "ESC did not close the dialogue cleanly")
         for _, room in ipairs(game.rooms) do
-            check(game:mapVisible(room) == known[room.id], "E changed minimap discovery")
+            check(game:mapVisible(room) == known[room.id], "dialogue changed minimap discovery")
         end
-        up("space"); advance(.3)
+        advance(.3)
         -- Reward indices still work while weapon-selection indices do nothing.
         game:enter(game.rooms.treasureId); love.draw()
         check(#game.rewardChoices == 3, "reward lost three choices")

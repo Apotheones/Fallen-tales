@@ -2,5 +2,5 @@ test-results.txt
 ui-test-results.txt
 *.log
 build/
-/*.png
-!/compact-*.png
+/screenshots/*
+!/screenshots/compact-*.png
