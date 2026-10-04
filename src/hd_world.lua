@@ -13,18 +13,42 @@ local Kit = require('src.hd_kit')
 local Lighting = require('src.lighting')
 local PostFX = require('src.postfx')
 local Props = require('src.props')
+local Pal = require('src.palettes')
+local PixelWorld = require('src.pixel_world')
+local PixelArt = require('src.pixel_art_v2')
+local PixelFont = require('src.pixel_font')
+local PixelScene = require('src.pixel_scene')
 
 local CELL = 64
 local HDWorld = {}
 
--- kind/id de prop -> def DSL do Traço (src/sprites/NOME). O que não casa
--- recebe stub genérico baixo — placeholder honesto até a DSL crescer.
+-- kind/id de prop -> def DSL do Traço (src/sprites/NOME). A DSL cobre a
+-- maior parte dos kinds de região; o que não casa recebe stub baixo.
 local PROP_SPRITE = {
     marco = 'marco', braseiro = 'braseiro', poco = 'poco',
-    cisterna = 'poco', pocoRua = 'poco', placa = 'placa',
-    placaRotas = 'placa', banco = 'bancada', bancada = 'bancada',
+    cisterna = 'cisterna_rua', pocoRua = 'cisterna_rua',
+    placa = 'placa', placaRotas = 'placa', placaEma = 'placa',
+    cartaz = 'cartaz', banco = 'banco_madeira', bancada = 'bancada',
     mesa = 'mesa', cadeira = 'cadeira', estante = 'estante',
-    prateleira = 'estante', arvore = 'arvore', cercado = 'cercado',
+    prateleira = 'prateleira', arvore = 'arvore', cercado = 'cercado',
+    lampiao = 'lampiao', posteLuz = 'lampiao', postoVigia = 'posto_vigia',
+    bau = 'bau', altar = 'altar', bigorna = 'bigorna', cama = 'cama',
+    caixas = 'caixas_antigas', carteiras = 'carteiras', cipo = 'cipo',
+    cova = 'cova', divisoria = 'divisoria', entulho = 'entulho',
+    espantalho = 'espantalho', fardos = 'fardos', flores = 'flores_adro',
+    fogao = 'fogao', lapide = 'lapide_a', sepultura = 'lapide_b',
+    mureta = 'mureta_adro', muro = 'muro_colina', parapeito = 'parapeito',
+    pertences = 'pertences', lenha = 'pilha_lenha',
+    pilhaLenha = 'pilha_lenha', portao = 'portao_adro', quadro = 'quadro',
+    quadroAula = 'quadro_aula', ervasRack = 'rack_ervas',
+    ferramentas = 'rack_ferramentas', recipientes = 'recipientes',
+    remendoMuro = 'remendo_muro', rocha = 'rocha', serragem = 'serragem',
+    tigela = 'tigela', toldo = 'toldo', toldoFeirante = 'toldo',
+    varal = 'varal', varalTerraco = 'varal_terraco', vela = 'vela_votiva',
+    velas = 'velas', oferenda = 'oferenda', brinquedo = 'brinquedo',
+    marcaImpro = 'marca_impro', pecaInacabada = 'peca_inacabada',
+    baldeTempera = 'balde_tempera', brasaForja = 'brasa_forja',
+    canteiro = 'canteiro_a',
 }
 
 local function dirSuffix(f)
@@ -91,20 +115,42 @@ local function sheetsFor(self)
         put('npc_' .. dir, Kit.sheet('npc_doro_' .. dir, 64, 96, actorStub))
     end
     s.propCache = {}
+    s.qcache = setmetatable({}, {__mode = 'v'})
     self._sheets = s
     return s
 end
 
+-- Quads memoizados por sheet (I5): Kit.quads alocava a tabela por
+-- entidade × canal × frame — um cache por sheet corta o churn.
+local function quadsOf(s, sheet)
+    local q = s.qcache[sheet]
+    if not q then
+        q = Kit.quads(sheet)
+        s.qcache[sheet] = q
+    end
+    return q
+end
+
 local function propQuad(self, s, prop)
+    -- Ordem: mapa explícito (id, kind) → tenta o próprio id/kind como def —
+    -- o Traço nomeia a maioria das defs pelo kind da ficha.
     local name = PROP_SPRITE[prop.id] or PROP_SPRITE[prop.kind]
-    if not name then return s.propStub, s.propStub_q[1] end
-    local c = s.propCache[name]
-    if c == nil then
-        c = Kit.bakeViaDSL(name) or false
-        s.propCache[name] = c
+    local c
+    if name then
+        c = s.propCache[name]
+        if c == nil then
+            c = Kit.bakeViaDSL(name) or false
+            s.propCache[name] = c
+        end
+    else
+        c = s.propCache[prop.id]
+        if c == nil then
+            c = Kit.bakeViaDSL(prop.id) or Kit.bakeViaDSL(prop.kind) or false
+            s.propCache[prop.id] = c
+        end
     end
     if not c then return s.propStub, s.propStub_q[1] end
-    return c, Kit.quads(c)[1]
+    return c, quadsOf(s, c)[1]
 end
 
 local function entityQuad(self, s, ent, t)
@@ -120,7 +166,23 @@ local function entityQuad(self, s, ent, t)
             or (n > 1 and 1 + math.floor(t * 2) % n or 1)
         return sh, qs[math.min(f, n)]
     end
-    local sh, qs = s['npc_' .. dir], s['npc_' .. dir .. '_q']
+    -- NPC real por id quando a DSL cobre a família (aurel/doro/bento/
+    -- nilo/sabela/teca): 'npc_<id>_<dir>'; sem def, cai no doro-legado e
+    -- depois no stub — troca automática quando o Traço assar mais.
+    local npcId = ent.npc and ent.npc.id
+    local sh, qs
+    if npcId then
+        local key = 'npc_' .. npcId .. '_' .. dir
+        local c = s.propCache[key]
+        if c == nil then
+            c = Kit.bakeViaDSL(key) or false
+            s.propCache[key] = c
+        end
+        if c then sh, qs = c, quadsOf(s, c) end
+    end
+    if not sh then
+        sh, qs = s['npc_' .. dir], s['npc_' .. dir .. '_q']
+    end
     if sh.stub then return s.actorStub, s.actorStub_q[1] end
     local n = #qs
     local f = n > 1 and 1 + math.floor(t * 2 + (ent.grid and ent.grid.x or 0)) % n or 1
@@ -150,12 +212,20 @@ end
 
 -- Chão: laje na praça do Refúgio com manchas de terra agrupadas (~3
 -- células) — hash por célula lia como xadrez; hash por bloco agrupa.
+-- Chão por região: praça de laje com terra no Refúgio, grama com terra
+-- na Colina, laje em interiores, terra como default de mundo aberto.
 local function floorKind(map, x, y)
-    if map.id == 'hub' then
+    local id = map.id
+    if id == 'hub' then
         return Kit.hash(math.floor(x / 3), math.floor(y / 3), 21) < .30
             and 'terra' or 'laje'
+    elseif id == 'colina' then
+        return Kit.hash(x, y, 22) < .55 and 'grama' or 'terra'
+    elseif id == 'oficinas' or id == 'mercado' or id == 'reservatorio'
+        or id == 'saloes' or id == 'fundacao' then
+        return 'laje'
     end
-    return 'terra'
+    return map.outdoor and 'terra' or 'laje'
 end
 
 function HDWorld.draw(renderer, campaign, v, map, shake)
@@ -173,13 +243,14 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
     for _, tile in pairs(map.tiles or {}) do
         if tile.piece then
             pieces[#pieces + 1] = {kind = 'tile', t2 = tile,
-                depth = tile.y * CELL, sx = tile.x}
+                depth = tile.y * CELL, sx = tile.x * CELL}
         end
     end
     for _, prop in ipairs(map.props or {}) do
         if prop.state ~= 'taken' and not Props.bakesToGround(prop) then
             pieces[#pieces + 1] = {kind = 'prop', p = prop,
-                depth = (prop.y + (prop.h or 1) - 1) * CELL, sx = prop.x}
+                depth = (prop.y + (prop.h or 1) - 1) * CELL,
+                sx = prop.x * CELL}
         end
     end
     for _, ent in ipairs(campaign:entities()) do
@@ -219,9 +290,22 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
             elseif p.kind == 'prop' then
                 local sh, q = propQuad(renderer, s, p.p)
                 local prop = p.p
-                Kit.drawFeet(sh, q, ch,
-                    (prop.x - 1) * CELL + (prop.w or 1) * CELL / 2,
-                    (prop.y + (prop.h or 1) - 1) * CELL)
+                if sh.stub and ((prop.w or 1) > 1 or (prop.h or 1) > 1) then
+                    -- Massa real do placeholder: prop multi-célula sem def
+                    -- (casas, cercas grandes) lê como caixa solitária se
+                    -- o stub vier uma vez só — repete por célula.
+                    for cx = 0, (prop.w or 1) - 1 do
+                        for cy = 0, (prop.h or 1) - 1 do
+                            Kit.drawFeet(sh, q, ch,
+                                (prop.x + cx - 1) * CELL + CELL / 2,
+                                (prop.y + cy) * CELL)
+                        end
+                    end
+                else
+                    Kit.drawFeet(sh, q, ch,
+                        (prop.x - 1) * CELL + (prop.w or 1) * CELL / 2,
+                        (prop.y + (prop.h or 1) - 1) * CELL)
+                end
             else
                 local sh, q = entityQuad(renderer, s, p.e, t)
                 Kit.drawFeet(sh, q, ch, p.fx, p.fy)
@@ -236,12 +320,19 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
     L:beginFrame()
     if map.outdoor then
         L:setAmbient(Kit.ambient(region))
+        -- Dominante por região (DIRECAO_AMBIENTAL): Refúgio pôr-do-sol
+        -- âmbar do SO; Colina é crepúsculo — lume alto, pálido e frio.
+        local sun = ({
+            hub = {c = {1.0, .76, .44}, i = 6.5},
+            refugio = {c = {1.0, .76, .44}, i = 6.5},
+            colina = {c = {.62, .70, 1.0}, i = 3.2},
+        })[region] or {c = {1.0, .76, .44}, i = 6.5}
         L:addLight({x = -640, y = map.h * CELL + 560, z = 460,
-            color = {1.0, .76, .44}, intensity = 6.5, radius = 8600})
+            color = sun.c, intensity = sun.i, radius = 8600})
     else
         -- Interior sem dominante: o ambiente É a luz — frio-neutro legível
         -- (escuro legível != preto, Calina), os pools de brasa aquecem.
-        L:setAmbient({.34, .33, .38})
+        L:setAmbient({.42, .41, .46})
     end
     for _, prop in ipairs(map.props or {}) do
         local ax, ay, tint, r = Props.lightAnchor(prop)
@@ -323,6 +414,659 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
             (L.stats and L.stats.occluders) or 0,
             (L.stats and L.stats.shadowQuads) or 0,
             (P.stats and P.stats.format) or '?'))
+    end
+
+    -- UI de mundo por cima da imagem composta: letreiros de destino,
+    -- prompt de interação e clima de região — os três desenham em px-64
+    -- (o translate da câmera ainda mapeia mundo→vista).
+    HDWorld.overlay(renderer, campaign, v, map)
+end
+
+-- ── Overlay de mundo (doorTags, prompt E·, clima) — paridade com o fim
+-- da worldCampaign legada, mas em células de 64px. Só leitura de estado.
+local function color(c, a) G.setColor(c[1], c[2], c[3], a or c[4] or 1) end
+
+local atmoTone = {
+    oficinas = {deep = PixelWorld.palette.goldDeep, accent = Pal.ember},
+    mercado = {deep = PixelWorld.palette.goldDark,
+        accent = Pal.regions.mercado.wood.base},
+    reservatorio = {deep = PixelWorld.palette.jadeDeep, accent = Pal.sky.mid},
+    saloes = {deep = PixelWorld.palette.violetDark,
+        accent = PixelWorld.palette.rust},
+    hub = {deep = PixelWorld.palette.goldDeep, accent = Pal.gold.light},
+    colina = {deep = PixelWorld.palette.violetDeep, accent = Pal.violet},
+}
+
+local INK = {.033, .046, .071}
+
+-- Escreve texto 2× (a vista HD tem scale 1 — o tag de px-32 encolhia).
+local function drawTag(renderer, x, y, tag, tint, sign, pal)
+    local font = renderer.worldFonts.tiny
+    local tw = font:getWidth(tag)
+    -- Lookup de cores ANTES do push: qualquer indexação nula aqui não pode
+    -- deixar push sem pop (desbalanceio já derrubou o draw inteiro).
+    local wd, wb, wl = pal.wood.dark, pal.wood.base, pal.wood.light
+    G.push('all')
+    G.translate(math.floor(x - tw), math.floor(y))
+    G.scale(2, 2)
+    if sign then
+        color(INK, .9); G.rectangle('fill', -4, -2, tw + 8, 11)
+        color(wd); G.rectangle('fill', -3, -1, tw + 6, 9)
+        color(wb); G.rectangle('fill', -3, -1, tw + 6, 1)
+        color(wl); G.rectangle('fill', -3, 8, tw + 6, 1)
+        color(INK); G.rectangle('fill', -2, 0, 1, 1)
+        G.rectangle('fill', tw + 2, 0, 1, 1)
+        G.setFont(font); color(Pal.emberLight)
+        G.print(PixelFont.clean(tag), 0, 1)
+    else
+        color(INK, .8); G.rectangle('fill', -3, -1, tw + 6, 9)
+        color(tint, .8); G.rectangle('fill', -3, -2, tw + 6, 1)
+        G.setFont(font); color(tint)
+        G.print(PixelFont.clean(tag), 0, 0)
+    end
+    G.pop()
+end
+
+local function drawPrompt(renderer, x, y, label)
+    local font = renderer.worldFonts.tiny
+    local fw = font:getWidth(label)
+    G.push('all')
+    G.translate(math.floor(x - fw - 3), math.floor(y - 54))
+    G.scale(2, 2)
+    color(INK, .9); G.rectangle('fill', 0, 0, fw + 6, 11)
+    color(Pal.gold.light, .7)
+    G.setLineWidth(1); G.rectangle('line', .5, .5, fw + 5, 10)
+    G.setFont(font); color(Pal.gold.light)
+    G.print(label, 3, 2)
+    G.pop()
+end
+
+function HDWorld.overlay(renderer, campaign, v, map)
+    local pal = PixelScene.palette(map)
+    local tone = atmoTone[map.id]
+        or {deep = PixelWorld.palette.stoneDeep, accent = Pal.stone.base}
+    -- Vinheta de clima presa ao rect estrito do mapa (px-64).
+    local x0 = math.max(v.left, 0)
+    local y0 = math.max(v.top, 0)
+    local x1 = math.min(v.left + v.w, map.w * CELL)
+    local y1 = math.min(v.top + v.h, map.h * CELL)
+    if x1 > x0 and y1 > y0 then
+        local vw, vh = x1 - x0, y1 - y0
+        color(tone.deep, .10); G.rectangle('fill', x0, y0, vw, 24)
+        color(tone.deep, .07); G.rectangle('fill', x0, y0, 40, vh)
+        color(tone.deep, .07); G.rectangle('fill', x1 - 40, y1 - 72, 40, 72)
+        color(tone.accent, .06); G.rectangle('fill', x0, y0, vw, 12)
+        local function contentAt(x, y)
+            return map.tiles[(math.floor(x / CELL) + 1) .. ':'
+                .. (math.floor(y / CELL) + 1)] ~= nil
+        end
+        if contentAt(x0 + 24, y0 + 24) then
+            PixelArt.halo(x0, y0, 60, 44, tone.deep, .28) end
+        if contentAt(x1 - 24, y0 + 24) then
+            PixelArt.halo(x1, y0, 60, 44, tone.deep, .28) end
+        if contentAt(x0 + 24, y1 - 24) then
+            PixelArt.halo(x0, y1, 52, 40, tone.deep, .24) end
+        if contentAt(x1 - 24, y1 - 24) then
+            PixelArt.halo(x1, y1, 52, 40, tone.deep, .24) end
+    end
+    -- Poças de luz das âncoras não vêm: as âncoras JÁ são luzes reais
+    -- do lightmap — desenhá-las de novo dobraria o brilho.
+
+    -- Letreiros de portal (mesma regra de coleta do legado, px-64).
+    if (v.scale or 1) >= 1 then
+        for i, door in ipairs(map.doors or {}) do
+            if door.label and (not door.hidden or door.revealed) then
+                local tag = door.label
+                local open = campaign:canLeave(door)
+                if not open then tag = tag .. ' · FECHADA' end
+                local sign
+                for _, prop in ipairs(map.props or {}) do
+                    local pw, ph = prop.w or 1, prop.h or 1
+                    if prop.solid and door.x >= prop.x
+                        and door.x < prop.x + pw
+                        and door.y - 1 >= prop.y
+                        and door.y - 1 < prop.y + ph then
+                        sign = true; break
+                    end
+                end
+                local tint = open
+                    and (door.finish and Pal.gold.light or Pal.jade.base)
+                    or Pal.gold.dark
+                drawTag(renderer,
+                    (door.x - .5) * CELL,
+                    (door.y - 1) * CELL - 40 - (i % 3) * 18
+                        - (sign and 8 or 0),
+                    tag, tint, sign, pal)
+            end
+        end
+    end
+
+    -- Prompt E·FALAR/EXAMINAR — mesmo seletor do legado.
+    if campaign.state == 'playing' and not campaign.dialogue
+        and campaign.scene == 'explore' then
+        local target = campaign:interactTarget()
+        if target and (target.kind == 'npc' or target.kind == 'talker') then
+            local npc = target.obj
+            drawPrompt(renderer, (npc.grid.x - .5) * CELL,
+                (npc.grid.y - .5) * CELL, 'E · FALAR')
+        elseif target then
+            local spot = target.obj
+            drawPrompt(renderer, (spot.x - .5) * CELL,
+                (spot.y - .5) * CELL, 'E · ' .. spot.label)
+        end
+    end
+end
+
+-- ── Batalha (Fase 4): a arena tática pelo mesmo G-buffer/luz/HDR. ────
+
+-- kind de inimigo → def DSL do Traço ('foe_crawler', 'foe_dasher', ...).
+local function foeQuad(self, s, ent, t)
+    local kind = ent.enemy and ent.enemy.kind
+    local dir = dirSuffix(ent.facing)
+    -- Chefes têm sheets direcionais ('boss_runa_s'); comuns são 'foe_kind'.
+    local key = kind and ('boss_' .. kind .. '_' .. dir)
+    local c = key and s.propCache[key]
+    if c == nil and key then
+        c = Kit.bakeViaDSL(key) or false
+        s.propCache[key] = c
+    end
+    if not c then
+        key = 'foe_' .. (kind or '')
+        c = s.propCache[key]
+        if c == nil then
+            c = kind and Kit.bakeViaDSL(key) or nil
+            s.propCache[key] = c or false
+        end
+    end
+    if not c then return s.actorStub, s.actorStub_q[1] end
+    local qs = quadsOf(s, c)
+    local n = #qs
+    -- Estado 'warn'/'dash'/'volley' pina o último frame (postura de
+    -- telegrafo do Traço); idle cicla os demais — o frame de warn não
+    -- pisca no meio do repouso (B1).
+    local a = ent.enemy
+    local warned = a and (a.state == 'warn' or a.state == 'dash'
+        or a.state == 'volley')
+    if warned then return c, qs[n] end
+    local idle = n > 1 and n - 1 or 1
+    return c, qs[1 + math.floor(t * 2) % idle]
+end
+
+-- Chão da arena por região de origem: laje de refúgio, terra do resto —
+-- a borda do tabuleiro delimita a área jogável (ground 'hole' = vazio).
+local function battleFloor(region, x, y)
+    if region == 'hub' or region == 'refugio' then
+        return Kit.hash(math.floor(x / 3), math.floor(y / 3), 21) < .30
+            and 'terra' or 'laje'
+    elseif region == 'colina' then
+        return Kit.hash(x, y, 22) < .30 and 'grama' or 'terra'
+    end
+    return 'terra'
+end
+
+-- Offsets de apresentação da batalha, replicados do legado
+-- (Render:actor): o poupado desliza e esmaece ~1.4s; o lunge empurra
+-- na direção do golpe; o hit treme a vítima; jump sobe os pés.
+-- Nunca lê regra — só apresentação, em px-64 (offsets legados ×2).
+local function battleDrawPos(renderer, e)
+    local R = package.loaded['src.render']
+    local x, y, jump = R.visualPosition(e)
+    local alpha
+    if e.spared then
+        if not e.spareT or e.spareT >= 1.4 then return nil end
+        x = x + e.spareT * 40
+        y = y - e.spareT * 10
+        alpha = math.max(0, 1 - e.spareT / 1.4)
+    end
+    if not renderer.reducedMotion then
+        if e.lunge and e.lunge.remaining > 0 then
+            local lt = 1 - e.lunge.remaining / e.lunge.duration
+            local push = math.sin(lt * math.pi) * 9
+            x, y = x + e.lunge.dx * push, y + e.lunge.dy * push
+        end
+        if e.shake and e.shake.remaining > 0 then
+            local st = e.shake.remaining / e.shake.duration
+            x = x + math.sin((e.shake.duration - e.shake.remaining)
+                * 95) * 3 * st
+        end
+    else jump = 0 end
+    return x * 2, y * 2 - (jump or 0) * 2, alpha
+end
+
+function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
+    shake = shake or {0, 0}
+    ensureBuffers(renderer, v.w, v.h)
+    local hd = renderer.hd
+    local s = sheetsFor(renderer)
+    local t = renderer.time or 0
+    local R = package.loaded['src.render']
+    local BD = R.BattleDraw
+    local prevCanvas = G.getCanvas()
+    local region = (battle.snapshot and battle.snapshot.region) or 'neutro'
+    local pulse = renderer.reducedMotion and 0 or math.sin(t * 5) * .05
+    local C = {ink = {.033, .046, .071}, jade = Pal.jade.light,
+        gold = Pal.gold.light, red = Pal.danger, white = {1, 1, 1},
+        text = {.90, .92, .89}}
+
+    -- Moldura do tabuleiro: mesmo cálculo de borda do legado, em px-32 —
+    -- tudo do overlay corre em px-32 dentro de um scale(2).
+    local x1, y1, x2, y2 = math.huge, math.huge, -math.huge, -math.huge
+    for _, tile in pairs(map.tiles or {}) do
+        if tile.ground == 'floor' and not tile.protected then
+            x1, y1 = math.min(x1, tile.x), math.min(y1, tile.y)
+            x2, y2 = math.max(x2, tile.x), math.max(y2, tile.y)
+        end
+    end
+    local f = {x = (x1 - 1) * 32, y = (y1 - 1) * 32,
+        w = (x2 - x1 + 1) * 32, h = (y2 - y1 + 1) * 32}
+
+    -- ── Camadas: decalques táticos (telegrafos/marcadores) em px-32 com
+    -- scale(2) → a mesma leitura do legado, só maior. Emissivo recebe a
+    -- mesma forma com tinta reduzida: o aviso brilha na sombra sem bloom.
+    local function decals(tintMul)
+        G.push('all')
+        G.scale(2, 2)
+        -- I4: no canal emissivo as tintas passam reduzidas — a forma brilha
+        -- na sombra sem cruzar o threshold do bloom (~0.35).
+        local function tc(c)
+            if tintMul >= 1 then return c end
+            return {c[1] * tintMul, c[2] * tintMul, c[3] * tintMul}
+        end
+        -- Anel de alvo dos modos sociais (act/actlist/mercy).
+        if battle.mode == 'act' or battle.mode == 'actlist'
+            or battle.mode == 'mercy' then
+            local list = battle.mode == 'mercy' and battle:spareable()
+                or battle:liveEnemies()
+            local idx = battle.mode == 'mercy' and battle.mercyIndex
+                or battle.actTarget
+            local u = list and list[math.max(1, math.min(#list, idx or 1))]
+            if u then
+                local tin = battle.mode == 'mercy' and C.jade or C.gold
+                local cx0, cy0 = (u.grid.x - 1) * 32, (u.grid.y - 1) * 32
+                color(tin, (.18 + pulse * .1) * tintMul)
+                G.rectangle('fill', cx0, cy0, 32, 32)
+                color(tin, tintMul)
+                G.rectangle('fill', cx0 - 1, cy0 - 1, 10, 2)
+                G.rectangle('fill', cx0 - 1, cy0 - 1, 2, 10)
+                G.rectangle('fill', cx0 + 23, cy0 - 1, 10, 2)
+                G.rectangle('fill', cx0 + 31, cy0 - 1, 2, 10)
+                G.rectangle('fill', cx0 - 1, cy0 + 31, 10, 2)
+                G.rectangle('fill', cx0 - 1, cy0 + 23, 2, 10)
+                G.rectangle('fill', cx0 + 23, cy0 + 31, 10, 2)
+                G.rectangle('fill', cx0 + 31, cy0 + 23, 2, 10)
+            end
+        end
+        -- Hazards + telegrafos real-time (o bloco canônico do legado).
+        for _, e in ipairs(battle:entities()) do
+            if e.hazard then
+                local prog = 1 - e.hazard.timer / (e.hazard.duration or 1)
+                for _, cell in ipairs(e.hazard.cells) do
+                    BD.warningCell(cell, tc(C.gold), 0, 0, prog, false, 'blast')
+                end
+            end
+        end
+        for _, e in ipairs(battle.enemies or {}) do
+            local a = e.enemy
+            if e.health.current > 0 and a
+                and (a.state == 'warn' or a.state == 'dash'
+                    or a.state == 'volley') then
+                local progress = a.state ~= 'warn' and 1
+                    or 1 - a.timer / (a.warningDuration or 1)
+                local tint2 = tc(BD.warnTint[a.mode] or C.red)
+                for i, cell in ipairs(a.cells) do
+                    if a.state ~= 'dash' or i >= (a.dashIndex or 1) then
+                        local dx, dy, kind = BD.warnCellSpec(a, e, cell, i)
+                        BD.warningCell(cell, tint2, dx, dy, progress,
+                            false, kind)
+                        for _, fc in ipairs(cell.fall or {}) do
+                            BD.warningCell(fc, tc(C.jade), a.dx or 0, a.dy or 0,
+                                progress, false, 'fall')
+                        end
+                    end
+                end
+                if a.state == 'warn' and a.mode == 'push' and a.crateX then
+                    local cx0, cy0 = (a.crateX - 1) * 32, (a.crateY - 1) * 32
+                    BD.border(cx0 + 2, cy0 + 2, 28, 28, tint2,
+                        .5 + progress * .4)
+                    BD.arrow(cx0 + 16 + (a.pushDx or 0) * 9,
+                        cy0 + 16 + (a.pushDy or 0) * 9,
+                        a.pushDx or 0, a.pushDy or 0, tint2, 3)
+                end
+                if a.state == 'warn' and a.mode == 'shove' and a.cells[1] then
+                    local lastc = a.cells[#a.cells]
+                    local lx, ly = (lastc.x - 1) * 32, (lastc.y - 1) * 32
+                    color(tint2)
+                    if (a.dx or 0) ~= 0 then
+                        G.rectangle('fill',
+                            lx + (a.dx > 0 and 25 or 4), ly + 6, 3, 20)
+                    else
+                        G.rectangle('fill', lx + 6,
+                            ly + (a.dy > 0 and 25 or 4), 20, 3)
+                    end
+                end
+            end
+        end
+        -- Marcadores sob os pés (glifo do estado) + saída de fuga + losango
+        -- da jogadora — decalques de chão, leem na sombra via emissivo.
+        for _, e in ipairs(battle.enemies or {}) do
+            if e.health.current > 0 and e.enemy then
+                local gx, gy = (e.grid.x - .5) * 32,
+                    (e.grid.y - .5) * 32 + 13
+                local a = e.enemy
+                local kind, _, tint3 = BD.enemyReadout(e)
+                tint3 = tc(tint3)
+                if kind == 'dash' or kind == 'demolish' then
+                    BD.chevron(gx + (a.dx or 0) * 3, gy + (a.dy or 0) * 3,
+                        a.dx or 0, a.dy or 0, tint3)
+                elseif kind == 'shoot' then
+                    color(tint3)
+                    BD.pixelLine(gx - 5, gy, gx - 2, gy)
+                    BD.pixelLine(gx + 2, gy, gx + 5, gy)
+                    BD.pixelLine(gx, gy - 5, gx, gy - 2)
+                    BD.pixelLine(gx, gy + 2, gx, gy + 5)
+                    G.rectangle('fill', gx, gy, 1, 1)
+                elseif kind == 'move' then
+                    color(tint3)
+                    G.rectangle('fill', gx - 3, gy - 2, 2, 3)
+                    G.rectangle('fill', gx + 1, gy, 2, 3)
+                elseif kind == 'sow' then
+                    BD.thornTip(gx, gy + 3, 4, tint3)
+                elseif kind == 'ritual' or kind == 'burst' then
+                    color(tint3)
+                    if kind == 'burst' then
+                        BD.pixelLine(gx - 3, gy - 3, gx + 3, gy + 3)
+                        BD.pixelLine(gx + 3, gy - 3, gx - 3, gy + 3)
+                    else
+                        BD.pixelLine(gx - 3, gy, gx + 3, gy)
+                        BD.pixelLine(gx, gy - 3, gx, gy + 3)
+                    end
+                elseif kind == 'hammer' or kind == 'push' or kind == 'jet'
+                    or kind == 'shove' then
+                    BD.intentGlyph(kind, gx - 3, gy - 3, tint3)
+                else
+                    BD.diamond(gx, gy, 3, tint3)
+                end
+            end
+        end
+        local exits = {}
+        if battle.fleeing and battle.exitCell then
+            exits[#exits + 1] = {cell = battle.exitCell,
+                edge = battle.flee and battle.flee.edge}
+        end
+        for _, e in ipairs(battle.enemies or {}) do
+            local a = e.enemy
+            if a and a.state == 'flee' and a.exitCell then
+                exits[#exits + 1] = {cell = a.exitCell, edge = a.exitEdge}
+            end
+        end
+        for _, ex in ipairs(exits) do
+            if tintMul >= 1 then BD.fleeExitMark(ex.cell, ex.edge, f, pulse) end
+        end
+        local pgm = (battle.player.grid.x - .5) * 32
+        local pgmy = (battle.player.grid.y - .5) * 32 + 13
+        BD.diamond(pgm, pgmy, 5, C.ink)
+        BD.diamond(pgm, pgmy, 4, tc(C.jade))
+        BD.diamond(pgm, pgmy - 1, 1, tc(C.white))
+        G.pop()
+    end
+
+    -- ── G-buffer ──
+    local pieces = {}
+    for _, tile in pairs(map.tiles or {}) do
+        if tile.piece == 'pillar' or tile.piece == 'crate' then
+            pieces[#pieces + 1] = {kind = 'tile', t2 = tile,
+                depth = tile.y * CELL, sx = tile.x * CELL}
+        end
+    end
+    -- Posições de apresentação (lunge/shake/jump/poupado) — B2/I3.
+    local pfx, pfy = battleDrawPos(renderer, battle.player)
+    pieces[#pieces + 1] = {kind = 'ent', e = battle.player,
+        depth = pfy, sx = pfx, fx = pfx, fy = pfy}
+    for _, e in ipairs(battle.enemies or {}) do
+        local fx, fy, alpha = battleDrawPos(renderer, e)
+        if fx then
+            pieces[#pieces + 1] = {kind = 'ent', e = e,
+                depth = fy, sx = fx, fx = fx, fy = fy, alpha = alpha}
+        end
+    end
+    table.sort(pieces, function(a, b)
+        return a.depth < b.depth or (a.depth == b.depth and a.sx < b.sx)
+    end)
+
+    local CLEAR = {
+        albedo = {.045, .055, .075, 1},
+        normal = {.5, .5, 1, 1},
+        emissive = {0, 0, 0, 0},
+    }
+    local function channel(ch)
+        local buf = ch == 'albedo' and hd.bufA or ch == 'normal' and hd.bufN
+            or hd.bufE
+        G.setCanvas(buf); G.clear(unpack(CLEAR[ch])); G.setColor(1, 1, 1, 1)
+        for _, tile in pairs(map.tiles or {}) do
+            if tile.ground == 'floor' then
+                local kind = battleFloor(region, tile.x, tile.y)
+                local sh = s[kind]
+                G.draw(sh[ch], s[kind .. '_q'][Kit.variant(sh, tile.x, tile.y)],
+                    (tile.x - 1) * CELL, (tile.y - 1) * CELL)
+            end
+        end
+        -- Meio-fio do tabuleiro: pedra simples lit, braseiros DSL nas bordas
+        -- (a chama vem do emissivo do sprite — o bloom cuida do resto).
+        if ch == 'albedo' then
+            local st = Pal.stone
+            color(st.dark); G.rectangle('fill',
+                f.x * 2 - 16, f.y * 2 - 16, f.w * 2 + 32, f.h * 2 + 32)
+            color(st.base); G.rectangle('fill',
+                f.x * 2 - 14, f.y * 2 - 14, f.w * 2 + 28, f.h * 2 + 28)
+            color(st.light); G.rectangle('fill',
+                f.x * 2 - 14, f.y * 2 - 14, f.w * 2 + 28, 4)
+            G.rectangle('fill', f.x * 2 - 14, f.y * 2 - 14, 4, f.h * 2 + 28)
+            color(C.ink, .5)
+            G.rectangle('fill', f.x * 2 - 2, f.y * 2 - 2, f.w * 2 + 4, 4)
+            G.rectangle('fill', f.x * 2 - 2, f.y * 2 - 2, 4, f.h * 2 + 4)
+        end
+        if not s.brazier then
+            s.brazier = Kit.sheet('braseiro', 64, 96, nil)
+            s.brazier_q = Kit.quads(s.brazier)
+        end
+        for _, sgn in ipairs({-1, 1}) do
+            local bx = sgn == -1 and f.x * 2 - 14 or (f.x + f.w) * 2 + 14
+            local by = (f.y + f.h / 2) * 2
+            Kit.drawFeet(s.brazier, s.brazier_q[1], ch, bx, by + 8)
+        end
+        if ch ~= 'normal' then decals(ch == 'emissive' and .30 or 1) end
+        for _, p in ipairs(pieces) do
+            if p.kind == 'tile' then
+                local tile = p.t2
+                if tile.piece == 'pillar' then
+                    local sh = s.pilar
+                    G.draw(sh[ch], s.pilar_q[1], (tile.x - 1) * CELL,
+                        (tile.y - 1) * CELL - (sh.h - CELL))
+                else
+                    local sh = s.propCache.caixas_antigas
+                    if sh == nil then
+                        sh = Kit.bakeViaDSL('caixas_antigas') or false
+                        s.propCache.caixas_antigas = sh
+                    end
+                    local sheet = sh or s.propStub
+                    local qs = sh and Kit.quads(sh) or s.propStub_q
+                    G.draw(sheet[ch], qs[1], (tile.x - 1) * CELL,
+                        (tile.y - 1) * CELL + CELL - sheet.h)
+                end
+            else
+                local sh, q
+                if p.e == battle.player then
+                    local dir = dirSuffix(p.e.facing)
+                    local moving = p.e.motion
+                        and (p.e.motion.remaining or 0) > 0
+                    local key = moving and s['walk_' .. dir] and 'walk_' .. dir
+                        or 'viajante_' .. dir
+                    sh = s[key]
+                    local qs = s[key .. '_q']
+                    local n = #qs
+                    q = qs[moving and (1 + math.floor(t * 9) % n)
+                        or (n > 1 and 1 + math.floor(t * 2) % n or 1)]
+                else
+                    sh, q = foeQuad(renderer, s, p.e, t)
+                end
+                if p.alpha then G.setColor(1, 1, 1, p.alpha) end
+                Kit.drawFeet(sh, q, ch, p.fx, p.fy)
+                if p.alpha then G.setColor(1, 1, 1, 1) end
+            end
+        end
+    end
+    channel('albedo'); channel('normal'); channel('emissive')
+    G.setCanvas(prevCanvas)
+
+    -- Luzes: ambiente da região + os dois braseiros da moldura.
+    local L = hd.lighting
+    L:beginFrame()
+    -- Arena cerimonial: lê-se tática, não stealth — ambiente mais claro
+    -- que o mundo (os braseiros do flanco aquecem as bordas).
+    L:setAmbient({.48, .47, .55})
+    -- Lume cerimonial: sobre o centro do tabuleiro, z alto — modela as
+    -- unidades por normal map sem vencer os telegrafos de chão.
+    L:addLight({x = (f.x + f.w / 2) * 2, y = (f.y + f.h / 2) * 2 - 60,
+        z = 260, color = {.98, .88, .70}, intensity = 2.2,
+        radius = f.w * 2 + 220})
+    for _, sgn in ipairs({-1, 1}) do
+        local bx = sgn == -1 and f.x * 2 - 18 or (f.x + f.w) * 2 + 18
+        local by = (f.y + f.h / 2) * 2
+        L:addLight({x = bx, y = by - 20, z = 92, color = {1.0, .58, .24},
+            intensity = 1.8, radius = 340,
+            flicker = {amp = .14, speed = 7, phase = sgn * 2}})
+    end
+    -- Occluders: pilares/caixotes + unidades.
+    for _, tile in pairs(map.tiles or {}) do
+        if tile.piece == 'pillar' then
+            L:addOccluder({x = (tile.x - 1) * CELL + 16,
+                y = (tile.y - 1) * CELL + 44, w = 32, h = 16, height = 150})
+        elseif tile.piece == 'crate' then
+            L:addOccluder({x = (tile.x - 1) * CELL + 8,
+                y = (tile.y - 1) * CELL + 48, w = 48, h = 12, height = 56})
+        end
+    end
+    for _, p in ipairs(pieces) do
+        if p.kind == 'ent' then
+            L:addOccluder({x = p.fx - 15, y = p.fy - 7, w = 30, h = 12,
+                height = 90})
+        end
+    end
+    L:update(t, renderer.reducedMotion)
+
+    local P = hd.postfx
+    P:setRegion(region)
+    P:setVignette(.16)
+    P:beginScene()
+    L:compose(hd.bufA, hd.bufN, hd.bufE, v.left - (shake[1] or 0),
+        v.top - (shake[2] or 0))
+    P:endScene()
+    P:setEmissive(hd.bufE)
+    G.push('all'); G.origin()
+    G.setCanvas(renderer.canvas)
+    P:present(0, 0, 1)
+    G.pop()
+
+    -- ── Pós-compose: o translate da câmera segue ativo e aplica DEPOIS
+    -- do scale — desenhar em px-32 sob scale(2) cai exato no mundo de 64.
+    -- Grade, mortes, efeitos, motes, balões, marcadores e projéteis ficam
+    -- nítidos por cima da imagem iluminada (camada de informação).
+    G.push('all')
+    G.scale(2, 2)
+    -- Grade do tabuleiro: informação tática — trama sutil sobre o piso.
+    color(C.ink, .24)
+    for _, tile in pairs(map.tiles or {}) do
+        if tile.ground == 'floor' and not tile.protected then
+            G.rectangle('line', (tile.x - 1) * 32 + .5, (tile.y - 1) * 32 + .5,
+                31, 31)
+        end
+    end
+    renderer.actors:drawDeaths(renderer, campaign)
+    -- Projéteis do mundo (flechas/bolts) — mesmo painter do legado.
+    for _, e in ipairs(battle:entities()) do
+        if e.projectile then renderer:projectile(e) end
+    end
+    renderer:effects()
+    -- Brasas à deriva sobre a arena (mesma fórmula do legado).
+    if not renderer.reducedMotion then
+        for i = 1, 14 do
+            local bx = f.x + ((i * 53) % f.w)
+            local by = f.y + ((i * 37) % f.h)
+            local mx = bx + math.sin(t * .7 + i * 1.9) * 6
+            local my = by + math.sin(t * .5 + i * 2.3) * 4
+                - (t * 2.2 + i * 9) % 16
+            local dc = math.sqrt((bx - (f.x + f.w / 2)) ^ 2
+                + (by - (f.y + f.h / 2)) ^ 2)
+            local a = math.max(0, .34 - dc / (f.w * .55))
+                * (math.sin(t * 1.1 + i * 1.3) * .5 + .5)
+            if a > .03 then
+                color(i % 3 == 0 and Pal.gold.light or Pal.jade.light, a)
+                G.rectangle('fill', BD.round(mx), BD.round(my),
+                    i % 4 == 0 and 2 or 1, 1)
+            end
+        end
+    end
+    -- Balões de fala (barks): mesma placa do legado, sob scale(2).
+    local font = renderer.worldFonts.tiny
+    for _, e in ipairs(battle.enemies or {}) do
+        if e.barkText and e.health.current > 0
+            and (not e.spared or (e.spareT and e.spareT < 1.4)) then
+            local tw = font:getWidth(e.barkText)
+            local bw = math.min(88, tw + 10)
+            local _, wrapped = font:getWrap(e.barkText, bw - 10)
+            local lines = math.max(1, #wrapped)
+            local bh = 8 + lines * 6
+            local ux, uy = R.visualPosition(e)
+            if e.spareT then ux = ux + e.spareT * 40 end
+            local bx = math.max(f.x + 4,
+                math.min(f.x + f.w - bw - 4, BD.round(ux - bw / 2)))
+            local warned = e.enemy and (e.enemy.state == 'warn'
+                or e.enemy.state == 'dash' or e.enemy.state == 'volley')
+            local by = math.max(f.y + 4,
+                BD.round(uy - (warned and 66 or 62) - (lines - 1) * 6))
+            local a = e.barkT and math.min(1, e.barkT / .4) or 1
+            local PW = PixelWorld.palette
+            if e.barkVerbal == false then
+                BD.border(bx, by, bw, bh, PW.bone, .9 * a)
+                color(PW.bone, .9 * a)
+                G.rectangle('fill', bx + 3, by + bh, 3, 1)
+                G.rectangle('fill', bx + 5, by + bh + 1, 2, 1)
+                BD.text(font, e.barkText, bx + 5, by + 3, PW.bone, bw - 10)
+            else
+                color(C.ink, .92 * a); G.rectangle('fill', bx, by, bw, bh)
+                BD.border(bx, by, bw, bh, PW.boneDark, .9 * a)
+                color(C.ink, .92 * a)
+                G.rectangle('fill', bx + 5, by + bh, 3, 2)
+                color(PW.boneDark, .9 * a)
+                G.rectangle('fill', bx + 5, by + bh, 3, 1)
+                BD.text(font, e.barkText, bx + 5, by + 3, C.text, bw - 10)
+            end
+        end
+    end
+    -- Selo 'zzz' de trégua e marca de fuga suspensos (mesmo bloco do legado
+    -- — marcadores vivem acima do sprite, nunca sob).
+    for _, e in ipairs(battle.enemies or {}) do
+        local a = e.enemy
+        if a and e.health.current > 0 and not e.spared then
+            if a.state == 'calmed' then
+                local ux, uy = R.visualPosition(e)
+                local zz = (t * .6 + (e.seed or 0)) % 1
+                color(Pal.sky.star, .9 - zz * .7)
+                G.print('z', ux + 8, uy - 40 - zz * 14)
+            end
+        end
+    end
+    G.pop()
+
+    hd.statsClock = (hd.statsClock or 0) + 1
+    if hd.statsClock >= 90 then
+        hd.statsClock = 0
+        print(string.format('[hd_battle] light=%.3fms bloom=%.3fms lights=%d occluders=%d shadowQuads=%d',
+            (L.stats and L.stats.lightPassMs) or 0,
+            (P.stats and P.stats.bloomMs) or 0,
+            (L.stats and L.stats.lights) or 0,
+            (L.stats and L.stats.occluders) or 0,
+            (L.stats and L.stats.shadowQuads) or 0))
     end
 end
 

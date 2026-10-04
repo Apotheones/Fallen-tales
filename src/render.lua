@@ -8,6 +8,7 @@ local Feedback = require('src.feedback')
 local Rooms = require('src.rooms')
 local Props = require('src.props')
 local HDWorld = require('src.hd_world')
+local HDKit = require('src.hd_kit')
 local Environment = require('src.environment')
 local Enemies = require('src.enemies')
 local Progression = require('src.progression')
@@ -1064,6 +1065,41 @@ function Render:dialogue(game, w, h)
     end
     if face then
         panel(x + 26, y + 62, 88, 88, C.jade)
+        -- Fase 5: no caminho HD o retrato vem do sprite DSL 64×96 (busto)
+        -- quando a voz tem def assada — senão cai no crop legado.
+        local hdPort
+        if self.hdEnabled then
+            -- Retrato dedicado 'portrait_<voz>' (96x96, frame = expressão:
+            -- 1 neutro, 2 ternura, 3 raiva contida) — busto DSL é o
+            -- fallback quando a voz não tem retrato assado.
+            local pDsl = d.voice and HDKit.bakeViaDSL('portrait_' .. d.voice)
+            if pDsl then
+                local exprFrame = ({kind = 2, soft = 2, happy = 2,
+                    stern = 3, raiva = 3, angry = 3})[emo] or 1
+                local qs = HDKit.quads(pDsl)
+                local fq = qs[math.min(exprFrame, #qs)]
+                -- O quad é 96×96 e o painel 88: recorta o miolo do busto
+                -- (8px de cada lado) sem perder a escala inteira.
+                local qx, qy = fq:getViewport()
+                hdPort = {image = pDsl.albedo,
+                    quad = G.newQuad(qx + 8, qy + 8, 80, 80,
+                        pDsl.albedo:getDimensions())}
+            else
+                local dslName = d.voice == 'viajante' and 'viajante'
+                    or d.voice and ('npc_' .. d.voice .. '_s')
+                local dsl = dslName and HDKit.bakeViaDSL(dslName)
+                if dsl then
+                    hdPort = {image = dsl.albedo,
+                        quad = G.newQuad(0, 2, dsl.w, 80,
+                            dsl.albedo:getDimensions())}
+                end
+            end
+        end
+        if hdPort then
+            color(C.white)
+            G.draw(hdPort.image, hdPort.quad, x + 30, y + 66)
+            tx, tw = x + 126, width - 152
+        else
         local sub
         if sheet.portraits then
             -- Retrato emocional: célula própria, parada (a emoção não respira
@@ -1087,6 +1123,7 @@ function Render:dialogue(game, w, h)
             x + 30 + math.floor((80 - face[3] * fs) / 2),
             y + 66 + math.floor((80 - face[4] * fs) / 2), 0, fs, fs)
         tx, tw = x + 126, width - 152
+        end
     end
     if d.mode == 'shop' then
         text(self.fonts.small, 'OURO: ' .. game.gold, x + width - 140, y + 20, C.gold)
@@ -2156,6 +2193,20 @@ local function enemyStage(self, battle, cx)
     color(C.white)
     G.draw(sheet.image, q, cx, h - 9, 0, 1, 1, fw / 2, fh)
 end
+
+-- Ponte para o render HD (Fase 4): hd_world desenha telegrafos e
+-- marcadores da arena com os MESMOS helpers do legado — a leitura tática
+-- é idêntica, só escala por 2 (célula 32→64). Tabela viva: funções são
+-- referências, não cópias.
+Render.BattleDraw = {
+    warningCell = warningCell, warnCellSpec = warnCellSpec,
+    warnTint = warnTint, intentGlyph = intentGlyph,
+    enemyReadout = enemyReadout, fleeExitMark = fleeExitMark,
+    chevron = chevron, thornTip = thornTip, diamond = diamond,
+    arrow = arrow, border = border, color = color, text = text,
+    round = round, pixelLine = pixelLine,
+    boardPillar = boardPillar, boardCrate = boardCrate,
+}
 
 function Render:battleScene(campaign)
     local battle = campaign.battle
@@ -3406,10 +3457,12 @@ function Render:drawCampaign(campaign, screen, hasSave)
         local map = battle and battle.room or campaign.room
         local actor = battle and battle.player or campaign.player
         local feetX, feetY = Render.visualPosition(actor)
-        -- Render HD (Fase 2): exploração via G-buffer; flag renderer.hdEnabled.
-        local hd = self.hdEnabled and not battle
+        -- Render HD (Fase 2+4): exploração e arena via G-buffer;
+        -- flag renderer.hdEnabled.
+        local hd = self.hdEnabled
         local v = hd
-            and Render.layout(w, h, map, feetX * 2, feetY * 2, 76, 0,
+            and Render.layout(w, h, map, feetX * 2, feetY * 2, 76,
+                battle and Render.battleStageH + 4 or 0,
                 {cell = Render.CELL_HD, scale = 1})
             or Render.layout(w, h, map, feetX, feetY, 76,
                 battle and Render.battleStageH + 4 or 0)
@@ -3431,16 +3484,28 @@ function Render:drawCampaign(campaign, screen, hasSave)
         G.push('all')
         G.setCanvas(self.canvas); G.clear(C.ink); G.setLineStyle('rough')
         G.translate(-v.left + shakeX, -v.top + shakeY)
-        if campaign.scene == 'battle' then self:battleScene(campaign)
+        if campaign.scene == 'battle' and not hd then
+            self:battleScene(campaign)
         elseif hd then
-            local ok, err = pcall(HDWorld.draw, self, campaign, v, map,
-                {shakeX, shakeY})
+            local ok, err
+            if battle then
+                ok, err = pcall(HDWorld.drawBattle, self, campaign, v, map,
+                    battle, {shakeX, shakeY})
+            else
+                ok, err = pcall(HDWorld.draw, self, campaign, v, map,
+                    {shakeX, shakeY})
+            end
             if not ok then
                 self.hdEnabled = false
+                love.filesystem.write('hd_error.txt',
+                    debug.traceback(tostring(err)))
                 print('[hd_world] falhou, caindo no render legado: '
                     .. tostring(err))
+                G.setCanvas(self.canvas); G.setShader()
+                G.setBlendMode('alpha'); G.setColor(1, 1, 1, 1)
                 G.origin(); G.translate(-v.left + shakeX, -v.top + shakeY)
-                self:worldCampaign(campaign)
+                if battle then self:battleScene(campaign)
+                else self:worldCampaign(campaign) end
             end
         else self:worldCampaign(campaign) end
         G.pop()

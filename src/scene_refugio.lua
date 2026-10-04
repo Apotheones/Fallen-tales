@@ -189,6 +189,7 @@ function Scene.new(opts)
     -- Conjunto da Botica (vida-refugio-props §1): poço da rua + placa de
     -- rotas — peças baixas e quentes; só o marco é alto e emissivo.
     S.poco = Kit.sheet('poco', 64, 96, mesaPaint)
+    S.lampiao = Kit.sheet('lampiao', 64, 96, mesaPaint)
     S.placa = Kit.sheet('placa', 64, 96, cadeiraPaint)
     S.bancada = Kit.sheet('bancada', 64, 96, mesaPaint)
     self.sheets = S
@@ -196,6 +197,7 @@ function Scene.new(opts)
     for k, s in pairs(S) do self.quads[k] = Kit.quads(s) end
     -- Âncoras (pés, px-mundo) e a composição da Calina.
     self.marcoPos = {x = 6 * CELL, y = 4.2 * CELL}
+    self.lampiaoPos = {x = 7.6 * CELL, y = 4.6 * CELL}
     self.brazierPos = {x = 8.2 * CELL, y = 4.4 * CELL}
     self.aurelPos = {x = 6.9 * CELL, y = 4.7 * CELL}
     self.actorPos = {x = 9 * CELL, y = 7.4 * CELL}
@@ -217,6 +219,7 @@ function Scene.new(opts)
     self.pieces = {
         {key = 'marco', pos = self.marcoPos, occ = {x = -20, y = -10, w = 40, h = 14, height = 150}},
         {key = 'brazier', pos = self.brazierPos, occ = {x = -20, y = -10, w = 40, h = 14, height = 62}},
+        {key = 'lampiao', pos = self.lampiaoPos, occ = {x = -10, y = -8, w = 20, h = 12, height = 120}},
         {key = 'aurel', pos = self.aurelPos, occ = {x = -15, y = -7, w = 30, h = 12, height = 88}},
         {key = 'actor', pos = self.actorPos, occ = {x = -15, y = -7, w = 30, h = 12, height = 90}},
         {key = 'bancada', pos = {x = 4.4 * CELL, y = 4.9 * CELL},
@@ -356,6 +359,10 @@ function Scene:draw()
     -- Jade do marco: emissivo já floresce no bloom; este é só o ar em volta.
     L:addLight({x = self.marcoPos.x, y = self.marcoPos.y - 56, z = 40,
         color = {.25, .85, .70}, intensity = .65, radius = 175})
+    -- Lampião real (Traço): lamparina ember alta no poste, pool ~3 células.
+    L:addLight({x = self.lampiaoPos.x, y = self.lampiaoPos.y - 70, z = 80,
+        color = {1.0, .62, .28}, intensity = 1.1, radius = 210,
+        flicker = {amp = .10, speed = 5, phase = 4.4}})
     local want = self._wantLights
     for i = L:lightCount() + 1, math.min(want, 8) do
         local ph = i * 2.1
