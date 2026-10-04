@@ -1,6 +1,7 @@
--- Sprites DSL do padrão HD (Fases 0-2, docs/MEGAPLAN_VISUAL_HD.md).
+-- Sprites DSL do padrão HD (Fases 0-3, docs/MEGAPLAN_VISUAL_HD.md).
 -- Cada módulo retorna uma def p/ SpriteDSL.bake(). Frames servem de
--- animação, variantes por seed (tiles/props) e estados por flag.
+-- animação (walk/idle), variantes por seed (tiles/props), estados por
+-- flag (f1=inicial) e telegraph (foe_*: [idle1,idle2,warn]).
 -- Convenções e nomes: nota maestri assets-fase1.
 return {
     -- Amostras Fase 0
@@ -102,7 +103,7 @@ return {
     cadeira = require('src.sprites.cadeira'),
     cercado = require('src.sprites.cercado'),
     arvore = require('src.sprites.arvore'),
-    -- Atores
+    -- Atores — viajante
     viajante_n = require('src.sprites.viajante_n'),
     viajante_e = require('src.sprites.viajante_e'),
     viajante_w = require('src.sprites.viajante_w'),
@@ -110,8 +111,47 @@ return {
     viajante_walk_n = require('src.sprites.viajante_walk_n'),
     viajante_walk_e = require('src.sprites.viajante_walk_e'),
     viajante_walk_w = require('src.sprites.viajante_walk_w'),
+    -- Atores — NPCs
     npc_doro_s = require('src.sprites.npc_doro_s'),
     npc_doro_n = require('src.sprites.npc_doro_n'),
     npc_doro_e = require('src.sprites.npc_doro_e'),
     npc_doro_w = require('src.sprites.npc_doro_w'),
+    npc_aurel_s = require('src.sprites.npc_aurel_s'),
+    npc_aurel_n = require('src.sprites.npc_aurel_n'),
+    npc_aurel_e = require('src.sprites.npc_aurel_e'),
+    npc_aurel_w = require('src.sprites.npc_aurel_w'),
+    npc_sabela_s = require('src.sprites.npc_sabela_s'),
+    npc_sabela_n = require('src.sprites.npc_sabela_n'),
+    npc_sabela_e = require('src.sprites.npc_sabela_e'),
+    npc_sabela_w = require('src.sprites.npc_sabela_w'),
+    npc_bento_s = require('src.sprites.npc_bento_s'),
+    npc_bento_n = require('src.sprites.npc_bento_n'),
+    npc_bento_e = require('src.sprites.npc_bento_e'),
+    npc_bento_w = require('src.sprites.npc_bento_w'),
+    npc_teca_s = require('src.sprites.npc_teca_s'),
+    npc_teca_n = require('src.sprites.npc_teca_n'),
+    npc_teca_e = require('src.sprites.npc_teca_e'),
+    npc_teca_w = require('src.sprites.npc_teca_w'),
+    npc_nilo_s = require('src.sprites.npc_nilo_s'),
+    npc_nilo_n = require('src.sprites.npc_nilo_n'),
+    npc_nilo_e = require('src.sprites.npc_nilo_e'),
+    npc_nilo_w = require('src.sprites.npc_nilo_w'),
+    -- Atores — ecos da arena
+    foe_crawler = require('src.sprites.foe_crawler'),
+    foe_dasher = require('src.sprites.foe_dasher'),
+    foe_ranger = require('src.sprites.foe_ranger'),
+    foe_sower = require('src.sprites.foe_sower'),
+    foe_breaker = require('src.sprites.foe_breaker'),
+    -- Retratos de diálogo 96x96 topleft (frames = expressoes: f1 neutro)
+    portrait_viajante = require('src.sprites.portrait_viajante'),
+    portrait_doro = require('src.sprites.portrait_doro'),
+    portrait_aurel = require('src.sprites.portrait_aurel'),
+    portrait_sabela = require('src.sprites.portrait_sabela'),
+    portrait_bento = require('src.sprites.portrait_bento'),
+    portrait_runa = require('src.sprites.portrait_runa'),
+    -- Atores — chefe
+    boss_runa_s = require('src.sprites.boss_runa_s'),
+    boss_runa_n = require('src.sprites.boss_runa_n'),
+    boss_runa_e = require('src.sprites.boss_runa_e'),
+    boss_runa_w = require('src.sprites.boss_runa_w'),
 }
