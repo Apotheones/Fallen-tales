@@ -92,6 +92,7 @@ function Tests.run()
     finish(c); c:closeDialogue()
     assert(Refugio.ready(c) and not c:flag('refugioConcluido'), 'Repairs do not silently complete departure')
     c.player.grid.x, c.player.grid.y = 20, 19
+    c.player.facing.dx, c.player.facing.dy = 1, 0 -- marcoRefugio a leste
     assert(c:interact(), 'Marco can be approached and read')
     local stone
     for _, prop in ipairs(c.map.props) do if prop.id == 'marco' then stone = prop end end

@@ -736,6 +736,13 @@ function CampaignTest.run()
         end
         check(c2.dialogue ~= nil and c2.scene ~= 'battle',
             'Contato gated pela fala: abre a oferta, nunca a arena')
+        -- a fala abre em 'lines': chooseDialogue só morde em 'options' —
+        -- drenar até o menu antes de procurar a oferta.
+        for _drain = 1, 600 do
+            if not (c2.dialogue and c2.dialogue.mode ~= 'options') then break end
+            c2.dialogue.reveal = math.huge
+            c2:advanceDialogue()
+        end
         -- a oferta de prova precisa existir no node
         local offer
         for i, opt in ipairs(c2.dialogue and c2.dialogue.node.options or {}) do
@@ -746,10 +753,14 @@ function CampaignTest.run()
             'A fala da Runa oferece a prova (DEMONSTRAR CAPACIDADE / ACEITO O DESAFIO)')
         if offer then
             c2:chooseDialogue(offer)
-            for _drain = 1, 600 do
-                if not (c2.dialogue) then break end
-                c2.dialogue.reveal = math.huge
-            c2:advanceDialogue()
+            -- Drena limitado: linhas avançam; menu só recebe SAIR (última).
+            for _ = 1, 20 do
+                if not c2.dialogue then break end
+                if c2.dialogue.mode == 'options' then
+                    c2:chooseDialogue(#c2.dialogue.node.options)
+                else
+                    c2.dialogue.reveal = math.huge; c2:advanceDialogue()
+                end
             end
             check(c2:flag('runaConfronto'), 'O aceite arma o confronto declarado (runaConfronto)')
             c2.player.grid.x, c2.player.grid.y = f2.grid.x, f2.grid.y + .4
@@ -762,7 +773,7 @@ function CampaignTest.run()
                 check(c2.data.regions.colina.props.grade == 'open',
                     'Vitória na prova abre a grade')
                 Save.write(c2.data)
-                local rr = Campaign.restore()
+                local rr = Campaign.restore(Save.read())
                 check(rr ~= nil and rr.data.encounters['C01-Q1'] == 'won'
                     and rr.data.regions.colina.props.grade == 'open',
                     'Save preserva prova vencida e grade aberta')
@@ -1199,8 +1210,10 @@ function CampaignTest.percurso()
         check(c.data.encounters['B03-01'] == 'negotiated' and c:stepDone('P03-E04'),
             'Rute yields to the real receipt — negotiated, no arena')
         c.player.grid.x, c.player.grid.y = 25, 19
+        c.player.facing.dx, c.player.facing.dy = 0, 1 -- o carro fica ao sul
         c:interact(); runTalk(c, {1}) -- MOVER O CARRO
         c.player.grid.x, c.player.grid.y = 25, 19
+        c.player.facing.dx, c.player.facing.dy = 0, 1
         c:interact(); runTalk(c)       -- use collects the cart prop
         check(c:flag('carroMovido') and c:flag('passagemSaloes')
             and c:stepDone('P03-E05')
@@ -1557,7 +1570,18 @@ function CampaignTest.entrada()
     rb:damage(ru, 3, ru.grid.x + 1, ru.grid.y)
     check(ru.spared and ru.health.current == 1,
         'O golpe que zeraria a vida rende — hp preserva 1, nunca execução')
-    for _ = 1, 4 do cR:update(1 / 120, {}) end
+    -- O fecho da rendição precisa de um frame de input de verdade (a arena
+    -- itera input.events) e de drenar o beat de rendição se ele abrir fala.
+    for _ = 1, 120 do
+        cR:update(1 / 120, {dx = 0, dy = 0, guard = false, events = {}})
+        if cR.dialogue then
+            cR.dialogue.reveal = math.huge; cR:advanceDialogue()
+            if cR.dialogue and cR.dialogue.mode == 'options' then
+                cR:chooseDialogue(#cR.dialogue.node.options)
+            end
+        end
+        if cR.scene == 'explore' then break end
+    end
     check(cR.scene == 'explore'
         and cR.data.encounters['C01-Q1'] == 'negotiated',
         'A rendição fecha o encontro real como negotiated')
