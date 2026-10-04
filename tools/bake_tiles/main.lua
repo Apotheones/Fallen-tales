@@ -55,6 +55,22 @@ function love.load()
         local base = 'screenshots/tiles_' .. nome
         DSL.dump(sheet, base)
         caminhos[#caminhos + 1] = base
+
+        -- Zoom de inspeção: albedo a 4x sobre fundo escuro.
+        local img = to_drawable(sheet.albedo)
+        if img then
+            local zc = love.graphics.newCanvas(
+                sheet.w * sheet.frames * 4, sheet.h * 4)
+            zc:setFilter('nearest', 'nearest')
+            love.graphics.setCanvas(zc)
+            love.graphics.clear(0.05, 0.05, 0.08, 1)
+            love.graphics.setColor(1, 1, 1)
+            love.graphics.draw(img, 0, 0, 0, 4, 4)
+            love.graphics.setCanvas()
+            local fi = assert(io.open('screenshots/insp_' .. nome .. '.png', 'wb'))
+            fi:write(zc:newImageData():encode('png'):getString())
+            fi:close()
+        end
     end
 
     -- Prancha: coluna por sprite (largura = sheet inteira, frames lado a

@@ -1,12 +1,13 @@
--- Bake de TODOS os sprites DSL (src/sprites/init.lua): dump de
--- albedo/normal/emissive em screenshots/sprite_<nome>_*.png e prancha
--- única screenshots/sprites_prancha.png (linha por sprite: frames de
--- albedo a 2x + normal f1 + emissive f1).
--- Roda da raiz: lovec tools/bake_sprites
-
+-- Bake dos sprites de INTERIORES do Refúgio (Fase 2, nota vida-refugio-props
+-- §7-11): require direto de cada def (não passa por src/sprites/init.lua),
+-- dump de albedo/normal/emissive em screenshots/int_<nome>_*.png e prancha
+-- única screenshots/int_prancha.png (linha por sprite: frames de albedo a
+-- 2x + normal f1 + emissive f1).
+-- Roda da raiz: lovec tools/bake_int
+--
 -- Erros vão para arquivo: o lovec headless não mostra console no Windows.
 local function die(msg)
-    local f = io.open('screenshots/bake_sprites-erro.txt', 'w')
+    local f = io.open('screenshots/bake_int-erro.txt', 'w')
     if f then f:write(tostring(msg) .. '\n' .. debug.traceback()); f:close() end
     love.event.quit(1)
 end
@@ -23,26 +24,47 @@ local function to_drawable(v)
     return nil
 end
 
+-- Lista explícita: a frente INTERIORES não entra no init.lua dos demais.
+local NOMES = {
+    'piso_tabua', 'parede_painel', 'parede_painel_janela',
+    'fogao', 'mesa_longa', 'prateleira', 'tigela',
+    'altar', 'banco_capela', 'velas', 'mesa_oferenda', 'quadro',
+    'cama', 'divisoria', 'pertences', 'bau', 'brinquedo',
+    'rack_ferramentas', 'peca_inacabada', 'serragem',
+    'carteiras', 'caixas_antigas', 'quadro_aula',
+}
+
 function love.load()
     love.graphics.setDefaultFilter('nearest', 'nearest')
     package.path = package.path .. ';./?.lua;./?/init.lua'
 
     local ok, DSL = pcall(require, 'src.sprite_dsl')
     if not ok then die('require src.sprite_dsl falhou: ' .. tostring(DSL)) return end
-    local ok2, sprites = pcall(require, 'src.sprites')
-    if not ok2 then die('require src.sprites falhou: ' .. tostring(sprites)) return end
 
-    local nomes = {}
-    for nome in pairs(sprites) do nomes[#nomes + 1] = nome end
-    table.sort(nomes)
+    local sprites = {}
+    for _, nome in ipairs(NOMES) do
+        local okr, def = pcall(require, 'src.sprites.' .. nome)
+        if not okr then
+            die('require src.sprites.' .. nome .. ' falhou: ' .. tostring(def))
+            return
+        end
+        sprites[nome] = def
+    end
 
     local G = love.graphics
-    local sheets, caminhos = {}, {}
-    for _, nome in ipairs(nomes) do
-        local sheet = DSL.bake(sprites[nome])
+    local sheets = {}
+    for _, nome in ipairs(NOMES) do
+        local okb, sheet = pcall(DSL.bake, sprites[nome])
+        if not okb then
+            die('bake de ' .. nome .. ' falhou: ' .. tostring(sheet))
+            return
+        end
         sheets[nome] = sheet
-        DSL.dump(sheet, 'screenshots/sprite_' .. nome)
-        caminhos[#caminhos + 1] = 'sprite_' .. nome
+        local okd, err = pcall(DSL.dump, sheet, 'screenshots/int_' .. nome)
+        if not okd then
+            die('dump de ' .. nome .. ' falhou: ' .. tostring(err))
+            return
+        end
     end
 
     -- Prancha: por sprite, uma linha com os frames de albedo (máx 4) +
@@ -50,7 +72,7 @@ function love.load()
     local escala, gap = 2, 8
     local largura, altura = gap, gap
     local rows = {}
-    for _, nome in ipairs(nomes) do
+    for _, nome in ipairs(NOMES) do
         local sheet = sheets[nome]
         local alb = to_drawable(sheet.albedo)
         local row, roww, rowh = {}, 0, 0
@@ -78,45 +100,27 @@ function love.load()
         altura = altura + rowh + gap
     end
 
-    -- Páginas: a prancha única estoura o limite de textura com o kit cheio.
-    local maxH, pagina, pn = 6000, {}, 1
-    local pages, ph, pw = {}, gap, largura
+    local canvas = G.newCanvas(largura, altura)
+    canvas:setFilter('nearest', 'nearest')
+    G.setCanvas(canvas)
+    G.clear(0, 0, 0, 0)
+    G.setColor(1, 1, 1)
+    local y = gap
     for _, r in ipairs(rows) do
-        if ph + r.h + gap > maxH and #pagina > 0 then
-            pages[#pages + 1] = pagina
-            pagina, ph = {}, gap
+        local x = gap
+        for _, cell in ipairs(r.row) do
+            local _, _, qw, qh = cell[2]:getViewport()
+            G.draw(cell[1], cell[2], x, y + r.h - qh * escala, 0, escala, escala)
+            x = x + qw * escala + gap
         end
-        pagina[#pagina + 1] = r
-        ph = ph + r.h + gap
+        y = y + r.h + gap
     end
-    if #pagina > 0 then pages[#pages + 1] = pagina end
+    G.setCanvas()
 
-    for pi, page in ipairs(pages) do
-        local alto = gap
-        for _, r in ipairs(page) do alto = alto + r.h + gap end
-        local canvas = G.newCanvas(pw, alto)
-        canvas:setFilter('nearest', 'nearest')
-        G.setCanvas(canvas)
-        G.clear(0, 0, 0, 0)
-        G.setColor(1, 1, 1)
-        local y = gap
-        for _, r in ipairs(page) do
-            local x = gap
-            for _, cell in ipairs(r.row) do
-                local _, _, qw, qh = cell[2]:getViewport()
-                G.draw(cell[1], cell[2], x, y + r.h - qh * escala, 0, escala, escala)
-                x = x + qw * escala + gap
-            end
-            y = y + r.h + gap
-        end
-        G.setCanvas()
-        local path = ('screenshots/sprites_prancha_%d.png'):format(pi)
-        local f = assert(io.open(path, 'wb'))
-        f:write(canvas:newImageData():encode('png'):getString())
-        f:close()
-        caminhos[#caminhos + 1] = 'sprites_prancha_' .. pi .. '.png'
-    end
+    local f = assert(io.open('screenshots/int_prancha.png', 'wb'))
+    f:write(canvas:newImageData():encode('png'):getString())
+    f:close()
 
-    print('bake ok: ' .. #nomes .. ' sprites -> ' .. #pages .. ' pranchas')
+    print('bake_int ok: ' .. #NOMES .. ' sprites -> int_prancha.png')
     love.event.quit(0)
 end

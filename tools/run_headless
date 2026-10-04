@@ -97,7 +97,10 @@ case "$LOG" in /*|[A-Za-z]:*) ;; *) LOG="$ROOT/$LOG" ;; esac
 if [ "$MODE" = suite ]; then
     # package.path do probe e relativo ao cwd: rodar de dentro do dir dele
     cd tools/suite_probe || exit 2
-    set -- . "${MODS[@]}"
+    set -- .
+    for _m in "${MODS[@]}"; do
+        case "$_m" in tests.*|src.*) set -- "$@" "$_m" ;; *) set -- "$@" "tests.$_m" ;; esac
+    done
 else
     set -- . "${ARGS[@]}"
 fi
