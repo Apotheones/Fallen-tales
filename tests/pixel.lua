@@ -35,6 +35,7 @@ function Pixel.run()
     x, y, hop = Render.visualPosition(actor)
     check(x == 112 and y == 80 and hop == 0, 'Landing uses the exact feet origin')
     check(Actors.selfCheck(), 'Actor animation checks')
+    check(require('src.sprite_dsl').selfCheck(), 'Sprite DSL parse/bake checks')
     check(require('src.pixel_world').selfCheck(), 'World pixel coordinates and isolation checks')
     local Font = require('src.pixel_font')
     local font = Font.new()
@@ -69,6 +70,18 @@ function Pixel.run()
     end
     for _, intro in pairs(Lore.bossIntros) do
         check(Font.clean(intro[1]) == intro[1] and Font.clean(intro[2]) == intro[2], 'Missing glyph in boss intro')
+    end
+    -- Barks da Fase B: toda string de src/battle_barks.lua passa na fonte
+    -- — falas, checks, ACTs, recusas e flavor, em qualquer aninhamento.
+    do
+        local function sweep(node)
+            for _, v in pairs(node) do
+                if type(v) == 'string' then
+                    check(Font.clean(v) == v, 'Bark needs a missing glyph: ' .. v)
+                elseif type(v) == 'table' then sweep(v) end
+            end
+        end
+        sweep(require('src.battle_barks'))
     end
     local Rooms = require('src.rooms')
     for _, theme in ipairs(Rooms.floorThemes) do
@@ -120,6 +133,7 @@ function Pixel.runUi(getState)
     local checks, held = 0, {}
     local oldKeyboard = love.keyboard.isDown
     local oldWidth, oldHeight, oldFlags = love.window.getMode()
+    local winX, winY = love.window.getPosition()
     local _, _, originalRenderer = getState()
     local oldMuted, oldReduced = originalRenderer.muted, originalRenderer.reducedMotion
     local function check(value, message) checks = checks + 1; assert(value, message) end
@@ -201,7 +215,7 @@ function Pixel.runUi(getState)
         check(animation(renderer, game.player) == a and a.timer == pausedTimer, 'Reward freezes actor animation')
         game.reward = false
         for _, size in ipairs({{900, 680}, {1120, 800}, {1920, 1080}}) do
-            love.window.setMode(size[1], size[2], {resizable = true, minwidth = 900, minheight = 680})
+            love.window.setMode(size[1], size[2], {resizable = true, minwidth = 900, minheight = 680, x = winX, y = winY})
             for _, reduced in ipairs({false, true}) do
                 renderer.reducedMotion = reduced; advance(.02)
                 local state = stamp(game)
@@ -230,6 +244,7 @@ function Pixel.runUi(getState)
         print(string.format('%d NATIVE PIXEL MOTION AND RESIZE ASSERTIONS PASSED', checks))
     end, debug.traceback)
     love.keyboard.isDown = oldKeyboard
+    oldFlags.x, oldFlags.y = winX, winY
     love.window.setMode(oldWidth, oldHeight, oldFlags)
     originalRenderer.muted, originalRenderer.reducedMotion = oldMuted, oldReduced
     assert(ok, err)

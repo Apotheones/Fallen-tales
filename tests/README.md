@@ -104,4 +104,4 @@ grave, Odete aguda, chefes profundos, inscrição neutra — pulos de linha e
 movimento reduzido viram um blip único, e M silencia tudo. O UI check desenha 120 quadros
 de movimento real, pausa/guia/página CARTAS/recompensa/morte e redimensiona entre
 900×680, 1120×800 e 1920×1080, incluindo filtro nearest e movimento reduzido.
-Referências visuais e reprodução: [primeiro marco](../docs/PIXEL_ART_MILESTONE.md).
+Referências visuais e reprodução: [primeiro marco](../docs/GUIA_VISUAL.md).
