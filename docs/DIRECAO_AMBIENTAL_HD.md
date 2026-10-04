@@ -365,6 +365,41 @@ militar, mobília de mostruário.
 - Flicker só em fogo real (braseiro, vela, brasa); lampião/janela/jade estáveis.
 - `--reduced-motion`: flicker e drift zeram, informação luminosa permanece.
 
+### 3.1 Luz que vive × luz quieta (adendo vida)
+
+O mundo respira por **dois mecanismos distintos** — não confundir:
+
+- **Flicker** (tempo real): só fogo aberto. Amplitude por material: chama de
+  braseiro ±12–15% (2 senoides, contrato fase0); vela ±20% mais rápida e de
+  raio menor; brasa ±8% lenta; lampião a óleo ±4% quase imperceptível.
+- **Estado** (marco/escolha): janela que acende quando a casa habita, nome do
+  Marco que acende, brasa da forja que pega, vela do velório que apaga. Não
+  existe ciclo dia/noite — luz viva muda por progresso, nunca por relógio.
+  Transição com fade 1–2s; nada dá pop.
+
+| Fonte | Tipo | Comportamento |
+|---|---|---|
+| Braseiro/fogueira | viva | flicker real; fagulha ocasional no emissivo |
+| Vela (capela, velório, salões) | viva | flicker rápido fraco; pode apagar por estado |
+| Brasa forja/fogão | viva | flicker lento + fagulha; acende por marco |
+| Lampião poste/banca | quase-viva | flicker mínimo; acende por estado |
+| Janela | viva por estado | acende conforme a casa habita; nunca pisca |
+| Jade (Marco, runa, selo) | quieta | emissivo constante; muda só por marco — é lei, não fogo |
+| Lamparina de trabalho | quieta | escrivaninha não performa |
+| Resíduo vedação/cristal/cobre | quieta | ei baixo constante, abaixo do bloom |
+| Sol/fresta/faixa de viga | quieta | assada no bake; move só se houver hora |
+| God rays/motes/fumaça | atmosfera viva | drift lento *dentro* do feixe — matéria, não fonte |
+| Reflexo d'água (Reservatório) | viva lenta | shimmer ±3% ~0.1Hz; some no reduced |
+
+**Regras anti-discoteca:**
+
+- ≤2 fontes com flicker real por tela; vivas agrupam-se no eixo quente
+  (fogo que guarda gente), nunca espalhadas competindo por atenção.
+- O que é lei/informação não pulsa: jade, selo, telegraph, cobre interativo.
+- O que é trabalho não performa: lamparina, lâmpada de quarto.
+- Em movimento reduzido: flicker/drift zeram e a fonte assume cor e raio
+  médios; mudanças de estado aplicam instantâneo — a informação não morre.
+
 ## 4. Notas para o Traço (DSL 64px)
 
 - **Rampas por papel, não por região.** A rampa já carrega hue-shift; o que
