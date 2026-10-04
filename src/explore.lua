@@ -28,8 +28,8 @@ end
 function Explore.blocked(campaign, lx, ly)
     if Explore.solidAt(campaign.map, lx, ly) then return true end
     for _, npc in ipairs(campaign.npcs) do
-        if math.abs(npc.grid.x - lx) < .32 + Explore.hx
-            and math.abs(npc.grid.y - ly) < .30 + Explore.hy then
+        if math.abs(npc.grid.x - lx) < .32
+            and math.abs(npc.grid.y - ly) < .30 then
             return true
         end
     end
@@ -44,6 +44,9 @@ local function boxFree(campaign, x, y)
         or Explore.blocked(campaign, x + hx, y + hy)
         or Explore.blocked(campaign, x, y))
 end
+
+-- Feet-box probe for code that places the player (battle retreat, arrivals).
+function Explore.free(campaign, x, y) return boxFree(campaign, x, y) end
 
 -- Axis-separated slide: horizontal and vertical are tried independently so
 -- brushing a wall never stops the perpendicular motion.

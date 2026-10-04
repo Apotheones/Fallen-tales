@@ -176,7 +176,10 @@ function Environment:update(dt)
                 for _, target in ipairs(game:entities()) do
                     if target ~= entity and target.health and target.health.current > 0
                         and target.grid.x == cell.x and target.grid.y == cell.y then
-                        game:damage(target, z.damage, p.x, p.y)
+                        -- Hazard de área não usa escudo nem armadura de face:
+                        -- a fonte é a própria célula atingida (mesmo contrato
+                        -- do jato do Ivo — sem direção para bloquear).
+                        game:damage(target, z.damage, cell.x, cell.y)
                     end
                 end
             end
@@ -195,7 +198,9 @@ function Environment:update(dt)
                     for _, target in ipairs(game:entities()) do
                         if target ~= entity and target.health and target.health.current > 0 and
                             target.grid.x == cell.x and target.grid.y == cell.y then
-                            game:damage(target, 3, p.x, p.y)
+                            -- Mesma regra do hazard de área: explosão não tem
+                            -- direção — a fonte é a célula do próprio alvo.
+                            game:damage(target, 3, cell.x, cell.y)
                         end
                     end
                 end

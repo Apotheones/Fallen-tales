@@ -1,6 +1,7 @@
 local utf8 = require('utf8')
 local Lore = require('src.lore')
 local Shop = require('src.shop')
+local Sfx = require('src.sfx')
 local Dialogue = {}
 
 -- game.dialogue = {node, title, lines, index, mode, reveal}
@@ -11,6 +12,8 @@ local Dialogue = {}
 function Dialogue.open(game, node)
     game.dialogue = {node = node, title = node.title, lines = node.lines,
         index = 1, mode = 'lines', reveal = 0, voice = node.voice}
+    Sfx.play('dlg_open')
+    if node.mood then Sfx.play('emote_' .. node.mood) end
 end
 
 function Dialogue.npc(game, id)
@@ -32,17 +35,20 @@ end
 function Dialogue.advance(game)
     local d = game.dialogue
     if not d then return end
-    if d.mode == 'shop' then d.mode, d.shop = 'options', nil; return end
+    if d.mode == 'shop' then d.mode, d.shop = 'options', nil; Sfx.play('dlg_choice'); return end
     if d.mode ~= 'lines' then return end
     local line = d.lines[d.index]
     local len = utf8.len(line) or #line
-    if d.reveal ~= nil and d.reveal < len then d.reveal = len; return end
+    if d.reveal ~= nil and d.reveal < len then d.reveal = len; Sfx.play('dlg_advance'); return end
     if d.index < #d.lines then
         d.index, d.reveal = d.index + 1, 0
+        Sfx.play('dlg_advance')
     elseif d.node.options then
         d.mode = 'options'
+        Sfx.play('dlg_options')
     else
         game.dialogue = nil
+        Sfx.play('dlg_close')
     end
 end
 
@@ -52,23 +58,28 @@ function Dialogue.choose(game, index)
     if d.mode == 'shop' then
         local bought = Shop.buy(game, index)
         d.shop = Shop.stock(game)
+        Sfx.play(bought and 'shop_buy' or 'ui_deny')
         return bought
     end
     if d.mode ~= 'options' then return false end
     local option = d.node.options[index]
-    if not option then return false end
+    if not option then Sfx.play('ui_deny'); return false end
     if option.shop then
         d.mode, d.shop = 'shop', Shop.stock(game)
+        Sfx.play('dlg_choice')
     elseif option.lines then
         d.lines, d.index, d.mode, d.reveal = option.lines, 1, 'lines', 0
+        Sfx.play('dlg_advance')
     elseif not option.action or option.action(game) then
         game.dialogue = nil
+        Sfx.play('dlg_close')
     end
     return true
 end
 
 function Dialogue.close(game)
     game.dialogue = nil
+    Sfx.play('dlg_close')
 end
 
 -- Run in LÖVE: require("src.dialogue").selfCheck()

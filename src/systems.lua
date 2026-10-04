@@ -129,16 +129,26 @@ function Systems.Projectile:update(dt)
             s.clock, s.steps = s.clock - s.interval, s.steps + 1
             p.x, p.y = p.x + s.dx, p.y + s.dy
             if Rooms.blocksAttack(g.room, p.x, p.y) then e:destroy(); break end
-            local hit = false
+            local hit, blocked = false, false
             for _, target in ipairs(g:entities()) do
-                if target.health and target.team.value ~= e.team.value and target.health.current > 0
+                if target.health and target.health.current > 0
                     and target.grid.x == p.x and target.grid.y == p.y then
-                    g:damage(target, s.damage, p.x - s.dx, p.y - s.dy, e.team.value == "player" and s.kind or nil)
-                    hit = true; break
+                    if target.team.value ~= e.team.value then
+                        g:damage(target, s.damage, p.x - s.dx, p.y - s.dy, e.team.value == "player" and s.kind or nil)
+                        hit = true
+                    else
+                        -- D12 (BATALHA_ACT_MERCY §8): corpo na lane corta a
+                        -- linha — a trajetória morre na primeira unidade viva,
+                        -- sem fogo amigo. O log nomeia quando a superfície tem.
+                        blocked = true
+                        g:effect("block", p.x, p.y)
+                        if g.say then g:say((target.name or "O aliado") .. " corta a linha.") end
+                    end
+                    break
                 end
             end
             local piercing = s.kind == "bow" and e.team.value == "player" and g.upgrades.bowPierce
-            if (hit and not piercing) or (s.range and s.steps >= s.range) then e:destroy(); break end
+            if (hit and not piercing) or blocked or (s.range and s.steps >= s.range) then e:destroy(); break end
         end
     end
 end

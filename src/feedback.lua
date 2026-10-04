@@ -52,8 +52,8 @@ end
 
 function Feedback.new()
     local self = setmetatable({particles = {}, rings = {}, popups = {}, landings = {},
-        tweens = flux.group(), time = 0, trauma = 0, flash = 0, banner = 0,
-        muted = false, reducedMotion = false, sounds = {}}, Feedback)
+        bolts = {}, tweens = flux.group(), time = 0, trauma = 0, flash = 0, banner = 0,
+        fade = 0, muted = false, reducedMotion = false, sounds = {}}, Feedback)
     -- Original, synthesized sounds: no samples or assets from the reference project.
     local specs = {hit = {155, .15, 'impact'}, death = {88, .3, 'fall'},
         block = {670, .23, 'metal'}, pulse = {240, .30, 'rise'}, ready = {880, .18, 'rise'},
@@ -87,27 +87,32 @@ function Feedback:burst(x, y, count, color, power, material)
         local speed = (35 + love.math.random() * 110) * (power or 1)
         self.particles[#self.particles + 1] = {x = x, y = y, vx = math.cos(angle) * speed,
             vy = math.sin(angle) * speed - 15, life = .25 + love.math.random() * .4,
-            max = .65, size = 1.4 + love.math.random() * 2.6, color = color, material = material}
+            max = .65, size = 1.4 + love.math.random() * 2.6, color = color, material = material,
+            born = self.time}
     end
 end
 
 function Feedback:ring(x, y, color, radius, duration)
-    self.rings[#self.rings + 1] = {x = x, y = y, radius = radius, color = color, life = duration, max = duration}
+    self.rings[#self.rings + 1] = {x = x, y = y, radius = radius, color = color, life = duration, max = duration,
+        born = self.time}
 end
 
 function Feedback:consume(event, game)
     local kind, x, y = event.kind, (event.x - .5) * 40, (event.y - .5) * 40
     local color = colors[kind] or {.50, .63, .70}
-    if kind == 'land' then
+    if kind == 'ui' then
+        self:play('talk', event.value or 1, .35)
+    elseif kind == 'land' then
         local key = event.x .. ':' .. event.y
         local tile = self.landings[key] or {depth = 0}; self.landings[key] = tile
-        tile.depth = self.reducedMotion and 0 or 4
+        tile.depth, tile.born = self.reducedMotion and 0 or 4, self.time
         self.tweens:to(tile, .27, {depth = 0}):ease('backout')
         if event.x == game.player.grid.x and event.y == game.player.grid.y then self:play('land', 1 + (event.x % 3) * .1, .2) end
     elseif kind == 'hit' then
         self:burst(x, y - 8, 11, color); self:ring(x, y, color, 22, .19)
         self.trauma = math.min(1, self.trauma + .28)
-        local popup = {x = x, y = y - 22, alpha = 1, size = 1.25, text = tostring(event.value), color = color}
+        local popup = {x = x, y = y - 22, alpha = 1, size = 1.25, text = tostring(event.value), color = color,
+            born = self.time}
         self.popups[#self.popups + 1] = popup
         self.tweens:to(popup, .5, {y = y - 52, alpha = 0, size = 1}):ease('quadout')
         if event.x == game.player.grid.x and event.y == game.player.grid.y then self.flash = .15 end
@@ -121,7 +126,7 @@ function Feedback:consume(event, game)
         self:burst(x, y, 15, color); self:ring(x, y, color, 32, .25); self:play(kind)
     elseif kind == 'armor' then
         self:burst(x, y - 6, 9, color, .65, 'metal'); self:play(kind, 1, .45)
-        local popup = {x = x, y = y - 25, alpha = 1, size = .7, text = 'FLANQUEIE', color = color}
+        local popup = {x = x, y = y - 25, alpha = 1, size = .7, text = 'FLANQUEIE', color = color, born = self.time}
         self.popups[#self.popups + 1] = popup
         self.tweens:to(popup, .7, {y = y - 48, alpha = 0}):ease('quadout')
     elseif kind == 'prime' then
@@ -129,7 +134,7 @@ function Feedback:consume(event, game)
     elseif kind == 'mineHit' or kind == 'mineEmpty' then
         local label = kind == 'mineHit' and (event.hits or event.value) .. '/' .. Environment.constants.hits or 'SEM PICARETAS'
         local popup = {x = x, y = y - 23, alpha = 1,
-            size = kind == 'mineHit' and .7 or .65, text = label, color = color}
+            size = kind == 'mineHit' and .7 or .65, text = label, color = color, born = self.time}
         self.popups[#self.popups + 1] = popup
         self.tweens:to(popup, .5, {y = y - 40, alpha = 0}):ease('quadout')
         if kind == 'mineHit' then
@@ -171,6 +176,19 @@ function Feedback:consume(event, game)
     elseif kind == 'ready' then
         self:burst(x, y - 15, 7, color, .45); self:ring(x, y, color, 25, .28); self:play(kind, 1, .4)
     elseif kind == 'fire' then self:burst(x, y - 8, 4, color, .6); self:play(kind, 1, .4)
+    elseif kind == 'shot' then
+        -- Flecha em voo: a trajetória é anotada em células e o renderer a
+        -- desenha como vulto — dourado nosso, rubro quando vem do inimigo.
+        local v = event.value or {}
+        if v.from and v.to and self.bolts then
+            self.bolts[#self.bolts + 1] = {
+                x1 = (v.from.x - .5) * 40, y1 = (v.from.y - .5) * 40,
+                x2 = (v.to.x - .5) * 40, y2 = (v.to.y - .5) * 40,
+                life = .16, max = .16, born = self.time,
+                color = v.enemy and colors.death or colors.fire}
+            -- O disparo inimigo soa mais grave e discreto que o nosso arco.
+            self:play('fire', v.enemy and .6 or 1, v.enemy and .3 or .4)
+        end
     elseif kind == 'warn' then self:play(kind, 1, .3)
     elseif kind == 'markWarn' then
         self:ring(x, y, color, 26, .3); self:play('prime', .8, .45)
@@ -181,27 +199,51 @@ function Feedback:consume(event, game)
         self:play('blast', 1.3, .6)
     elseif kind == 'summon' then
         self:ring(x, y, color, 34, .5); self:burst(x, y - 8, 10, color, .7); self:play('prime', .6, .55)
-        local popup = {x = x, y = y - 26, alpha = 1, size = .7, text = 'INVOCAÇÃO', color = color}
+        local popup = {x = x, y = y - 26, alpha = 1, size = .7, text = 'INVOCAÇÃO', color = color, born = self.time}
         self.popups[#self.popups + 1] = popup
         self.tweens:to(popup, .7, {y = y - 48, alpha = 0}):ease('quadout')
     elseif kind == 'hatch' then
         self:burst(x, y - 6, 14, color, .9); self:ring(x, y, color, 30, .3); self:play('land', .5, .6)
     elseif kind == 'stagger' then
         self:burst(x, y - 10, 16, color, .8); self:ring(x, y, color, 44, .4); self:play('stun', 1, .7)
-        local popup = {x = x, y = y - 28, alpha = 1, size = .75, text = 'INTERROMPIDO', color = color}
+        local popup = {x = x, y = y - 28, alpha = 1, size = .75, text = 'INTERROMPIDO', color = color, born = self.time}
         self.popups[#self.popups + 1] = popup
         self.tweens:to(popup, .8, {y = y - 52, alpha = 0}):ease('quadout')
     elseif kind == 'disarm' then self:ring(x, y, color, 18, .2); self:play('chargeCancel', 1.2, .2)
-    elseif kind == 'talk' then self:ring(x, y - 12, color, 16, .22); self:play('talk', 1, .4)
+    -- event.sfx = o call site já tocou o cue no Sfx (Tímpano): o feedback
+    -- mantém só o visual. Sem a marca, o arcade segue usando estes plays.
+    elseif kind == 'talk' then self:ring(x, y - 12, color, 16, .22)
+        if not event.sfx then self:play('talk', 1, .4) end
     elseif kind == 'sealBreak' then
         self:burst(x, y, 16, color, 1); self:ring(x, y, color, 34, .34)
-        self:play('prime', .7, .5); self:play('wallBreak', 1.15, .3)
+        if not event.sfx then
+            self:play('prime', .7, .5); self:play('wallBreak', 1.15, .3)
+        end
     elseif kind == 'worldEnd' then
         self:burst(x, y, 48, color, 1.9); self:ring(x, y, color, 170, 1.1)
         self.banner = 1; self.tweens:to(self, 3, {banner = 0}):ease('quadin')
         self:play('reward', 1, .8); self:play('clear', .7, .6)
     elseif kind == 'room' then
-        self.landings, self.particles, self.rings, self.popups = {}, {}, {}, {}
+        -- A transição apaga só o que nasceu antes deste update: efeitos do
+        -- mesmo frame (o floreio do golpe final, por exemplo) sobrevivem.
+        local function fresh(list)
+            local kept = {}
+            for _, e in ipairs(list or {}) do
+                if e.born and e.born >= self.time then kept[#kept + 1] = e end
+            end
+            return kept
+        end
+        self.particles, self.rings = fresh(self.particles), fresh(self.rings)
+        self.popups, self.bolts = fresh(self.popups), fresh(self.bolts)
+        for key, tile in pairs(self.landings or {}) do
+            if not (tile.born and tile.born >= self.time) then self.landings[key] = nil end
+        end
+        -- Cortina de transição: cada sala (e a arena) se revela do escuro.
+        if self.tweens then
+            if self.fadeTween then self.fadeTween:stop() end
+            self.fade = 1
+            self.fadeTween = self.tweens:to(self, self.reducedMotion and .25 or .45, {fade = 0}):ease('quadout')
+        end
     end
 end
 
@@ -223,7 +265,7 @@ function Feedback.selfCheck()
     local cells = {{x = 6, y = 4}, {x = 7, y = 4}}
     for _, reduced in ipairs({false, true}) do
         local feedback = setmetatable({particles = {}, rings = {}, popups = {}, tweens = flux.group(),
-            muted = true, reducedMotion = reduced, trauma = 0}, Feedback)
+            muted = true, reducedMotion = reduced, trauma = 0, time = 0}, Feedback)
         feedback:consume({kind = 'wallBreak', x = 4, y = 4}, {})
         feedback:consume({kind = 'pillarWarn', x = 5, y = 4, value = cells}, {})
         feedback:consume({kind = 'pillarFall', x = 5, y = 4, value = cells}, {})
@@ -257,6 +299,12 @@ function Feedback:update(dt, game, screen)
         if p.life <= 0 then table.remove(self.rings, i) end
     end
     for i = #self.popups, 1, -1 do if self.popups[i].alpha <= 0 then table.remove(self.popups, i) end end
+    if self.bolts then
+        for i = #self.bolts, 1, -1 do
+            local b = self.bolts[i]; b.life = b.life - dt
+            if b.life <= 0 then table.remove(self.bolts, i) end
+        end
+    end
     self.music:update(dt, game, screen, self.muted)
     for _, sound in pairs(self.sounds) do sound:update(dt) end
 end

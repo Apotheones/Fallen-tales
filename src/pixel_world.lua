@@ -1,5 +1,6 @@
 local Rooms = require('src.rooms')
 local Environment = require('src.environment')
+local Pal = require('src.palettes')
 local World = {}
 local G = love.graphics
 local P = {
@@ -11,6 +12,11 @@ local P = {
     goldDark = {.314, .235, .129}, gold = {.643, .490, .251}, goldLight = {.847, .702, .392},
     white = {.898, .941, .847}, danger = {.941, .388, .302}, rust = {.435, .204, .153},
     violet = {.482, .318, .702}, violetDark = {.278, .192, .412}, violetLight = {.690, .529, .878},
+    -- Tons de modelagem: sombras frias (hue-shift) e luzes quentes por material.
+    jadeDeep = {.039, .141, .157}, jadeMid = {.133, .412, .376},
+    violetDeep = {.169, .118, .286}, violetMid = {.376, .255, .545},
+    goldDeep = {.192, .141, .067}, ember = {.976, .573, .216}, emberLight = {1, .816, .494},
+    stoneDeep = {.055, .082, .114}, bone = {.812, .749, .592}, boneDark = {.557, .478, .345},
 }
 World.palette = P
 local function round(n) return math.floor(n + .5) end
@@ -86,6 +92,17 @@ end
 local function portal(renderer, game, door)
     local x, y = (door.x - 1) * 32, (door.y - 1) * 32
     local open = game:canLeave(door)
+    if door.localPath then
+        local pal = Pal.regions[game.room.id] or Pal.regions.default
+        rect(x + 1, y + 24, 30, 7, pal.wall.face)
+        rect(x + 1, y + 24, 30, 2, pal.wall.rim)
+        if not open then
+            rect(x + 3, y + 2, 3, 23, pal.wood.dark)
+            rect(x + 25, y + 2, 3, 23, pal.wood.dark)
+            rect(x + 3, y + 11, 25, 4, pal.wood.base)
+        end
+        return
+    end
     local sealed = door.sealed and not door.unsealed
     local c = open and (door.finish and P.goldLight or P.jade) or sealed and P.violet or P.rust
     rect(x + 1, y + 2, 30, 30, P.ink)
@@ -117,6 +134,7 @@ local function portal(renderer, game, door)
     end
 end
 
+World.portal = portal
 function World.floor(renderer, game)
     local room = game.room
     rect(-64, -64, room.w * 32 + 128, room.h * 32 + 128, P.ink)
@@ -179,20 +197,26 @@ local function damage(tile, px, py)
     for i = 1, 3 do rect(px + 11 + (i - 1) * 4, py + 25, 3, 3, i <= hits and P.goldLight or P.stoneDark) end
 end
 
-function World.wall(renderer, room, tile)
+function World.wall(renderer, room, tile, pal)
     local x, y, piece = tile.x, tile.y, tile.piece
     local px, py = (x - 1) * 32, (y - 1) * 32
     if piece == 'pillar' then
+        -- Pilares seguem a família de pedra da região quando informada.
+        local st = pal and pal.wall or nil
+        local sDark = st and st.faceDark or P.stoneDark
+        local sMid = st and st.brick or P.stone
+        local sLight = st and st.cap or P.stoneLight
+        local sEdge = st and st.rim or P.stoneEdge
         local lean = tile.state == 'falling' and not renderer.reducedMotion and round((1 - tile.timer / tile.duration) * 5) or 0
         local cx, cy = px + 16 + (tile.dx or 0) * lean, py + (tile.dy or 0) * lean
         rect(px + 4, py + 24, 26, 8, P.ink, .8)
-        rect(px + 4, py + 23, 24, 6, P.stoneDark); rect(px + 5, py + 21, 22, 4, P.stone)
-        rect(px + 5, py + 21, 21, 1, P.stoneLight); rect(px + 7, py + 20, 18, 1, P.goldDark)
+        rect(px + 4, py + 23, 24, 6, sDark); rect(px + 5, py + 21, 22, 4, sMid)
+        rect(px + 5, py + 21, 21, 1, sLight); rect(px + 7, py + 20, 18, 1, P.goldDark)
         rect(cx - 8, cy - 23, 16, 45, P.ink)
-        rect(cx - 7, cy - 22, 14, 43, P.stone); rect(cx - 6, cy - 21, 3, 41, P.stoneLight)
-        rect(cx + 4, cy - 21, 3, 42, P.stoneDark); rect(cx - 1, cy - 18, 2, 37, P.stoneDark)
-        rect(cx - 9, cy - 24, 18, 5, P.stoneDark); rect(cx - 10, cy - 28, 20, 5, P.stone)
-        rect(cx - 8, cy - 30, 16, 2, P.stoneLight); rect(cx - 8, cy - 29, 14, 1, P.stoneEdge)
+        rect(cx - 7, cy - 22, 14, 43, sMid); rect(cx - 6, cy - 21, 3, 41, sLight)
+        rect(cx + 4, cy - 21, 3, 42, sDark); rect(cx - 1, cy - 18, 2, 37, sDark)
+        rect(cx - 9, cy - 24, 18, 5, sDark); rect(cx - 10, cy - 28, 20, 5, sMid)
+        rect(cx - 8, cy - 30, 16, 2, sLight); rect(cx - 8, cy - 29, 14, 1, sEdge)
         rect(cx - 8, cy - 25, 16, 1, P.gold); rect(cx - 8, cy - 24, 2, 2, P.goldLight)
         rect(cx - 8, cy + 13, 16, 3, P.goldDark); rect(cx - 7, cy + 13, 12, 1, P.gold)
         rune(cx, cy - 7, P.gold, .75); rect(cx, cy - 7, 1, 1, P.jade, .8)

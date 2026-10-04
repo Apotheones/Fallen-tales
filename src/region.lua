@@ -9,6 +9,15 @@ local Region = {}
 local registry = {
     colina = 'src.regions.colina',
     hub = 'src.regions.hub',
+    oficinas = 'src.regions.oficinas',
+    mercado = 'src.regions.mercado',
+    reservatorio = 'src.regions.reservatorio',
+    saloes = 'src.regions.saloes',
+    fundacao = 'src.regions.fundacao',
+    andlar = 'src.regions.andlar',
+    capela = 'src.regions.interiores_refugio', cozinha = 'src.regions.interiores_refugio',
+    pensao = 'src.regions.interiores_refugio', oficina = 'src.regions.interiores_refugio',
+    escola = 'src.regions.interiores_refugio',
 }
 
 local function key(x, y) return Rooms.key(x, y) end
@@ -17,10 +26,12 @@ local function tile(map, x, y)
     return map.tiles[key(x, y)]
 end
 
-function Region.load(id)
+function Region.load(id, legacy)
     local source = registry[id]
     assert(source, 'region: unknown map "' .. tostring(id) .. '"')
-    return Region.build(require(source))
+    if id == 'hub' and legacy then source = 'src.regions.hub_legacy' end
+    local def = require(source)
+    return Region.build(source == 'src.regions.interiores_refugio' and def[id] or def)
 end
 
 function Region.build(def)
@@ -30,6 +41,8 @@ function Region.build(def)
         exits = {}, doors = {}, arrivals = def.arrivals or {},
         encounters = def.encounters or {},
         spawn = def.spawn, cleared = true, campaignRegion = true,
+        realm = def.realm, outdoor = def.outdoor, zones = def.zones,
+        paths = def.paths,
     }
 
     local function put(x, y, piece, ground)
@@ -55,7 +68,7 @@ function Region.build(def)
     end
     for _, c in ipairs(def.pillars or {}) do
         local cell = put(c.x, c.y, 'pillar', 'floor')
-        cell.hits = 3
+        cell.hits = c.hits or 3
     end
     for _, c in ipairs(def.walls or {}) do
         put(c.x, c.y, 'wall', 'floor')
@@ -80,7 +93,8 @@ function Region.build(def)
     for _, e in ipairs(def.exits or {}) do
         local cell = put(e.x, e.y, 'portal', 'floor')
         local exit = {x = e.x, y = e.y, side = e.side or 'south', to = e.to,
-            arrival = e.arrival, open = e.open ~= false, label = e.label, id = e.id}
+            arrival = e.arrival, open = e.open ~= false, label = e.label, id = e.id,
+            flag = e.flag, localPath = e.localPath}
         cell.exit, cell.protected = exit, true
         map.exits[#map.exits + 1] = exit
         map.doors[#map.doors + 1] = exit
@@ -88,7 +102,7 @@ function Region.build(def)
 
     for _, p in ipairs(def.props or {}) do
         local prop = {id = p.id, x = p.x, y = p.y, w = p.w or 1, h = p.h or 1,
-            kind = p.kind or p.id, solid = p.solid == true}
+            kind = p.kind or p.id, solid = p.solid == true, state = p.state, doorSide = p.doorSide}
         map.props[#map.props + 1] = prop
         if prop.solid then
             for y = prop.y, prop.y + prop.h - 1 do
@@ -101,7 +115,8 @@ function Region.build(def)
 
     for _, n in ipairs(def.npcs or {}) do
         map.npcs[#map.npcs + 1] = {id = n.id, x = n.x, y = n.y,
-            dx = n.dx or 0, dy = n.dy or 1, talkRange = n.talkRange}
+            dx = n.dx or 0, dy = n.dy or 1, talkRange = n.talkRange,
+            act = n.act, posts = n.posts}
     end
     for _, s in ipairs(def.hotspots or {}) do
         map.hotspots[#map.hotspots + 1] = {id = s.id, x = s.x, y = s.y,
