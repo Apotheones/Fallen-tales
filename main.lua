@@ -162,9 +162,10 @@ function love.load(args)
         return
     end
     renderer = require("src.render").new()
-    -- Render HD da exploração (Fase 2): flag de ambiente — arte apresenta,
+    -- Render HD da exploração (Fase 2): ligado por padrão — arte apresenta,
     -- a simulação segue idêntica e o fallback é o render legado.
-    renderer.hdEnabled = os.getenv('ARROWFALLEN_HD') == '1'
+    -- ARROWFALLEN_HD=0 desativa explicitamente (depuração/comparação).
+    renderer.hdEnabled = os.getenv('ARROWFALLEN_HD') ~= '0'
     -- The arcade/three-floor session only exists for internal scenes and tests;
     -- the campaign is the real title flow.
     game = (showcase or uiTesting) and Game.new(42042, true) or nil
