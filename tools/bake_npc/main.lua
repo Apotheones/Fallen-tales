@@ -6,8 +6,9 @@
 -- Roda da raiz: lovec tools/bake_npc
 
 -- Erros vão para arquivo: o lovec headless não mostra console no Windows.
+local ERRO = 'screenshots/bake_npc-erro.txt'
 local function die(msg)
-    local f = io.open('screenshots/bake_npc-erro.txt', 'w')
+    local f = io.open(ERRO, 'w')
     if f then f:write(tostring(msg) .. '\n' .. debug.traceback()); f:close() end
     love.event.quit(1)
 end
@@ -27,41 +28,49 @@ end
 function love.load()
     love.graphics.setDefaultFilter('nearest', 'nearest')
     package.path = package.path .. ';./?.lua;./?/init.lua'
+    os.remove(ERRO)  -- arquivo de erro é sempre desta execução
 
     local ok, DSL = pcall(require, 'src.sprite_dsl')
     if not ok then die('require src.sprite_dsl falhou: ' .. tostring(DSL)) return end
 
-    -- ordem da prancha: referência primeiro, depois os cinco NPCs.
+    -- ordem da prancha: referência primeiro, depois os cinco NPCs e os
+    -- loops de trabalho do pessoal da praça.
     local nomes = {
         'viajante', 'viajante_n', 'viajante_e',
         'npc_doro_s', 'npc_doro_n', 'npc_doro_e',
+        'npc_doro_trabalho', 'npc_sabela_trabalho', 'npc_aurel_trabalho',
     }
     for _, n in ipairs({ 'aurel', 'sabela', 'bento', 'teca', 'nilo' }) do
         for _, d in ipairs({ 's', 'n', 'e', 'w' }) do
             nomes[#nomes + 1] = 'npc_' .. n .. '_' .. d
         end
     end
+    -- loops de trabalho da frente VIDA-PARADO (interiores do Refúgio).
+    for _, n in ipairs({ 'bento', 'teca', 'nilo' }) do
+        nomes[#nomes + 1] = 'npc_' .. n .. '_trabalho'
+    end
 
     local G = love.graphics
-    local sheets = {}
+    local sheets, validos, falhas = {}, {}, {}
     for _, nome in ipairs(nomes) do
         local okd, def = pcall(require, 'src.sprites.' .. nome)
         if not okd then
-            die('require ' .. nome .. ' falhou: ' .. tostring(def))
-            return
-        end
-        local okb, sheet = pcall(DSL.bake, def)
-        if not okb then
-            die('bake ' .. nome .. ' falhou: ' .. tostring(sheet))
-            return
-        end
-        sheets[nome] = sheet
-        if nome:match('^npc_') then
-            local okp, err = pcall(DSL.dump, sheet,
-                'screenshots/' .. nome)
-            if not okp then
-                die('dump ' .. nome .. ': ' .. tostring(err))
-                return
+            falhas[#falhas + 1] = 'require ' .. nome .. ': ' .. tostring(def)
+        else
+            local okb, sheet = pcall(DSL.bake, def)
+            if not okb then
+                falhas[#falhas + 1] = 'bake ' .. nome .. ': ' .. tostring(sheet)
+            else
+                sheets[nome] = sheet
+                validos[#validos + 1] = nome
+                if nome:match('^npc_') then
+                    local okp, err = pcall(DSL.dump, sheet,
+                        'screenshots/' .. nome)
+                    if not okp then
+                        falhas[#falhas + 1] = 'dump ' .. nome .. ': '
+                            .. tostring(err)
+                    end
+                end
             end
         end
     end
@@ -71,7 +80,7 @@ function love.load()
     local escala, gap = 2, 8
     local largura, altura = gap, gap
     local rows = {}
-    for _, nome in ipairs(nomes) do
+    for _, nome in ipairs(validos) do
         local sheet = sheets[nome]
         local alb = to_drawable(sheet.albedo)
         local row, roww, rowh = {}, 0, 0
@@ -122,6 +131,18 @@ function love.load()
     f:write(canvas:newImageData():encode('png'):getString())
     f:close()
 
-    print('bake npc ok: ' .. #nomes .. ' defs')
+    if #falhas > 0 then
+        local fe = io.open(ERRO, 'w')
+        if fe then
+            fe:write(#falhas .. ' def(s) com falha — linha(s) ausente(s)'
+                .. ' na prancha:\n')
+            for _, m in ipairs(falhas) do fe:write(m .. '\n\n') end
+            fe:close()
+        end
+    end
+
+    print('bake npc ok: ' .. #validos .. ' defs'
+        .. (#falhas > 0 and (' (' .. #falhas .. ' falhas, ver '
+            .. ERRO .. ')') or ''))
     love.event.quit(0)
 end
