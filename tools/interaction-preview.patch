@@ -1,0 +1,174 @@
+--- a/src/campaign.lua
++++ b/src/campaign.lua
+@@ -518,6 +518,33 @@
+                 -- próprio (autoria); na ausência, o hotspot mapeia o id.
+                 node.icon = node.icon or Props.dialogIcon(spot.id)
+                 Dialogue.open(self, node)
++                -- Só apresentação: cópia do objeto depois da resolução local.
++                -- Fica no diálogo, nunca no save nem no node compartilhado.
++                if spot.id ~= 'miranteRefugio' and spot.id ~= 'terracoRefugio' then
++                    local target = ({marcoRefugio = 'marco', retornoAndlar = 'marcoAndlar',
++                        aguaRefugio = 'cisterna', preparoRefugio = 'bancada',
++                        descansoRefugio = 'cama2', camasRefugio = 'cama3',
++                        refeicaoRefugio = 'mesa', bauRefugio = 'bauPensao',
++                        cabraRefugio = 'cabra', cartazRefugio = 'cartazPraca'})[spot.id] or spot.id
++                    local subject, distance
++                    for _, prop in ipairs(self.map.props) do
++                        if prop.id == target or prop.kind == node.icon then
++                            local dx = prop.x + ((prop.w or 1) - 1) / 2 - spot.x
++                            local dy = prop.y + ((prop.h or 1) - 1) / 2 - spot.y
++                            local d = dx * dx + dy * dy
++                            if not distance or d < distance then subject, distance = prop, d end
++                        end
++                    end
++                    if subject then
++                        local snapshot = {}
++                        for k, v in pairs(subject) do
++                            if type(v) ~= 'table' and type(v) ~= 'function' then snapshot[k] = v end
++                        end
++                        -- Recolhido é estado de mundo, não apaga a imagem do achado.
++                        if snapshot.state == 'taken' then snapshot.state = nil end
++                        self.dialogue.preview = snapshot
++                    end
++                end
+                 Sfx.play('npc_greet', {pitch = Sfx.voice(node.voice or 'inscription')})
+             end
+             if spot.once then
+--- a/src/render.lua
++++ b/src/render.lua
+@@ -990,6 +990,22 @@
+     text(self.fonts.tiny, 'Depois da escolha, explore o andar e siga pelos portais abertos. Seu arco permanece equipado.', x + 28, y + 387, C.muted, width - 56, 'center')
+ end
+ 
++-- Quadro do objeto real: clip em coordenadas de tela, nenhuma mutação.
++local function propPicture(prop, x, y, size, pal, time, calm)
++    panel(x, y, size, size, C.jade)
++    G.push('all')
++    local sx, sy = G.transformPoint(x + 4, y + 4)
++    local ex, ey = G.transformPoint(x + size - 4, y + size - 4)
++    G.intersectScissor(sx, sy, ex - sx, ey - sy)
++    local pw, ph = (prop.w or 1) * 32, (prop.h or 1) * 32
++    local monument = prop.kind == 'marco'
++    local scale = monument and 1 or math.max(1, math.floor((size - 8) / math.max(pw, ph)))
++    G.translate(round(x + size / 2), round(y + size / 2)); G.scale(scale)
++    -- O Marco tem 220px de haste: close-up dos nomes, sem esmagar pixels.
++    Props.draw(prop, -pw / 2, monument and 64 or -ph / 2, pw, ph, pal, time, calm)
++    G.pop()
++end
++
+ function Render:dialogue(game, w, h)
+     local d = game.dialogue
+     -- Speakers with an actor sheet get an Undertale-style portrait: the head
+@@ -1000,10 +1016,16 @@
+     local emo = d.node and d.node.expr or 'neutral'
+     local face = sheet and (sheet.portraits
+         and (sheet.portraits[emo] or sheet.portraits.neutral) or sheet.portrait)
+-    local width = math.min(700, w - 120)
++    local picture = not face and d.mode ~= 'shop' and d.preview
++    local visual = face or picture
++    local width = math.min(760, w - 120)
+     local rows = d.mode == 'options' and #d.node.options
+         or d.mode == 'shop' and #d.shop or 1
+-    local boxH = math.max(face and 206 or 176, (face and 118 or 88) + rows * 30)
++    local boxH = math.max(visual and 224 or 176, (visual and 118 or 88) + rows * 30)
++    if d.mode == 'lines' then
++        local _, wrapped = self.fonts.body:getWrap(d.lines[d.index] or '', width - (visual and 180 or 52))
++        boxH = math.max(boxH, 100 + #wrapped * self.fonts.body:getHeight())
++    end
+     local x, y = (w - width) / 2, h - boxH - 42
+     panel(x, y, width, boxH, C.gold)
+     text(self.fonts.medium, d.title or ' ', x + 26, y + 20, C.gold)
+@@ -1012,7 +1034,7 @@
+     -- hotspot) pinta o objeto/lugar citado no canto do box — 'casaco'
+     -- mostra o casaco, 'marco' mostra o Marco, 'cova' a lápide. Fica na
+     -- margem do título: o layout do texto não muda.
+-    if d.node and d.node.icon and d.mode ~= 'shop' then
++    if d.node and d.node.icon and not picture and d.mode ~= 'shop' then
+         local ipal = game.room and PixelScene.palette(game.room)
+             or Pal.regions.default
+         local ix, iy = round(x + width - 50), round(y + 14)
+@@ -1021,6 +1043,10 @@
+         Props.icon(d.node.icon, ix, iy, 2, ipal)
+     end
+     local tx, tw = x + 26, width - 52
++    if picture then
++        propPicture(picture, x + 26, y + 62, 112, PixelScene.palette(game.room), self.time, self.reducedMotion)
++        tx, tw = x + 154, width - 180
++    end
+     if face then
+         panel(x + 26, y + 62, 88, 88, C.jade)
+         local sub
+@@ -3216,6 +3242,32 @@
+ -- equipado marcado por slot, detalhe com descrição e efeito. Estados vazios
+ -- e ações honestas — equipável equipa/desequipa, consumível consome,
+ -- chave só se lê.
++local function itemPicture(id, x, y, size, pal)
++    G.push('all')
++    local sx, sy = G.transformPoint(x, y)
++    local ex, ey = G.transformPoint(x + size, y + size)
++    G.intersectScissor(sx, sy, ex - sx, ey - sy)
++    local command = ({arco = 'bow', picareta = 'tool', provisao = 'use'})[id]
++    if command then
++        local scale = math.max(1, math.floor(size / 12))
++        G.translate(round(x + size / 2 - 5 * scale), round(y + size / 2 - 5 * scale))
++        G.scale(scale); slotIcon(command, 0, 0, false)
++    elseif id == 'fivela' then
++        local scale = math.max(1, math.floor(size / 16))
++        G.translate(round(x + size / 2 - 8 * scale), round(y + size / 2 - 8 * scale)); G.scale(scale)
++        color(Pal.gold.dark); G.rectangle('fill', 2, 5, 12, 7)
++        color(Pal.gold.light); G.rectangle('fill', 2, 4, 12, 6)
++        color(C.ink); G.rectangle('fill', 4, 6, 8, 2)
++        color(Pal.gold.light); G.rectangle('fill', 8, 5, 1, 5)
++    else
++        local icon = id == 'esquemaCanal' and 'mapa' or 'livro'
++        local scale = math.max(1, math.floor(size / 16))
++        Props.icon(icon, round(x + (size - 16 * scale) / 2),
++            round(y + (size - 16 * scale) / 2), scale, pal)
++    end
++    G.pop()
++end
++
+ function Render:campaignBag(w, h, campaign, bag)
+     color(C.ink, .82); G.rectangle('fill', 0, 0, w, h)
+     local width, x, y = 760, (w - 760) / 2, h / 2 - 260
+@@ -3242,7 +3294,8 @@
+         if isEq then
+             color(C.jade); G.rectangle('fill', x + 26, ry + 13, 6, 6)
+         end
+-        text(self.fonts.body, PixelFont.clean(it.def.label), x + 42, ry + 9,
++        itemPicture(it.id, x + 40, ry + 8, 16, PixelScene.palette(campaign.room))
++        text(self.fonts.body, PixelFont.clean(it.def.label), x + 64, ry + 9,
+             sel and C.text or C.muted)
+         if it.def.stack and it.qty > 1 then
+             text(self.fonts.small, 'x' .. it.qty, x + 330, ry + 10, C.gold)
+@@ -3258,9 +3311,11 @@
+     panel(dx, y + 100, width - 400, 340, C.jade)
+     text(self.fonts.body, PixelFont.clean(it.def.label), dx + 16, y + 116, C.gold)
+     text(self.fonts.small, it.def.cat:upper(), dx + 16, y + 140, C.jade)
+-    text(self.fonts.small, PixelFont.clean(it.def.desc or ''), dx + 16, y + 168,
++    panel(dx + 16, y + 164, 112, 112, C.gold)
++    itemPicture(it.id, dx + 24, y + 172, 96, PixelScene.palette(campaign.room))
++    text(self.fonts.small, PixelFont.clean(it.def.desc or ''), dx + 16, y + 292,
+         C.text, width - 430)
+-    local fy = y + 268
++    local fy = y + 350
+     if it.def.battle and it.def.battle.heal then
+         text(self.fonts.small, 'EFEITO: +' .. it.def.battle.heal
+             .. ' DE VIDA — ARENA E ESTRADA', dx + 16, fy, C.jade); fy = fy + 22
+--- a/tests/refugio.lua
++++ b/tests/refugio.lua
+@@ -74,6 +74,14 @@
+     assert(Refugio.ready(c) and not c:flag('refugioConcluido'), 'Repairs do not silently complete departure')
+     c.player.grid.x, c.player.grid.y = 20, 19
+     assert(c:interact(), 'Marco can be approached and read')
++    local stone
++    for _, prop in ipairs(c.map.props) do if prop.id == 'marco' then stone = prop end end
++    assert(c.dialogue.preview and c.dialogue.preview ~= stone
++        and c.dialogue.preview.state == stone.state, 'Inspection shows a separate snapshot of the real state')
++    local state = stone.state
++    c.dialogue.preview.state = 'preview-only'
++    assert(stone.state == state, 'Preview changes never mutate the world or save')
++    c.dialogue.preview.state = state
+     finish(c)
+     assert(c.dialogue and c.dialogue.mode == 'options')
+     c:chooseDialogue(2)

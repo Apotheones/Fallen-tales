@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# run_headless — runner padrao do ARROWFALLEN para testes e capturas.
+#
+# Garante, em qualquer agente/shell:
+#   * janela fora da tela (ARROWFALLEN_HEADLESS -> conf.lua posiciona -32000,-32000)
+#   * serializacao via lock (build/headless.lock) — um lovec de teste por vez
+#   * timeout com kill (padrao 240s; suite completa leva ~4-6min -> use 600)
+#   * cleanup de lovec orfaos (processo-pai morto) de runs de teste/captura
+#   * stdout despejado no log mesmo em timeout
+#
+# Uso:
+#   tools/run_headless [opcoes] -- <args repassados ao lovec>
+#   tools/run_headless --suite                 suite completa via suite_probe
+#   tools/run_headless --suite explore_campaign   um modulo so
+#   tools/run_headless --test                  igual a `lovec . --test`
+#   tools/run_headless -- --screenshot=screenshots/x.png --scene=map
+#   tools/run_headless --timeout 600 -- --test
+#   tools/run_headless --cleanup               so mata orfaos e sai
+#
+# Exit code do lovec e propagado. Log vai para stdout e para --log <arquivo>
+# (padrao build/run_headless-<timestamp>.log).
+set -u
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 2
+LOVEC="C:/Program Files/LOVE/lovec.exe"
+[ -x "$LOVEC" ] || LOVEC="$(command -v lovec || true)"
+[ -n "$LOVEC" ] || { echo "[run_headless] lovec.exe nao encontrado" >&2; exit 2; }
+
+TIMEOUT=240
+LOG=""
+MODE="game"
+MODS=()
+ARGS=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --timeout) TIMEOUT="$2"; shift 2 ;;
+        --log) LOG="$2"; shift 2 ;;
+        --suite) MODE="suite"; shift ;;
+        --test) MODE="game"; ARGS+=("--test"); shift ;;
+        --cleanup) MODE="cleanup"; shift ;;
+        --) shift; ARGS+=("$@"); break ;;
+        -*) echo "[run_headless] opcao desconhecida: $1" >&2; exit 2 ;;
+        *) MODS+=("$1"); shift ;;
+    esac
+done
+mkdir -p build screenshots
+
+cleanup_orphans() {
+    # Mata lovec/love orfaos (pai morto) que rodem flags de teste/captura
+    # neste repo. Runs interativos (Jogar.bat, love puro) sao poupados.
+    powershell -NoProfile -Command "
+\$dead = @{}
+Get-CimInstance Win32_Process -Filter \"name='lovec.exe' or name='love.exe'\" | ForEach-Object {
+    \$cmd = \$_.CommandLine
+    if (\$cmd -match '--test|--ui-test|--screenshot|--scene=|--pose=|--showcase|--headless|suite_probe') {
+        \$parent = \$_.ParentProcessId
+        \$alive = \$dead[\$parent]
+        if (\$null -eq \$alive) {
+            \$alive = [bool](Get-Process -Id \$parent -ErrorAction SilentlyContinue)
+            \$dead[\$parent] = \$alive
+        }
+        if (-not \$alive) {
+            Write-Output (\"orphan kill: \" + \$_.ProcessId + \" \" + \$cmd)
+            Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+    }
+}" 2>/dev/null
+}
+
+[ "$MODE" = cleanup ] && { cleanup_orphans; exit 0; }
+
+# --- lock: um diretorio = aquisicao atomica ----------------------------------
+LOCK=build/headless.lock
+tries=0
+while ! mkdir "$LOCK" 2>/dev/null; do
+    tries=$((tries + 1))
+    owner="$(cat "$LOCK/pid" 2>/dev/null)"
+    # lock parado > 20min OU dono morto -> rouba
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+        rm -rf "$LOCK"; continue
+    fi
+    if [ $tries -gt 120 ]; then
+        echo "[run_headless] lock ocupado por pid=$owner ha >10min; abortando" >&2
+        exit 3
+    fi
+    [ $((tries % 12)) -eq 1 ] && echo "[run_headless] esperando lock (dono: ${owner:-?})..." >&2
+    sleep 5
+done
+echo $$ > "$LOCK/pid"
+trap 'rm -rf "$LOCK"' EXIT INT TERM
+
+cleanup_orphans
+
+# --- monta o comando ---------------------------------------------------------
+: "${LOG:=build/run_headless-$(date +%H%M%S).log}"
+case "$LOG" in /*|[A-Za-z]:*) ;; *) LOG="$ROOT/$LOG" ;; esac
+if [ "$MODE" = suite ]; then
+    # package.path do probe e relativo ao cwd: rodar de dentro do dir dele
+    cd tools/suite_probe || exit 2
+    set -- . "${MODS[@]}"
+else
+    set -- . "${ARGS[@]}"
+fi
+echo "[run_headless] $LOVEC $*  (timeout ${TIMEOUT}s, log $LOG)" >&2
+
+export ARROWFALLEN_HEADLESS=1
+STDOUT_BUF=none timeout -k 5 "$TIMEOUT" "$LOVEC" "$@" 2>&1 | tee "$LOG"
+rc=${PIPESTATUS[0]}
+if [ $rc -eq 124 ] || [ $rc -eq 137 ]; then
+    echo "[run_headless] TIMEOUT ${TIMEOUT}s — lovec morto" >&2
+fi
+exit $rc
