@@ -459,9 +459,20 @@ Palettes.grades = {
         shadow = {.42, .58, .50}, mid = {.85, .96, .82}, light = {.92, 1.05, .88}},
     saloes = {    -- dourado escuro de teatro
         shadow = {.50, .36, .38}, mid = {.98, .82, .58}, light = {1.10, .92, .55}},
+    -- Quatro regiões novas (DIRECAO_AMBIENTAL / docs/DIRECAO_AMBIENTAL_HD.md):
+    -- multiplicador por faixa tonal p/ a LUT do postfx, nunca cor de rampa.
+    oficinas = {    -- ferro sob brasa: sombra fria de metal, luz morna
+        shadow = {.45, .48, .60}, mid = {.92, .92, .95}, light = {1.05, .96, .80}},
+    reservatorio = { -- calcário e água: sombra verde-água, luz cal amarelada
+        shadow = {.42, .55, .52}, mid = {.88, .97, .88}, light = {.95, 1.05, .92}},
+    mercado = {     -- ocre de toldo ao sol: o interior mais quente e claro
+        shadow = {.55, .46, .38}, mid = {1.02, .94, .75}, light = {1.12, 1.00, .72}},
+    fundacao = {    -- cal azulada, dia cinza: sombra fria, luz quase neutra
+        shadow = {.48, .50, .62}, mid = {.92, .94, 1.00}, light = {1.02, 1.00, .95}},
     default = {
         shadow = {1, 1, 1}, mid = {1, 1, 1}, light = {1, 1, 1}},
 }
+-- Andlar e mapas sem grade própria caem no default até existirem.
 Palettes.grades.hub = Palettes.grades.refugio
 Palettes.grades.neutro = Palettes.grades.default
 

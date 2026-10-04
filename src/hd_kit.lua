@@ -83,4 +83,24 @@ end
 
 function Kit.hash(x, y, s) return ((x * 73 + y * 151 + (s or 0) * 997) % 97) / 97 end
 
+-- Ambiente por região (DIRECAO_AMBIENTAL): nível de preenchimento frio —
+-- a dominante de cada região esquenta por cima. Valores calibrados na
+-- praça: ~0.3 × nível 'amb' da nota, matiz do fill da região.
+Kit.AMBIENT = {
+    refugio = {.18, .20, .32},      -- sol SO âmbar + fill azul-violeta
+    colina = {.18, .19, .32},       -- crepúsculo violeta, sem dominante
+    necropole = {.12, .18, .15},    -- esverdeado úmido, ilhas de lamparina
+    saloes = {.16, .14, .11},       -- dourado escuro de teatro
+    oficinas = {.16, .17, .22},     -- cinza difuso + brasas
+    reservatorio = {.16, .21, .18}, -- calcário + reflexo verde da água
+    mercado = {.27, .23, .21},      -- ocre de toldo, mais claro
+    fundacao = {.20, .21, .27},     -- cal azulada, dia cinza
+    hub = {.18, .20, .32},
+    neutro = {.18, .19, .26},
+}
+
+function Kit.ambient(region)
+    return Kit.AMBIENT[region] or Kit.AMBIENT.neutro
+end
+
 return Kit

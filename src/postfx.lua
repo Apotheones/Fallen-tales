@@ -134,6 +134,30 @@ local function gradeLGG(o)
     end
 end
 
+-- Grading tonal de Palettes.grades — a fonte de verdade da arte (as 9
+-- regiões, DIRECAO_AMBIENTAL). {shadow,mid,light} é multiplicador por
+-- faixa de luminância do pixel de entrada: preserva matiz, pinta sombra/
+-- meio/luz conforme a região. Prevalece sobre a fn legada de mesmo nome.
+local function gradeLum(g)
+    local s, m, l = g.shadow, g.mid, g.light
+    return function(r, gr, b)
+        local lum = r * .299 + gr * .587 + b * .114
+        local tr, tg, tb
+        if lum < .5 then
+            local t = lum * 2
+            tr = s[1] + (m[1] - s[1]) * t
+            tg = s[2] + (m[2] - s[2]) * t
+            tb = s[3] + (m[3] - s[3]) * t
+        else
+            local t = (lum - .5) * 2
+            tr = m[1] + (l[1] - m[1]) * t
+            tg = m[2] + (l[2] - m[2]) * t
+            tb = m[3] + (l[3] - m[3]) * t
+        end
+        return r * tr, gr * tg, b * tb
+    end
+end
+
 local LUT_FNS = {
     -- neutro: identidade EXATA — referência de calibração e fallback de
     -- qualquer região desconhecida.
@@ -210,8 +234,20 @@ function PostFX.new()
     self.stats.hdr = self.hdrFormat == 'rgba16f'
 
     -- LUTs em ImageData primeiro: selfCheck roda mesmo sem GPU.
+    -- Fonte de verdade: Palettes.grades (todas as regiões); as fns legadas
+    -- ficam como fallback se a paleta não responder.
+    local fns = {}
+    for k, v in pairs(LUT_FNS) do fns[k] = v end
+    local okP, Pal = pcall(require, 'src.palettes')
+    if okP and Pal and Pal.grades then
+        for name, g in pairs(Pal.grades) do
+            if g.shadow and g.mid and g.light then
+                fns[name] = gradeLum(g)
+            end
+        end
+    end
     self.lutData = {}
-    for name, fn in pairs(LUT_FNS) do
+    for name, fn in pairs(fns) do
         self.lutData[name] = buildLUT(fn)
     end
     self.lutImg = {}
@@ -242,7 +278,11 @@ function PostFX.new()
                 tostring(img))
             return self
         end
-        img:setFilter('nearest', 'nearest')
+        -- linear, NÃO nearest: o lookup interpola 2 fatias de azul por
+        -- shader e o filtro faz R e G dentro da fatia — com nearest a LUT
+        -- 16³ quantiza gradientes de luz em anéis concêntricos visíveis.
+        img:setFilter('linear', 'linear')
+        img:setWrap('clamp', 'clamp')
         self.lutImg[name] = img
     end
     self.enabled = true
@@ -307,7 +347,7 @@ end
 
 function PostFX:setRegion(name)
     -- região desconhecida cai na identidade — nunca gradeia errado.
-    self.region = LUT_FNS[name] and name or 'neutro'
+    self.region = (self.lutData[name] or LUT_FNS[name]) and name or 'neutro'
 end
 
 function PostFX:setVignette(strength)

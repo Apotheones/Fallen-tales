@@ -7,6 +7,7 @@ local PixelFont = require('src.pixel_font')
 local Feedback = require('src.feedback')
 local Rooms = require('src.rooms')
 local Props = require('src.props')
+local HDWorld = require('src.hd_world')
 local Environment = require('src.environment')
 local Enemies = require('src.enemies')
 local Progression = require('src.progression')
@@ -3405,10 +3406,15 @@ function Render:drawCampaign(campaign, screen, hasSave)
         local map = battle and battle.room or campaign.room
         local actor = battle and battle.player or campaign.player
         local feetX, feetY = Render.visualPosition(actor)
-        local v = Render.layout(w, h, map, feetX, feetY, 76,
-            battle and Render.battleStageH + 4 or 0)
+        -- Render HD (Fase 2): exploração via G-buffer; flag renderer.hdEnabled.
+        local hd = self.hdEnabled and not battle
+        local v = hd
+            and Render.layout(w, h, map, feetX * 2, feetY * 2, 76, 0,
+                {cell = Render.CELL_HD, scale = 1})
+            or Render.layout(w, h, map, feetX, feetY, 76,
+                battle and Render.battleStageH + 4 or 0)
         if battle then battleClampTop(battle, v) end
-        if not battle and map.id == 'hub' and map.outdoor and (campaign.panoramaTime or 0) > 0 then
+        if not hd and not battle and map.id == 'hub' and map.outdoor and (campaign.panoramaTime or 0) > 0 then
             v = refugePanorama(w, h, map)
         end
         self.view = v
@@ -3426,6 +3432,16 @@ function Render:drawCampaign(campaign, screen, hasSave)
         G.setCanvas(self.canvas); G.clear(C.ink); G.setLineStyle('rough')
         G.translate(-v.left + shakeX, -v.top + shakeY)
         if campaign.scene == 'battle' then self:battleScene(campaign)
+        elseif hd then
+            local ok, err = pcall(HDWorld.draw, self, campaign, v, map,
+                {shakeX, shakeY})
+            if not ok then
+                self.hdEnabled = false
+                print('[hd_world] falhou, caindo no render legado: '
+                    .. tostring(err))
+                G.origin(); G.translate(-v.left + shakeX, -v.top + shakeY)
+                self:worldCampaign(campaign)
+            end
         else self:worldCampaign(campaign) end
         G.pop()
         color(C.white); G.draw(self.canvas, v.x, v.y, 0, v.scale, v.scale)

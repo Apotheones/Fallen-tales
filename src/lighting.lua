@@ -85,14 +85,34 @@ vec4 effect(vec4 color, Image tex, vec2 uv, vec2 sc) {
 }
 ]]
 
+-- Passe de sombra: multiplica a contribuição da luz isolada. O fator
+-- esmaece AO LONGO da projeção (smoothstep em t) — a sombra respira: densa
+-- no pé do occluder, quase invisível na ponta. Dois desenhos por occluder
+-- (anel dilatado translúcido + casco) dão a pena de borda de 1-2 degraus.
+local SHADER_SHADOW = [[
+uniform vec2 occC;   // centro do occluder, px do lightmap (escalado)
+uniform vec2 sdir;   // direção da projeção, unitária
+uniform float slen;  // comprimento total da projeção
+uniform float core;  // multiplicador no pé da sombra
+
+vec4 effect(vec4 color, Image tex, vec2 uv, vec2 sc) {
+    float t = clamp(dot(sc - occC, sdir) / max(slen, 1.0), 0.0, 1.0);
+    t = t * t * (3.0 - 2.0 * t);
+    float f = mix(core, 1.0, t);
+    return vec4(f, f, f, 1.0) * color;
+}
+]]
+
 local SHADER_COMPOSE = [[
 uniform Image lightmapTex;
 uniform Image emissiveTex;
+uniform float debugLightmapOnly;
 
 vec4 effect(vec4 color, Image tex, vec2 uv, vec2 sc) {
     vec4 a = Texel(tex, uv);
     vec3 lit = a.rgb * Texel(lightmapTex, uv).rgb
              + Texel(emissiveTex, uv).rgb; // emissivo passa direto, sem atenuação
+    if (debugLightmapOnly > 0.5) return vec4(Texel(lightmapTex, uv).rgb, 1.0);
     return vec4(lit, a.a);
 }
 ]]
@@ -146,7 +166,8 @@ local function convexHull(pts)
 end
 
 -- Polígono de sombra de um occluder para uma luz, já em espaço de vista.
--- Retorna vértices achatados + centro (para a cópia dilatada da borda).
+-- Retorna vértices achatados + centro, direção e comprimento (o shader usa
+-- direção/comprimento para o esmaecimento longitudinal).
 local function shadowPoly(o, l, camX, camY)
     local cx, cy = o.x + o.w / 2, o.y + o.h / 2
     local dx, dy = cx - l.x, cy - l.y
@@ -154,10 +175,11 @@ local function shadowPoly(o, l, camX, camY)
     if dl < 0.001 then dx, dy, dl = 0, 1, 1 end -- luz exatamente acima: direção arbitrária estável
     dx, dy = dx / dl, dy / dl
     local H = o.height or 32
-    -- Sombra alonga com luz baixa/próxima e encurta com luz alta;
-    -- o clamp evita sombra infinita com lz perto do chão e sombra nula no zenite.
-    local len = H * (l.radius * 0.6) / math.max(l.z, 8)
-    len = math.max(H * 0.5, math.min(len, H * 3))
+    -- Comprimento físico h × distância-chão/z, uma regra só: teto de ~2.5×
+    -- a altura do occluder — peças baixas ficam naturalmente curtas (sombra
+    -- de contato alongada), peças altas não cruzam a praça.
+    local len = H * dl / math.max(l.z, 20)
+    len = math.max(H * 0.5, math.min(len, H * 2.5))
     local sx, sy = dx * len, dy * len
     local pts = {
         { x = o.x,         y = o.y },
@@ -178,16 +200,37 @@ local function shadowPoly(o, l, camX, camY)
         verts[#verts + 1] = vy
         ccx, ccy = ccx + vx, ccy + vy
     end
-    return verts, ccx / #h, ccy / #h
+    -- centro do OCCLUDER (não do casco) como origem de t no shader
+    return verts, ccx / #h, ccy / #h, cx - camX, cy - camY, dx, dy, len
 end
 
+-- AABB do casco toca a vista? Occluder fora da tela (ou cuja sombra cai
+-- fora) não precisa rasterizar nada — no mapa real são ~100 occluders e
+-- só ~15 pousam na vista (corte de custo dominante do gameplay).
+local function hullVisible(verts, w, h)
+    local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+    for i = 1, #verts, 2 do
+        local x, y = verts[i], verts[i + 1]
+        if x < minX then minX = x end
+        if x > maxX then maxX = x end
+        if y < minY then minY = y end
+        if y > maxY then maxY = y end
+    end
+    return maxX >= 0 and minX <= w and maxY >= 0 and minY <= h
+end
+
+-- Scratch reutilizado por occluder×luz×frame (M10): sem isso cada sombra
+-- alocava duas tabelas novas por frame — churn de GC no passe quente.
+local svScratch, dvScratch = {}, {}
+
 -- Cópia dilatada do polígono em torno do centróide — anel externo da sombra.
-local function dilate(verts, cx, cy, s)
-    local out = {}
+-- Escreve em `out` (pool), devolve a própria tabela.
+local function dilate(verts, cx, cy, s, out)
     for i = 1, #verts, 2 do
         out[i]     = cx + (verts[i] - cx) * s
         out[i + 1] = cy + (verts[i + 1] - cy) * s
     end
+    for i = #verts + 1, #out do out[i] = nil end
     return out
 end
 
@@ -196,7 +239,12 @@ end
 function Lighting.new(viewW, viewH)
     local self = setmetatable({}, Lighting)
     self.enabled = true
-    self.lightScale = 2 -- supersample do lightmap (anti-banding, §refugio-hd)
+    -- Supersample do lightmap: 1.5× lisa o gradiente e as sombras sem o
+    -- custo 4× do 2× — o debanding pesado fica na LUT linear + dither.
+    -- Adapta por área da vista em resize(): >~1.4Mpx cai pra 1.25× (1920
+    -- é onde o passe de sol dominava o frame).
+    self.lightScale = tonumber(os.getenv('ARROWFALLEN_LIGHTSCALE')) or 1.5
+    self._lsFixed = os.getenv('ARROWFALLEN_LIGHTSCALE') ~= nil
     self.w, self.h = 0, 0
     self.lights = {}
     self.occluders = {}
@@ -206,6 +254,10 @@ function Lighting.new(viewW, viewH)
     self.shaderAll = compile(SHADER_ALL, 'multi')
     self.shaderSingle = compile(SHADER_SINGLE, 'single')
     self.shaderCompose = compile(SHADER_COMPOSE, 'compose')
+    self.shaderShadow = compile(SHADER_SHADOW, 'shadow')
+    -- Envs de depuração içadas no ctor: os.getenv por frame é syscall por
+    -- chamada (M5) — o processo não troca env a meio da execução.
+    self._dbgLightmapOnly = os.getenv('ARROWFALLEN_SHOW_LIGHTMAP2') and 1 or 0
     if not (self.shaderAll and self.shaderSingle and self.shaderCompose) then
         self.enabled = false
     end
@@ -228,6 +280,9 @@ function Lighting:resize(w, h)
     w, h = math.max(1, math.floor(w or 1)), math.max(1, math.floor(h or 1))
     if w == self.w and h == self.h and self.lightmap then return end
     self.w, self.h = w, h
+    if not self._lsFixed then
+        self.lightScale = (w * h > 1400000) and 1.25 or 1.5
+    end
     -- Lightmap a lightScale× a vista (supersample): o gradiente de luz é
     -- contínuo por natureza — renderizar gordo e descer com filtro linear
     -- mata o banding de anéis que o texel 1:1 quantiza. Posições/raios e
@@ -376,6 +431,25 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
         if #set > 0 then anyShadow = true end
     end
 
+    -- Polígonos de sombra visíveis por luz: hull e AABB computados uma
+    -- vez aqui — luz cuja sombra toda cai fora da vista entra no batch
+    -- grátis (sem lightTmp), e o loop de desenho não repete matemática.
+    local polys = {}
+    if anyShadow then
+        for i = 1, nLights do
+            local list = {}
+            for j = 1, #occSets[i] do
+                local verts, ccx, ccy, ocx, ocy, dx, dy, len =
+                    shadowPoly(occSets[i][j], self.lights[i], camX, camY)
+                if verts and hullVisible(verts, self.w, self.h) then
+                    list[#list + 1] = {verts = verts, cx = ccx, cy = ccy,
+                        ocx = ocx, ocy = ocy, dx = dx, dy = dy, len = len}
+                end
+            end
+            polys[i] = list
+        end
+    end
+
     G.push()
     G.origin()
 
@@ -406,11 +480,12 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
             G.rectangle('fill', 0, 0, self.lw, self.lh)
         end
     else
-        -- Luzes sem oclusão ainda vão juntas num passe de array; só as
-        -- ocluídas pagam o custo do lightTmp por fonte.
+        -- Luzes sem sombra VISÍVEL (sem occluder ou sombra toda fora da
+        -- vista) vão juntas no passe de array; só quem realmente sombreia
+        -- paga o lightTmp isolado.
         local free = {}
         for i = 1, nLights do
-            if #occSets[i] == 0 then free[#free + 1] = i end
+            if #polys[i] == 0 then free[#free + 1] = i end
         end
         if #free > 0 then
             local pos, col, rad = {}, {}, {}
@@ -432,8 +507,8 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
             G.rectangle('fill', 0, 0, self.lw, self.lh)
         end
         for i = 1, nLights do
-            local set = occSets[i]
-            if #set > 0 then
+            local set = polys[i]
+            if set and #set > 0 then
                 local l = self.lights[i]
                 -- Contribuição isolada em lightTmp → sombra multiplica →
                 -- soma no lightmap. Sombra da luz A não toca a luz B.
@@ -443,20 +518,36 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
                 G.setShader()
                 G.setBlendMode('multiply', 'premultiplied')
                 for j = 1, #set do
-                    local verts, ccx, ccy = shadowPoly(set[j], l, camX, camY)
-                    if verts then
-                        -- dois tons: anel dilatado mais claro + núcleo denso,
-                        -- borda suave sem custo de blur. ×ls: os polígonos
-                        -- nascem em espaço de vista e o lightTmp é 2×.
-                        local sv = {}
-                        for k = 1, #verts do sv[k] = verts[k] * ls end
-                        ccx, ccy = ccx * ls, ccy * ls
-                        G.setColor(0.55, 0.55, 0.55, 1)
-                        G.polygon('fill', dilate(sv, ccx, ccy, 1.15))
-                        G.setColor(0.35, 0.35, 0.35, 1)
+                    local p = set[j]
+                    local verts = p.verts
+                    -- Dois desenhos com o shader de sombra (fator esmaece
+                    -- ao longo da projeção): anel dilatado translúcido =
+                    -- pena de 1-2 degraus; casco com núcleo ~0.27.
+                    -- 0.80 × 0.275 ≈ 0.22 no pé — sombra, não viga.
+                    local sv = svScratch
+                    for k = 1, #verts do sv[k] = verts[k] * ls end
+                    for k = #verts + 1, #sv do sv[k] = nil end
+                    local ccx, ccy = p.cx * ls, p.cy * ls
+                    local sh = self.shaderShadow
+                    if sh then
+                        sh:send('occC', { p.ocx * ls, p.ocy * ls })
+                        sh:send('sdir', { p.dx, p.dy })
+                        sh:send('slen', math.max(p.len * ls, 1))
+                        G.setShader(sh)
+                        sh:send('core', 0.80)
+                        G.polygon('fill', dilate(sv, ccx, ccy, 1.10,
+                            dvScratch))
+                        sh:send('core', 0.275)
                         G.polygon('fill', sv)
-                        shadowQuads = shadowQuads + 1
+                        G.setShader()
+                    else
+                        G.setColor(0.75, 0.75, 0.75, 1)
+                        G.polygon('fill', dilate(sv, ccx, ccy, 1.10,
+                            dvScratch))
+                        G.setColor(0.28, 0.28, 0.28, 1)
+                        G.polygon('fill', sv)
                     end
+                    shadowQuads = shadowQuads + 1
                 end
                 G.setCanvas(self.lightmap)
                 G.setShader()
@@ -472,6 +563,7 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
     local sh = self.shaderCompose
     sh:send('lightmapTex', self.lightmap)
     sh:send('emissiveTex', emissiveCanvas)
+    sh:send('debugLightmapOnly', self._dbgLightmapOnly or 0)
     G.setShader(sh)
     G.setBlendMode('alpha', 'alphamultiply')
     G.setColor(1, 1, 1, 1)
