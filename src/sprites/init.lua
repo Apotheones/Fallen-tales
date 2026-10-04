@@ -1,8 +1,117 @@
--- Sprites amostra do formato DSL (Fase 0, docs/MEGAPLAN_VISUAL_HD.md).
--- Cada módulo retorna uma `def` completa; a ordem aqui é a ordem da
--- prancha de bake em tools/bake_sprites.
+-- Sprites DSL do padrão HD (Fases 0-2, docs/MEGAPLAN_VISUAL_HD.md).
+-- Cada módulo retorna uma def p/ SpriteDSL.bake(). Frames servem de
+-- animação, variantes por seed (tiles/props) e estados por flag.
+-- Convenções e nomes: nota maestri assets-fase1.
 return {
+    -- Amostras Fase 0
     viajante = require('src.sprites.viajante'),
     braseiro = require('src.sprites.braseiro'),
     parede = require('src.sprites.parede'),
+    -- Tiles Refugio
+    piso_laje = require('src.sprites.piso_laje'),
+    piso_terra = require('src.sprites.piso_terra'),
+    piso_grama = require('src.sprites.piso_grama'),
+    piso_caminho = require('src.sprites.piso_caminho'),
+    piso_horta = require('src.sprites.piso_horta'),
+    piso_tabua = require('src.sprites.piso_tabua'),
+    -- Tiles Colina
+    piso_colina = require('src.sprites.piso_colina'),
+    -- Arquitetura
+    parede_canto_e = require('src.sprites.parede_canto_e'),
+    parede_canto_d = require('src.sprites.parede_canto_d'),
+    parede_janela = require('src.sprites.parede_janela'),
+    parede_porta = require('src.sprites.parede_porta'),
+    parede_painel = require('src.sprites.parede_painel'),
+    parede_painel_janela = require('src.sprites.parede_painel_janela'),
+    pilar = require('src.sprites.pilar'),
+    marco = require('src.sprites.marco'),
+    remendo_muro = require('src.sprites.remendo_muro'),
+    parapeito = require('src.sprites.parapeito'),
+    -- Praca/ruas
+    lampiao = require('src.sprites.lampiao'),
+    banco_madeira = require('src.sprites.banco_madeira'),
+    banco_pedra = require('src.sprites.banco_pedra'),
+    banco_serra = require('src.sprites.banco_serra'),
+    varal = require('src.sprites.varal'),
+    toldo = require('src.sprites.toldo'),
+    recipientes = require('src.sprites.recipientes'),
+    cartaz = require('src.sprites.cartaz'),
+    posto_vigia = require('src.sprites.posto_vigia'),
+    rocha = require('src.sprites.rocha'),
+    placa = require('src.sprites.placa'),
+    -- Horta/terraco
+    espantalho = require('src.sprites.espantalho'),
+    canteiro_a = require('src.sprites.canteiro_a'),
+    canteiro_b = require('src.sprites.canteiro_b'),
+    rack_ervas = require('src.sprites.rack_ervas'),
+    fardos = require('src.sprites.fardos'),
+    banco_terraco = require('src.sprites.banco_terraco'),
+    varal_terraco = require('src.sprites.varal_terraco'),
+    cisterna_rua = require('src.sprites.cisterna_rua'),
+    -- Quintal da forja
+    bigorna = require('src.sprites.bigorna'),
+    brasa_forja = require('src.sprites.brasa_forja'),
+    pilha_lenha = require('src.sprites.pilha_lenha'),
+    balde_tempera = require('src.sprites.balde_tempera'),
+    entulho = require('src.sprites.entulho'),
+    madeira_encostada = require('src.sprites.madeira_encostada'),
+    -- Adro
+    mureta_adro = require('src.sprites.mureta_adro'),
+    portao_adro = require('src.sprites.portao_adro'),
+    flores_adro = require('src.sprites.flores_adro'),
+    oferenda = require('src.sprites.oferenda'),
+    marca_impro = require('src.sprites.marca_impro'),
+    -- Colina
+    lapide_a = require('src.sprites.lapide_a'),
+    lapide_b = require('src.sprites.lapide_b'),
+    lapide_c = require('src.sprites.lapide_c'),
+    vela_votiva = require('src.sprites.vela_votiva'),
+    cova = require('src.sprites.cova'),
+    cipo = require('src.sprites.cipo'),
+    muro_colina = require('src.sprites.muro_colina'),
+    -- Interiores — cozinha
+    fogao = require('src.sprites.fogao'),
+    mesa_longa = require('src.sprites.mesa_longa'),
+    prateleira = require('src.sprites.prateleira'),
+    tigela = require('src.sprites.tigela'),
+    -- Interiores — capela
+    altar = require('src.sprites.altar'),
+    banco_capela = require('src.sprites.banco_capela'),
+    velas = require('src.sprites.velas'),
+    mesa_oferenda = require('src.sprites.mesa_oferenda'),
+    quadro = require('src.sprites.quadro'),
+    -- Interiores — casa das camas
+    cama = require('src.sprites.cama'),
+    divisoria = require('src.sprites.divisoria'),
+    pertences = require('src.sprites.pertences'),
+    bau = require('src.sprites.bau'),
+    brinquedo = require('src.sprites.brinquedo'),
+    -- Interiores — oficina
+    bancada = require('src.sprites.bancada'),
+    rack_ferramentas = require('src.sprites.rack_ferramentas'),
+    peca_inacabada = require('src.sprites.peca_inacabada'),
+    serragem = require('src.sprites.serragem'),
+    -- Interiores — escola
+    carteiras = require('src.sprites.carteiras'),
+    caixas_antigas = require('src.sprites.caixas_antigas'),
+    quadro_aula = require('src.sprites.quadro_aula'),
+    estante = require('src.sprites.estante'),
+    -- Props diversos
+    poco = require('src.sprites.poco'),
+    mesa = require('src.sprites.mesa'),
+    cadeira = require('src.sprites.cadeira'),
+    cercado = require('src.sprites.cercado'),
+    arvore = require('src.sprites.arvore'),
+    -- Atores
+    viajante_n = require('src.sprites.viajante_n'),
+    viajante_e = require('src.sprites.viajante_e'),
+    viajante_w = require('src.sprites.viajante_w'),
+    viajante_walk_s = require('src.sprites.viajante_walk_s'),
+    viajante_walk_n = require('src.sprites.viajante_walk_n'),
+    viajante_walk_e = require('src.sprites.viajante_walk_e'),
+    viajante_walk_w = require('src.sprites.viajante_walk_w'),
+    npc_doro_s = require('src.sprites.npc_doro_s'),
+    npc_doro_n = require('src.sprites.npc_doro_n'),
+    npc_doro_e = require('src.sprites.npc_doro_e'),
+    npc_doro_w = require('src.sprites.npc_doro_w'),
 }

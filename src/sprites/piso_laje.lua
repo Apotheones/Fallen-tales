@@ -5,6 +5,8 @@
 -- tom de cada laje por flood fill, lascas em carimbo com filete claro.
 -- Valor baixo e contraste calmo — o piso recua. h: junta 0, laje 1, fio
 -- de desgaste 2.
+-- v2: lascas engordadas (cunha 3-4 px + filete 'S' um degrau acima do
+-- fio de desgaste) — a versão 2x2 sumia na leitura a 1x.
 
 local W, H = 64, 64
 
@@ -80,9 +82,32 @@ local function str(g)
 end
 
 -- Lascas: entalhe escuro na laje + filete claro na aresta oposta.
-local LASCA_A = { 'dd.', 'd.s' }
-local LASCA_B = { '.dd', 'sd.' }
-local LASCA_C = { 'sd', 'dd' }
+-- v2: as lascas de 2x2 sumiam a 1x — filete engordado ('S' = stone.6,
+-- um degrau acima do fio de desgaste) e cunha escura com corpo.
+local LASCA_A = {
+    'ddd.',
+    'dd..',
+    'd.S.',
+    '.SS.',
+}
+local LASCA_B = {
+    '.ddd',
+    '..dd',
+    '.Sd.',
+    '.SS.',
+}
+local LASCA_C = {
+    'Sdd.',
+    'ddd.',
+    'dd..',
+    'd...',
+}
+local LASCA_D = {
+    '..dd.',
+    '.ddd.',
+    'ddSS.',
+    'dS...',
+}
 -- Fio de desgaste: topo da laje lavado pela luz (h=2, bem raro).
 local FIO = { 'sss' }
 local FIO2 = { '.ss' }
@@ -115,6 +140,7 @@ local V1 = {
     },
     carimbos = {
         { 18, 22, LASCA_A }, { 44, 54, LASCA_B }, { 33, 38, LASCA_C },
+        { 56, 20, LASCA_D },
         { 27, 6, FIO }, { 51, 27, FIO2 }, { 6, 44, FIO2 },
     },
 }
@@ -139,6 +165,7 @@ local V2 = {
     },
     carimbos = {
         { 36, 18, LASCA_B }, { 16, 50, LASCA_C }, { 54, 52, LASCA_A },
+        { 6, 34, LASCA_D },
         { 7, 24, FIO }, { 48, 37, FIO }, { 30, 61, FIO2 },
     },
 }
@@ -161,6 +188,7 @@ local V3 = {
     },
     carimbos = {
         { 24, 24, LASCA_C }, { 58, 42, LASCA_A }, { 12, 58, LASCA_B },
+        { 44, 30, LASCA_D },
         { 46, 8, FIO }, { 33, 45, FIO2 }, { 59, 26, FIO2 },
     },
 }
@@ -185,6 +213,7 @@ local V4 = {
     },
     carimbos = {
         { 47, 18, LASCA_A }, { 22, 32, LASCA_B }, { 6, 48, LASCA_C },
+        { 38, 44, LASCA_D },
         { 14, 60, FIO }, { 38, 33, FIO2 }, { 59, 5, FIO },
     },
 }
@@ -200,6 +229,7 @@ return {
         l = { ramp = 'stone', step = 4, h = 1 }, -- laje clara
         d = { ramp = 'stone', step = 2, h = 1 }, -- laje sombreada / lasca
         s = { ramp = 'stone', step = 5, h = 2 }, -- fio de desgaste
+        S = { ramp = 'stone', step = 6, h = 2 }, -- filete claro da lasca
     },
 
     layers = {

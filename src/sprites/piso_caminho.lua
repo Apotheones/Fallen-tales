@@ -3,6 +3,9 @@
 -- desgaste, bordas orgânicas invadidas por mato/terra escura nas
 -- laterais, pegadas em pares e sulcos sutis de carroça. h: pegada 0,
 -- massa 1, pedrinha 2.
+-- v2: os sulcos corriam o tile inteiro de ponta a ponta e liam "listrado"
+-- — agora são segmentos longos e irregulares com vãos, retomando
+-- deslocados e puxando diagonal curta aqui e ali.
 
 local W, H = 64, 64
 
@@ -151,8 +154,14 @@ end
 
 local V1 = {
     sulcos = {
-        { 24, 1, 23, 16, 25, 30, 24, 44, 26, 58, 25, 63 },
-        { 40, 1, 41, 14, 39, 28, 41, 42, 40, 56, 41, 63 },
+        { 24, 2, 23, 9, 25, 15, 24, 20 },        -- sulco esq, trecho 1
+        { 26, 27, 24, 33, 25, 39 },              -- retoma deslocado
+        { 23, 47, 25, 53, 24, 59 },              -- trecho 3
+        { 40, 4, 42, 10, 40, 15 },               -- sulco dir, trecho 1
+        { 41, 23, 39, 30, 41, 36, 40, 41 },      -- retoma com cotovelo
+        { 42, 49, 40, 55, 42, 61 },              -- trecho 3
+        { 30, 20, 34, 24 },                      -- escoriação diagonal curta
+        { 48, 42, 52, 46 },                      -- diagonal curta
     },
     carimbos = {
         { 1, 6, BORDA_E1 }, { 58, 18, BORDA_D1 }, { 1, 42, BORDA_E2 },
@@ -165,8 +174,14 @@ local V1 = {
 
 local V2 = {
     sulcos = {
-        { 20, 1, 22, 12, 20, 26, 22, 40, 21, 54, 22, 63 },
-        { 44, 1, 43, 18, 45, 32, 43, 46, 45, 60, 44, 63 },
+        { 20, 3, 22, 11, 21, 17 },
+        { 22, 25, 20, 31, 22, 38 },
+        { 21, 48, 22, 55, 21, 61 },
+        { 44, 2, 43, 9, 45, 15 },
+        { 43, 22, 45, 29, 44, 35 },
+        { 45, 43, 43, 50, 45, 57, 44, 62 },
+        { 14, 34, 18, 38 },                      -- diagonal curta
+        { 34, 8, 38, 12 },                       -- diagonal curta
     },
     carimbos = {
         { 56, 8, BORDA_D2 }, { 1, 30, BORDA_E1 }, { 58, 44, BORDA_D1 },
@@ -179,8 +194,14 @@ local V2 = {
 
 local V3 = {
     sulcos = {
-        { 28, 1, 27, 14, 29, 30, 27, 44, 29, 58, 28, 63 },
-        { 36, 1, 37, 12, 35, 26, 37, 40, 35, 54, 37, 63 },
+        { 28, 2, 27, 8, 29, 14, 28, 19 },
+        { 27, 27, 29, 33, 27, 38 },
+        { 29, 46, 28, 53, 29, 60 },
+        { 36, 4, 37, 10, 35, 15 },
+        { 37, 24, 35, 31, 37, 36 },
+        { 35, 44, 37, 51, 36, 58 },
+        { 42, 30, 46, 34 },                      -- diagonal curta
+        { 22, 52, 26, 56 },                      -- diagonal curta
     },
     carimbos = {
         { 1, 16, BORDA_E2 }, { 57, 6, BORDA_D1 }, { 59, 38, BORDA_D2 },
@@ -193,8 +214,14 @@ local V3 = {
 
 local V4 = {
     sulcos = {
-        { 18, 1, 19, 16, 17, 32, 19, 46, 18, 60, 19, 63 },
-        { 46, 1, 45, 14, 47, 28, 45, 44, 46, 58, 45, 63 },
+        { 18, 3, 19, 10, 17, 16 },
+        { 19, 24, 17, 30, 18, 36 },
+        { 18, 44, 19, 51, 17, 58 },
+        { 46, 2, 45, 9, 47, 14 },
+        { 45, 22, 47, 28, 46, 34 },
+        { 46, 42, 45, 49, 46, 56 },
+        { 36, 12, 40, 16 },                      -- diagonal curta
+        { 28, 40, 32, 44 },                      -- diagonal curta
     },
     carimbos = {
         { 58, 12, BORDA_D2 }, { 1, 8, BORDA_E1 }, { 1, 34, BORDA_E2 },

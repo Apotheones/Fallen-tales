@@ -1,7 +1,8 @@
 -- PISO_GRAMA — gramado sálvia do Refúgio, tile 64x64, origem topleft.
 -- 4 frames = variantes de seed. Massa de musgo/verde seco em manchas
--- desenhadas + touceiras verticais (clusters de 2-4 px com sombra na
--- base) + flor ocasional rara. h: vale 0, massa 1, touceira 3.
+-- grandes, touceiras verticais de lâminas claras (clusters 3-4 px com
+-- sombra na base) e flor ocasional rara. h: sombra de touceira 0,
+-- massa 1, lâmina 3.
 
 local W, H = 64, 64
 
@@ -35,86 +36,100 @@ local function str(g)
     return table.concat(t, '\n')
 end
 
--- Manchas de massa: musgo fundo ('d'), touceira clara ('l'), terra seca
--- aparecendo ('e') — desenhadas em clusters, nunca pontilhado.
-local MANCHA_D1 = {
-    '.ddd..',
-    'ddddd.',
-    'ddddd.',
-    '.ddd..',
-    '..d...',
+-- Massas grandes: musgo fundo ('d'), touceira rasteira clara ('l'),
+-- terra seca aparecendo ('e'). Bordas moles, 10-16 px.
+local MASSA_D1 = {
+    '...ddddd....',
+    '..dddddddd..',
+    '.dddddddddd.',
+    'ddddddddddd.',
+    '.ddddddddd..',
+    '..ddddddd...',
 }
-local MANCHA_D2 = {
-    '..dd...',
-    '.dddd.',
-    'ddddd..',
-    'dddd...',
-    '.dd....',
+local MASSA_D2 = {
+    '..ddddd...',
+    '.ddddddd..',
+    'ddddddddd.',
+    'dddddddd..',
+    '.dddddd...',
+    '..ddd.....',
 }
-local MANCHA_L1 = {
-    '.ll..',
-    'llll.',
-    'llll.',
-    '.lll.',
+local MASSA_L1 = {
+    '...lllll....',
+    '..lllllll...',
+    '.lllllllll..',
+    'lllllllll...',
+    '.llllllll...',
+    '..llllll....',
 }
-local MANCHA_L2 = {
-    '..lll..',
-    '.lllll.',
-    'llllll.',
-    '.llll..',
+local MASSA_L2 = {
+    '..lllll..',
+    '.lllllll.',
+    'llllllll.',
+    'lllllll..',
+    '.lllll...',
 }
-local MANCHA_E1 = {
-    '.ee..',
-    'eeee.',
-    'eee..',
-    '.e...',
+local MASSA_E1 = {
+    '...eeee...',
+    '..eeeeee..',
+    '.eeeeeee..',
+    'eeeeeee...',
+    '.eeeee....',
 }
-local MANCHA_E2 = {
-    '..ee.',
-    '.eeee',
-    'eee..',
-    'ee...',
+local MASSA_E2 = {
+    '..eee..',
+    '.eeeee.',
+    'eeeeee.',
+    '.eeee..',
 }
 
--- Touceiras: lâminas claras ('t') e médias ('u') de pé na sombra ('x').
+-- Touceiras: lâminas 't' (claras) e 'u' (médias) de pé numa sombra 'x'
+-- curta — verticais de 3-4 px, desenhadas como moitas, não confete.
 local TUFA = {
-    't.t',
-    'ttt',
-    'xux',
-}
-local TUFB = {
-    '.t.',
-    'tut',
-    'xux',
-}
-local TUFC = { -- touceira alta, 4 px de lâmina
     't..t',
+    'tu.t',
     'tutt',
-    '.tu.',
     '.xx.',
 }
+local TUFB = {
+    '.t.t.',
+    'tuttt',
+    'uttu.',
+    'xx...',
+}
+local TUFC = { -- touceira alta e densa
+    't.t.t',
+    'ttutt',
+    'tuttt',
+    'xxxxx',
+}
 local TUFD = {
-    'u.u',
+    't.t',
     'tut',
-    'xxx',
+    'xux',
 }
-local TUFE = { -- par de touceiras encostadas
-    't...t',
-    'tt.tu',
-    'xuxux',
+local TUFE = { -- moita dupla
+    't...t.',
+    'tt.tt.',
+    'tuttu.',
+    'xxxx..',
 }
-
--- Flor rara: corola clara ('f') com coração quente ('o') sobre haste.
+local TUFG = { -- broto jovem, 2 px
+    'u.u',
+    'xux',
+}
+-- Flor rara: corola clara 'f' com coração 'o' sobre haste.
 local FLOR = {
-    '.f.',
-    'fof',
-    '.t.',
-    '.x.',
+    '.f.f.',
+    'fof..',
+    '.tt..',
+    '.x...',
 }
 local FLOR2 = {
     'f.f',
-    '.o.',
+    'fof',
     '.t.',
+    '.x.',
 }
 
 local function grama(spec)
@@ -125,49 +140,53 @@ end
 
 local V1 = {
     carimbos = {
-        { 10, 12, MANCHA_D1 }, { 42, 8, MANCHA_L2 }, { 52, 30, MANCHA_D2 },
-        { 18, 40, MANCHA_L1 }, { 36, 50, MANCHA_D1 }, { 5, 52, MANCHA_E1 },
-        { 24, 22, MANCHA_L1 }, { 48, 54, MANCHA_E2 },
-        { 15, 18, TUFA }, { 30, 10, TUFC }, { 56, 18, TUFB },
-        { 44, 28, TUFD }, { 8, 34, TUFE }, { 26, 44, TUFA },
+        { 8, 10, MASSA_D1 }, { 42, 6, MASSA_L1 }, { 50, 30, MASSA_D2 },
+        { 16, 42, MASSA_L2 }, { 34, 52, MASSA_D1 }, { 4, 50, MASSA_E1 },
+        { 24, 24, MASSA_L2 }, { 46, 52, MASSA_E2 },
+        { 14, 18, TUFA }, { 30, 12, TUFC }, { 56, 20, TUFB },
+        { 44, 30, TUFD }, { 8, 34, TUFE }, { 26, 46, TUFA },
         { 52, 44, TUFC }, { 38, 58, TUFB }, { 14, 58, TUFD },
-        { 60, 8, TUFA }, { 33, 32, TUFB }, { 58, 58, FLOR },
+        { 60, 8, TUFA }, { 34, 34, TUFB }, { 20, 30, TUFG },
+        { 58, 56, FLOR }, { 47, 16, TUFG },
     },
 }
 
 local V2 = {
     carimbos = {
-        { 44, 14, MANCHA_D2 }, { 8, 8, MANCHA_L1 }, { 24, 36, MANCHA_D1 },
-        { 50, 46, MANCHA_L2 }, { 16, 54, MANCHA_D2 }, { 34, 8, MANCHA_E1 },
-        { 55, 32, MANCHA_L1 }, { 6, 40, MANCHA_E2 },
-        { 28, 16, TUFA }, { 50, 8, TUFD }, { 12, 26, TUFC },
-        { 38, 24, TUFB }, { 58, 52, TUFE }, { 30, 48, TUFD },
-        { 44, 40, TUFA }, { 8, 58, TUFA }, { 60, 20, TUFC },
-        { 20, 46, TUFB }, { 42, 58, TUFA }, { 16, 34, TUFB },
+        { 44, 12, MASSA_D2 }, { 6, 6, MASSA_L1 }, { 22, 34, MASSA_D1 },
+        { 48, 44, MASSA_L1 }, { 14, 52, MASSA_D2 }, { 34, 6, MASSA_E1 },
+        { 54, 30, MASSA_L2 }, { 4, 40, MASSA_E2 },
+        { 28, 14, TUFA }, { 50, 8, TUFD }, { 12, 24, TUFC },
+        { 38, 22, TUFB }, { 58, 50, TUFE }, { 30, 46, TUFD },
+        { 44, 38, TUFA }, { 8, 56, TUFA }, { 60, 20, TUFC },
+        { 20, 44, TUFB }, { 42, 56, TUFA }, { 16, 32, TUFB },
+        { 52, 58, TUFG }, { 28, 28, TUFG },
     },
 }
 
 local V3 = {
     carimbos = {
-        { 30, 10, MANCHA_D1 }, { 8, 30, MANCHA_L2 }, { 46, 24, MANCHA_D2 },
-        { 18, 48, MANCHA_L1 }, { 56, 50, MANCHA_D1 }, { 40, 44, MANCHA_E1 },
-        { 58, 10, MANCHA_L1 }, { 26, 58, MANCHA_E2 },
-        { 14, 14, TUFD }, { 36, 6, TUFA }, { 54, 36, TUFC },
-        { 22, 30, TUFE }, { 6, 46, TUFA }, { 44, 56, TUFC },
-        { 32, 38, TUFB }, { 58, 22, TUFB }, { 12, 58, TUFD },
-        { 50, 12, TUFA }, { 26, 12, FLOR2 }, { 40, 30, TUFD },
+        { 28, 8, MASSA_D1 }, { 6, 28, MASSA_L1 }, { 46, 22, MASSA_D2 },
+        { 16, 46, MASSA_L2 }, { 54, 48, MASSA_D1 }, { 38, 42, MASSA_E1 },
+        { 56, 8, MASSA_L2 }, { 24, 56, MASSA_E2 },
+        { 14, 12, TUFD }, { 36, 4, TUFA }, { 54, 34, TUFC },
+        { 20, 28, TUFE }, { 6, 44, TUFA }, { 44, 54, TUFC },
+        { 30, 36, TUFB }, { 58, 20, TUFB }, { 12, 58, TUFD },
+        { 48, 12, TUFA }, { 40, 28, TUFD }, { 8, 16, TUFG },
+        { 26, 10, FLOR2 }, { 58, 58, TUFG },
     },
 }
 
 local V4 = {
     carimbos = {
-        { 16, 8, MANCHA_L2 }, { 48, 12, MANCHA_D1 }, { 6, 44, MANCHA_D2 },
-        { 36, 34, MANCHA_L1 }, { 54, 54, MANCHA_E1 }, { 28, 56, MANCHA_D1 },
-        { 10, 24, MANCHA_E2 }, { 58, 32, MANCHA_L1 },
-        { 42, 8, TUFC }, { 24, 18, TUFA }, { 56, 24, TUFE },
-        { 8, 56, TUFD }, { 34, 46, TUFA }, { 48, 42, TUFD },
-        { 18, 36, TUFC }, { 60, 8, TUFB }, { 28, 28, TUFB },
-        { 44, 58, TUFE }, { 12, 12, TUFB }, { 36, 22, TUFA },
+        { 14, 6, MASSA_L1 }, { 46, 10, MASSA_D1 }, { 4, 42, MASSA_D2 },
+        { 34, 32, MASSA_L1 }, { 52, 52, MASSA_E1 }, { 26, 54, MASSA_D1 },
+        { 8, 22, MASSA_E2 }, { 56, 30, MASSA_L2 },
+        { 42, 6, TUFC }, { 24, 16, TUFA }, { 56, 22, TUFE },
+        { 8, 56, TUFD }, { 34, 44, TUFA }, { 48, 40, TUFD },
+        { 18, 36, TUFC }, { 60, 8, TUFB }, { 28, 26, TUFB },
+        { 44, 58, TUFE }, { 12, 12, TUFB }, { 36, 20, TUFA },
+        { 52, 36, TUFG }, { 22, 50, TUFG },
     },
 }
 
@@ -179,7 +198,7 @@ return {
     legend = {
         a = { ramp = 'moss', step = 3, h = 1 },  -- massa sálvia
         d = { ramp = 'moss', step = 2, h = 1 },  -- mancha de musgo fundo
-        l = { ramp = 'moss', step = 4, h = 1 },  -- touceira clara rasteira
+        l = { ramp = 'moss', step = 4, h = 1 },  -- touceira rasteira clara
         e = { ramp = 'earth', step = 4, h = 1 }, -- terra seca aparecendo
         x = { ramp = 'moss', step = 1, h = 0 },  -- sombra na base da touceira
         u = { ramp = 'moss', step = 4, h = 3 },  -- lâmina média

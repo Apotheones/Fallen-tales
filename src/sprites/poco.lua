@@ -22,15 +22,18 @@ return {
         k = {spec = 'ink', h = 5},
         a = {spec = 'abyss', h = 3},            -- boca escura
         -- anel de pedra: borda clara, topo, pedra alternada, sombra interna
-        S = {ramp = 'stone', step = 6, h = 11},
-        s = {ramp = 'stone', step = 4, h = 10},
-        t = {ramp = 'stone', step = 5, h = 10},
+        -- v2: peça lia escura demais — superfície do anel e face frontal
+        -- sobem um degrau (s 4->5, t 5->6, S 6->7, b/B/m/d +1) e o fio
+        -- claro da borda frontal fica com 2 px de altura.
+        S = {ramp = 'stone', step = 7, h = 11},
+        s = {ramp = 'stone', step = 5, h = 10},
+        t = {ramp = 'stone', step = 6, h = 10},
         o = {ramp = 'stone', step = 2, h = 7},  -- parede interna em sombra
         -- face frontal: tijolos, juntas, base
-        b = {ramp = 'stone', step = 4, h = 9},
-        B = {ramp = 'stone', step = 5, h = 9},
-        m = {ramp = 'stone', step = 2, h = 8},
-        d = {ramp = 'stone', step = 3, h = 7},
+        b = {ramp = 'stone', step = 5, h = 9},
+        B = {ramp = 'stone', step = 6, h = 9},
+        m = {ramp = 'stone', step = 3, h = 8},
+        d = {ramp = 'stone', step = 4, h = 7},
         -- musgo
         g = {ramp = 'moss', step = 3, h = 9},
         G = {ramp = 'moss', step = 2, h = 7},
@@ -39,8 +42,8 @@ return {
         W = {ramp = 'wood', step = 6, h = 12},
         r = {ramp = 'bone', step = 4, h = 12},
         -- balde de madeira com cinta de ferro
-        u = {ramp = 'wood', step = 3, h = 11},
-        U = {ramp = 'wood', step = 5, h = 11},
+        u = {ramp = 'wood', step = 4, h = 11},
+        U = {ramp = 'wood', step = 6, h = 11},
         i = {ramp = 'iron', step = 3, h = 11},
         -- chão ao redor
         e = {ramp = 'earth', step = 3, h = 1},
@@ -59,33 +62,33 @@ return {
                 -- borda de trás do anel (fio claro)
                 L'..................SSSSSSSSSSSSSSSSSSSSSSSSSSSS',   -- 46
                 L'................SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS', -- 47
-                -- superfície do anel: pedras alternadas
-                L'.............ssttttssttttssttttssttttssttttsstss', -- 48
-                L'...........ssttssttssttssttssttssttssttssttsstsss',-- 49
-                L'..........stssttssttssttssttssttssttssttssttsstst',-- 50
-                L'.........ssstttssttssttssttssttssttssttssttsstssss',-- 51
-                L'........sssttssttssttssttssttssttssttssttsstttssss',-- 52
-                L'........ssttssttssttssttssttssttssttssttssttsstsss',-- 53
-                -- abertura: parede interna em sombra
-                L'........ssssssssssssooooooooooooooooooooooossssssssssss',-- 54
-                L'........ssssssssssooooooooooooooooooooooossssssssssss',-- 55
-                L'........sssssssssoooooooooooooooooooooooosssssssssssss',-- 56
-                L'........sssssssssoooooooooooooooooooooooosssssssssssss',-- 57
-                L'........ssssssssoooooooooooooooooooooooosssssssssssss',-- 58
-                L'........ssssssssoooooooooooooooooooooooosssssssssssss',-- 59
-                L'........sssssssaaaaaaaaaaaaaaaaaaaaaaaasssssssssssss',-- 60
-                L'........sssssssaaaaaaaaaaaaaaaaaaaaaaaasssssssssssss',-- 61
-                L'........sssssssaaaaaaaaaaaaaaaaaaaaaaaassssssssssss',-- 62
-                L'........ssssssssaaaaaaaaaaaaaaaaaaaaaaassssssssssss',-- 63
-                L'........ssssssssaaaaaaaaaaaaaaaaaaaaaaassssssssssss',-- 64
-                L'........ssssssssaaaaaaaaaaaaaaaaaaaaaaasssssssssssss',-- 65
-                L'........sssssssssaaaaaaaaaaaaaaaaaaaaasssssssssssss',-- 66
-                L'........ssssssssssaaaaaaaaaaaaaaaaaaassssssssssssss',-- 67
-                -- borda da frente do anel (fio claro)
-                L'........ssssssssssstttttttttttttttttttsssssssssssssss',-- 68
-                L'........sssssssssssssttttttttttttttttsssssssssssssss',-- 69
-                L'.........ssssssssssssssttttttttttttssssssssssssssss',-- 70
-                L'..........ssssssssssssssssttttttsssssssssssssssss',-- 71
+                -- superfície do anel: pedras claras com remendos
+                L'.............tttttttSSSttttttSSSttttttSSStttttt', -- 48
+                L'...........ttttttttttttttttttttttttttttttttttttt',-- 49
+                L'..........tttsssttttssstttttsssttttsssttttsstttt',-- 50
+                L'.........ttttsssttttssstttttsssttttsssttttssttttt',-- 51
+                L'........sttttsssttttssstttttsssttttsssttttssttttts',-- 52
+                L'........sstttsssttttssstttttsssttttsssttttssttttss',-- 53
+                -- abertura: parede interna em sombra, depois o abismo
+                L'........ssssssssssoooooooooooooooooooooooossssssssss',-- 54
+                L'........sssssssssoooooooooooooooooooooooosssssssssss',-- 55
+                L'........ssssssssoooooooooooooooooooooooossssssssssss',-- 56
+                L'........ssssssssaaaaaaaaaaaaaaaaaaaaaaaassssssssssss',-- 57
+                L'........ssssssssaaaaaaaaaaaaaaaaaaaaaaaassssssssssss',-- 58
+                L'........sssssssaaaaaaaaaaaaaaaaaaaaaaaaassssssssssss',-- 59
+                L'........sssssssaaaaaaaaaaaaaaaaaaaaaaaaasssssssssss',-- 60
+                L'........sssssssaaaaaaaaaaaaaaaaaaaaaaaaasssssssssss',-- 61
+                L'........sssssssaaaaaaaaaaaaaaaaaaaaaaaaasssssssssss',-- 62
+                L'........ssssssssaaaaaaaaaaaaaaaaaaaaaaaasssssssssss',-- 63
+                L'........ssssssssaaaaaaaaaaaaaaaaaaaaaaaasssssssssss',-- 64
+                L'........ssssssssaaaaaaaaaaaaaaaaaaaaaaaasssssssssss',-- 65
+                L'........sssssssssaaaaaaaaaaaaaaaaaaaaaasssssssssssss',-- 66
+                L'........ssssssssssaaaaaaaaaaaaaaaaaaaassssssssssssss',-- 67
+                -- borda da frente do anel (fio claro, 2 px de altura)
+                L'........sssssssssssSSSSSSSSSSSSSSSSSSSssssssssssssss',-- 68
+                L'........sssssssssssSSSSSSSSSSSSSSSSSSSsssssssssssss',-- 69
+                L'.........ssssssssssstttttttttttttttttssssssssssssss',-- 70
+                L'..........ssssssssssssssttttttttttssssssssssssssss',-- 71
                 L'...........ssssssssssssssssssssssssssssssssssssss',-- 72
                 -- face frontal: tijolos com juntas e musgo
                 L'........kbbbbbbbbbbbbbBbbbbbbbbbbBbbbbbbbbbbbbbbbk',-- 73
@@ -130,9 +133,9 @@ return {
                 -- eixo atravessa os postes e passa à direita (manivela)
                 L'..............wwwWWWWWWWWWWWWWWWWWWWWWWWWWWWWwwwwwww',-- 30
                 L'..............wwwwwwwwwwwwrrrrrrrrrwwwwwwwwwwwww',-- 31
-                L'..............wwwwwwwwwwwrrrrrrrrrrrwwwwwwwwwww.w',-- 32
-                L'..............wwwWWWWWWWWrrrrrrrrrWWWWWWWWWWwww.u',-- 33
-                L'..............www...............rr...........www.u',-- 34
+                L'..............wwwwwwwwwwwrrrrrrrrrrrwwwwwwwwwww',-- 32
+                L'..............wwwWWWWWWWWrrrrrrrrrWWWWWWWWWWwww',-- 33
+                L'..............www...............rr...........www',-- 34
                 L'..............www...............rr...........www',-- 35
                 L'..............www...............rr...........www',-- 36
                 L'..............www...............rr...........www',-- 37

@@ -1,8 +1,11 @@
 -- PISO_TERRA — terra batida, tile 64x64, origem topleft. 4 frames =
--- variantes de seed. Massa contínua de barro com manchas orgânicas
--- (carimbos desenhados, não ruído), pedrinhas em clusters com sombra
--- própria e uma mancha de desgaste mais clara. h: vale escuro 0,
--- massa 1, pedrinha 2.
+-- variantes de seed. Massa contínua de barro em manchas grandes e moles,
+-- pedrinhas em clusters desenhados (pedra clara + sombra, nunca
+-- pontilhado) e mancha de desgaste mais clara onde o pé sempre passa.
+-- h: depressão 0, massa 1, pedrinha 2.
+-- v2: as manchas eram todas elipses médias — agora variam em tamanho e
+-- elongação (manchão raro, veios alongados horizontais/verticais, manchas
+-- pequenas), quebrando a repetitividade do tile lado a lado.
 
 local W, H = 64, 64
 
@@ -36,81 +39,154 @@ local function str(g)
     return table.concat(t, '\n')
 end
 
--- Manchas escuras de barro pisado (irregulares, desenhadas).
-local MANCHA_A = {
-    '.dd...',
-    'ddddd.',
-    'ddddd.',
-    '.ddd..',
-    '..d...',
+-- Massas grandes de barro pisado ('d'): manchas moles de 10-20 px,
+-- o volume da superfície — não confete.
+local MASSA_D1 = {
+    '...ddddd.....',
+    '..dddddddd...',
+    '.dddddddddd..',
+    'ddddddddddd..',
+    'dddddddddd...',
+    '.dddddddd....',
+    '..dddddd.....',
 }
-local MANCHA_B = {
-    '..ddd..',
-    '.ddddd.',
-    'dddddd.',
-    'dddd...',
-    '.ddd...',
-    '..d....',
+local MASSA_D2 = {
+    '..ddddd....',
+    '.dddddddd..',
+    'ddddddddd..',
+    'ddddddddd..',
+    '.ddddddd...',
+    '..ddddd....',
 }
-local MANCHA_C = {
-    'dd..',
+local MASSA_D3 = {
+    '...dddddd...',
+    '..dddddddd..',
+    '.ddddddddd..',
+    '.dddddddd...',
+    '..dddddd....',
+}
+-- v2 — Manchão raro (~1 por tile): lâmina larga de barro pisado.
+local MASSA_G1 = {
+    '.....dddddd........',
+    '...ddddddddddd.....',
+    '..dddddddddddddd...',
+    '.ddddddddddddddddd.',
+    'dddddddddddddddddd.',
+    'dddddddddddddddd...',
+    '.ddddddddddddddd...',
+    '..dddddddddddd.....',
+    '....dddddddd.......',
+}
+local MASSA_G2 = {
+    '....ddddddd......',
+    '..dddddddddddd...',
+    '.dddddddddddddd..',
+    'dddddddddddddd...',
+    'dddddddddddddd...',
+    '.dddddddddddddd..',
+    '...dddddddddd....',
+    '.....dddddd......',
+}
+-- v2 — Veios alongados: mancha esticada horizontal, borda irregular.
+local MASSA_L1 = {
+    '...dddddddddddd...',
+    '.ddddddddddddddd..',
+    'ddddddddddddddddd.',
+    '.dddddddddddddd...',
+    '...ddddddddd......',
+}
+local MASSA_L2 = {
+    '.ddddddddddddd..',
+    'ddddddddddddddd.',
+    'dddddddddddddd..',
+    '.dddddddddddd...',
+    '...dddddddd.....',
+}
+-- v2 — Veio vertical estreito: erosionado onde a água desce.
+local MASSA_V1 = {
+    '.dd.',
     'ddd.',
+    'ddd.',
+    'dddd',
+    '.ddd',
+    '.ddd',
     '.ddd',
     '..dd',
-}
-local MANCHA_D = {
-    '...dd..',
-    '..dddd.',
-    '.ddddd.',
-    'dddddd.',
-    '.dddd..',
-}
--- Mancha de desgaste: faixa clara onde o pé sempre passa.
-local DESGASTE_A = {
-    '...bbbbb....',
-    '..bbbbbbb...',
-    '.bbbbbbbbb..',
-    'bbbbbbbbbb..',
-    '.bbbbbbbbb..',
-    '..bbbbbbb...',
-    '...bbbbb....',
-}
-local DESGASTE_B = {
-    '..bbbbb...',
-    '.bbbbbbb..',
-    'bbbbbbbbb.',
-    'bbbbbbbb..',
-    '.bbbbbbb..',
-    '..bbbbb...',
-}
--- Pedrinhas: cluster claro com sombra embaixo (desenhado, nunca solto).
-local PEDRA_A = {
-    '.pp.',
-    'pppd',
-    '.dd.',
-}
-local PEDRA_B = {
-    'pp.',
-    'ppd',
-    '.d.',
-}
-local PEDRA_C = {
-    '.p..',
-    'ppp.',
-    'd.d.',
-}
-local PEDRA_D = {
-    'ppp.',
-    '.ppd',
     '..d.',
 }
-local PEDRA_E = { -- par de pedrinhas
-    'p..p',
-    'd..d',
+local MASSA_V2 = {
+    '..dd..',
+    '.dddd.',
+    '.ddd..',
+    '.ddd..',
+    'dddd..',
+    'ddd...',
+    '.dd...',
 }
--- Vale fundo: depressão de um-dois pixels, só onde a mancha escurece.
+-- v2 — Mancha pequena: lama escura pontuando entre as massas.
+local MASSA_P1 = {
+    '.ddd.',
+    'ddddd',
+    'ddd..',
+    '.d...',
+}
+local MASSA_P2 = {
+    'dd..',
+    'ddd.',
+    'dddd',
+    '.dd.',
+}
+-- Mancha de desgaste: barro lavado pelo uso, borda mole.
+local DESG_A = {
+    '....bbbbbbb.....',
+    '..bbbbbbbbbb....',
+    '.bbbbbbbbbbbb...',
+    'bbbbbbbbbbbbbb..',
+    '.bbbbbbbbbbbb...',
+    '..bbbbbbbbbb....',
+    '....bbbbbbb.....',
+}
+local DESG_B = {
+    '...bbbbbbb...',
+    '..bbbbbbbbb..',
+    '.bbbbbbbbbbb.',
+    'bbbbbbbbbbbb.',
+    '.bbbbbbbbb...',
+    '...bbbbbb....',
+}
+-- Pedrinhas: cluster de pedra clara 'p' com lado de sombra 'q' e
+-- apoio escuro 'u' no barro — desenhadas, com luz vindo de cima-esq.
+local PEDRA_A = {
+    '.pp..',
+    'pqqp.',
+    '.uu..',
+}
+local PEDRA_B = {
+    '.p.pp',
+    'ppqpp',
+    'u.uu.',
+}
+local PEDRA_C = {
+    'ppp..',
+    'pqpp.',
+    '.u.u.',
+}
+local PEDRA_D = { -- duas pedrinhas vizinhas
+    '.pp..pp.',
+    'ppq.pqp.',
+    '.u...u..',
+}
+local PEDRA_E = {
+    '.pp.',
+    'pqp.',
+    '.u..',
+}
+-- Depressões de 1-2 px, só dentro das massas escuras.
 local VALE = { 'r' }
-local VALE2 = { 'rr' }
+local VALE2 = { 'r', 'r' }
+-- Brilho raro no desgaste: grão claro do barro seco.
+local GRAO = { 'c' }
+local GRAO2 = { 'c.c' }
 
 local function terra(spec)
     local g = nova('a')
@@ -120,49 +196,57 @@ end
 
 local V1 = {
     carimbos = {
-        { 8, 10, MANCHA_B }, { 40, 7, MANCHA_C }, { 52, 26, MANCHA_D },
-        { 14, 34, MANCHA_A }, { 44, 44, MANCHA_C }, { 24, 52, MANCHA_A },
-        { 22, 14, DESGASTE_A },
-        { 30, 30, PEDRA_A }, { 56, 12, PEDRA_B }, { 5, 47, PEDRA_C },
-        { 48, 33, PEDRA_D }, { 35, 55, PEDRA_E }, { 14, 22, PEDRA_B },
-        { 18, 16, VALE }, { 53, 31, VALE2 }, { 46, 47, VALE },
-        { 60, 55, PEDRA_C }, { 2, 30, PEDRA_D },
+        { 36, 10, MASSA_G1 },   -- manchão raro
+        { 4, 40, MASSA_L1 },    -- veio horizontal
+        { 52, 44, MASSA_V1 },   -- veio vertical
+        { 8, 6, MASSA_P1 }, { 28, 30, MASSA_P2 },
+        { 14, 20, DESG_A },
+        { 48, 8, PEDRA_B }, { 52, 12, PEDRA_E }, { 8, 32, PEDRA_C },
+        { 36, 56, PEDRA_D }, { 40, 59, PEDRA_E },
+        { 12, 12, VALE }, { 46, 32, VALE }, { 48, 36, VALE2 },
+        { 30, 22, GRAO }, { 34, 26, GRAO2 },
     },
 }
 
 local V2 = {
     carimbos = {
-        { 44, 12, MANCHA_B }, { 10, 44, MANCHA_B }, { 55, 48, MANCHA_C },
-        { 20, 8, MANCHA_A }, { 33, 33, MANCHA_D }, { 5, 24, MANCHA_C },
-        { 12, 24, DESGASTE_B }, { 38, 40, DESGASTE_B },
-        { 50, 30, PEDRA_A }, { 25, 18, PEDRA_C }, { 58, 8, PEDRA_D },
-        { 8, 56, PEDRA_B }, { 42, 58, PEDRA_E }, { 28, 44, PEDRA_D },
-        { 47, 17, VALE }, { 13, 48, VALE2 }, { 36, 37, VALE },
-        { 60, 20, PEDRA_B }, { 18, 60, PEDRA_C },
+        { 34, 30, MASSA_G2 },   -- manchão raro
+        { 40, 4, MASSA_L2 },    -- veio horizontal no topo
+        { 8, 22, MASSA_V2 },    -- veio vertical na esquerda
+        { 20, 54, MASSA_D2 }, { 54, 50, MASSA_P1 },
+        { 10, 8, DESG_B }, { 44, 26, DESG_B },
+        { 20, 18, PEDRA_A }, { 23, 21, PEDRA_E }, { 56, 14, PEDRA_C },
+        { 30, 52, PEDRA_B }, { 34, 55, PEDRA_E }, { 8, 58, PEDRA_D },
+        { 40, 12, VALE2 }, { 14, 40, VALE }, { 52, 46, VALE },
+        { 14, 12, GRAO }, { 48, 30, GRAO2 },
     },
 }
 
 local V3 = {
     carimbos = {
-        { 6, 8, MANCHA_C }, { 34, 14, MANCHA_D }, { 52, 40, MANCHA_B },
-        { 16, 50, MANCHA_D }, { 46, 6, MANCHA_A }, { 8, 30, MANCHA_A },
-        { 28, 26, DESGASTE_A },
-        { 40, 50, PEDRA_A }, { 12, 16, PEDRA_B }, { 55, 22, PEDRA_C },
-        { 24, 42, PEDRA_D }, { 4, 58, PEDRA_E }, { 58, 56, PEDRA_B },
-        { 9, 13, VALE }, { 37, 18, VALE2 }, { 54, 44, VALE },
-        { 44, 30, PEDRA_C }, { 30, 60, PEDRA_D },
+        { 6, 34, MASSA_G2 },    -- manchão raro embaixo-esq
+        { 30, 6, MASSA_L1 },    -- veio horizontal no topo
+        { 54, 12, MASSA_V1 },   -- veio vertical na direita
+        { 14, 10, MASSA_D3 }, { 40, 54, MASSA_P2 },
+        { 20, 26, DESG_A },
+        { 6, 24, PEDRA_D }, { 50, 22, PEDRA_A }, { 54, 25, PEDRA_E },
+        { 56, 44, PEDRA_B }, { 14, 58, PEDRA_C },
+        { 12, 14, VALE }, { 46, 8, VALE2 }, { 34, 48, VALE },
+        { 26, 32, GRAO2 }, { 32, 36, GRAO },
     },
 }
 
 local V4 = {
     carimbos = {
-        { 28, 10, MANCHA_B }, { 50, 28, MANCHA_A }, { 12, 22, MANCHA_D },
-        { 40, 46, MANCHA_A }, { 8, 52, MANCHA_C }, { 58, 10, MANCHA_C },
-        { 34, 32, DESGASTE_B }, { 6, 36, DESGASTE_B },
-        { 18, 34, PEDRA_A }, { 46, 18, PEDRA_C }, { 26, 56, PEDRA_B },
-        { 56, 44, PEDRA_D }, { 36, 6, PEDRA_E }, { 4, 14, PEDRA_B },
-        { 31, 14, VALE }, { 14, 26, VALE2 }, { 42, 50, VALE },
-        { 60, 60, PEDRA_C }, { 48, 58, PEDRA_D },
+        { 32, 34, MASSA_G1 },   -- manchão raro embaixo-dir
+        { 24, 4, MASSA_L2 },    -- veio horizontal no topo
+        { 6, 30, MASSA_V2 },    -- veio vertical na esquerda
+        { 44, 14, MASSA_D2 }, { 54, 52, MASSA_P1 },
+        { 36, 20, DESG_B }, { 6, 52, DESG_B },
+        { 50, 12, PEDRA_B }, { 54, 15, PEDRA_E }, { 14, 34, PEDRA_A },
+        { 28, 54, PEDRA_D }, { 32, 57, PEDRA_E }, { 58, 50, PEDRA_C },
+        { 32, 8, VALE }, { 10, 26, VALE2 }, { 46, 44, VALE },
+        { 40, 24, GRAO }, { 12, 54, GRAO2 },
     },
 }
 
@@ -173,10 +257,13 @@ return {
 
     legend = {
         a = { ramp = 'earth', step = 4, h = 1 }, -- massa de barro
+        d = { ramp = 'earth', step = 3, h = 1 }, -- mancha pisada
+        r = { ramp = 'earth', step = 2, h = 0 }, -- depressão funda
         b = { ramp = 'earth', step = 5, h = 1 }, -- desgaste claro
-        d = { ramp = 'earth', step = 2, h = 1 }, -- mancha pisada escura
-        r = { ramp = 'earth', step = 1, h = 0 }, -- vale fundo
-        p = { ramp = 'earth', step = 6, h = 2 }, -- pedrinha
+        c = { ramp = 'earth', step = 6, h = 1 }, -- grão claro raro
+        p = { ramp = 'stone', step = 5, h = 2 }, -- pedrinha, luz
+        q = { ramp = 'stone', step = 3, h = 2 }, -- pedrinha, lado de sombra
+        u = { ramp = 'earth', step = 2, h = 1 }, -- sombra sob a pedrinha
     },
 
     layers = {
