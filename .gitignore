@@ -4,3 +4,8 @@ ui-test-results.txt
 build/
 /screenshots/*
 !/screenshots/compact-*.png
+nul
+.maestri-prompt-*.txt
+.devin/
+.maestri/
+__pycache__/
