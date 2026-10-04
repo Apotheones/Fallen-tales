@@ -1,4 +1,6 @@
--- DORO — idle LESTE (perfil olhando para a direita), 64x96, 2f.
+-- DORO — idle LESTE (perfil olhando para a direita), 64x96, 4f.
+-- f1 repouso | f2 respiro | f3 GESTO: cabeça desce 1px (olha a peça) +
+-- nós 'd' no punho da frente | f4 respiro + piscar. _w = espelho.
 -- npc_doro_w = espelho via código.
 -- Perfil: crânio raspado, nariz largo à direita, barba prata em massa
 -- na frente do rosto/pescoço (âncora "cabeça clara" mantida); tronco
@@ -40,6 +42,12 @@ local function overlay(ga, gb)
         out[i] = table.concat(row)
     end
     return table.concat(out, '\n')
+end
+local function patch(map, edits)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(edits) do t[r] = s end
+    return t
 end
 
 local body = {
@@ -193,6 +201,17 @@ local strap = {
 
 local garb = overlay(R(apron), R(strap))
 
+-- f3: olha a peça — cabeça desce 1px + punho da frente flexiona; nós 'd'
+-- em bloco 2x2 (1px sumia a 1x).
+local gesto = patch(shift(body, 1, 9, 36), {
+    [59] = '.....................kddsk.kllvvvvvvvvvlllk.kssddk',
+    [60] = '.....................kdddk.kppppppppppppppk.kssddk',
+})
+-- f4: respiro com piscar — olho 'ee' vira pálpebra 'dd'.
+local respiroPisca = shift(patch(body, {
+    [18] = '............................ksssssddsssk',
+}), 1, 38, 56)
+
 return {
     name = 'npc_doro_e',
     w = 64, h = 96,
@@ -226,7 +245,9 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 38, 56)),
+            R(gesto),
+            R(respiroPisca),
         }},
-        {name = 'garb', h = 6, albedo = {garb, garb}},
+        {name = 'garb', h = 6, albedo = {garb, garb, garb, garb}},
     },
 }

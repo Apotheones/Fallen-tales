@@ -539,6 +539,17 @@ return {
     w = 64, h = 96,
     origin = 'feet',
     legend = legend,
+    -- Metadados W4: f1/f4 são os contatos (ver cabeçalho); 1/9s por frame
+    -- = o t*9 do hd_world; ancora 'pe' segue o pé plantado de cada frame.
+    anchors = {
+        pe = {{31, 94}, {34, 94}, {33, 94}, {41, 94}},
+        cabeca = {37, 20},
+        ferramenta = {16, 51},               -- punhadura do arco
+        emissao = {35, 48},                  -- pingente jade
+    },
+    markers = { contact = {1, 4} },
+    sequences = { walk = {1, 4, loop = true} },
+    frameDuration = 1 / 9,
     layers = {
         {name = 'body', h = 4, albedo = {
             bodyFrame(1), bodyFrame(2), bodyFrame(3), bodyFrame(4),

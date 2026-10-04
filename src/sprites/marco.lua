@@ -3,6 +3,13 @@
 -- de nomes gravados que ACENDEM em jade (emissivo ei 0.5-0.8). Relevo
 -- alto na pedra, fio de luz na aresta esquerda, base em três degraus.
 -- Peça-âncora da praça (docs/PLANO_REFUGIO_ANDLAR.md §1).
+--
+-- LOOP AMBIENTAL (frente micro-animações): f1..f4 = respiração das
+-- runas. Só o canal EMISSIVO anima (a pedra não mexe): f1/f3 = base,
+-- f2 = apagado (ei -0.15 em todas as runas), f4 = aceso (ei +0.15).
+-- O ciclo base->apagado->base->aceso é uma onda triangular — respira,
+-- não estrobo. Chars de respiro: H/i/x = versões escuras de R/r/f,
+-- J/u/y = versões claras (mesma cor, ei diferente).
 
 local W, H = 64, 96
 
@@ -160,6 +167,13 @@ lin(g, 7, 96, 'k' .. ('d'):rep(50) .. 'k')
 lin(g, 15, 82, 'gg'); lin(g, 15, 83, 'gg'); lin(g, 16, 84, 'g')
 lin(g, 8, 90, 'gg'); lin(g, 8, 91, 'ggg'); lin(g, 9, 92, 'gg')
 
+-- Emissivo do loop: o grade `ge` só tem runas (R/r/f) e pontos —
+-- trocar o char troca o ei (mesma cor jade), e a pedra nunca mexe.
+local emi1 = str(ge)
+local function reescreve(src, mapa)
+    return (src:gsub('[Rrf]', mapa))
+end
+
 return {
     name = 'marco',
     w = 64, h = 96,
@@ -183,14 +197,29 @@ return {
         r = { ramp = 'cloth', step = 4, h = 11, e = 'jade', ei = 0.6 },
         R = { ramp = 'cloth', step = 5, h = 12, e = 'jadeLight', ei = 0.8 },
         f = { ramp = 'cloth', step = 3, h = 10, e = 'cloth.3', ei = 0.5 },
+        -- versões de respiro para o loop f1..f4 (só emissivo): mesma
+        -- cor emitida, ei -0.15 (apagado) / +0.15 (aceso)
+        i = { ramp = 'cloth', step = 4, h = 11, e = 'jade', ei = 0.45 },
+        u = { ramp = 'cloth', step = 4, h = 11, e = 'jade', ei = 0.75 },
+        H = { ramp = 'cloth', step = 5, h = 12, e = 'jadeLight', ei = 0.65 },
+        J = { ramp = 'cloth', step = 5, h = 12, e = 'jadeLight', ei = 0.95 },
+        x = { ramp = 'cloth', step = 3, h = 10, e = 'cloth.3', ei = 0.35 },
+        y = { ramp = 'cloth', step = 3, h = 10, e = 'cloth.3', ei = 0.65 },
     },
 
     layers = {
         {
+            -- f1..f4 = respiração das runas (ver cabeçalho); o albedo
+            -- é estável, o emissivo respira por substituição de chars.
             name = 'pedra',
             h = 11,
             albedo = str(g),
-            emissive = str(ge),
+            emissive = {
+                emi1,
+                reescreve(emi1, {R = 'H', r = 'i', f = 'x'}),  -- apagado
+                emi1,
+                reescreve(emi1, {R = 'J', r = 'u', f = 'y'}),  -- aceso
+            },
         },
     },
 }

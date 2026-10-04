@@ -389,6 +389,24 @@ return {
         j = {spec = 'jade', h = 9, e = 'jadeLight', ei = 0.8},
     },
 
+    -- Metadados W4 (consumidos por tools/kit_w4 e tools/kit_workbench):
+    -- âncoras 1-based por frame, marcadores de fase, sequências nomeadas
+    -- e exposição por frame em segundos (0.5 = o t*2 do hd_world).
+    anchors = {
+        pe = {34, 94},                       -- contato dos pés no chão
+        cabeca = {37, 20},                   -- face (pele, entre os olhos)
+        ferramenta = {16, 51},               -- punhadura do arco 'WW'
+        mao_r = {57, 58},                    -- punho direito junto à coxa
+        emissao = {{35, 48}, {35, 49}},      -- pingente jade (desce no f2)
+    },
+    sequences = { idle = {1, 2, loop = true} },
+    frameDuration = {0.5, 0.5},
+    regions = {
+        rosto = {x = 27, y = 15, w = 18, h = 20},
+        arco = {x = 14, y = 14, w = 12, h = 69},
+        punho_d = {x = 53, y = 57, w = 7, h = 6},
+    },
+
     layers = {
         {name = 'body', h = 4, albedo = {
             R(body),

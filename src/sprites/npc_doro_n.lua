@@ -1,4 +1,6 @@
--- DORO — idle NORTE (de costas), 64x96, origem nos pés, 2f.
+-- DORO — idle NORTE (de costas), 64x96, origem nos pés, 4f.
+-- f1 repouso | f2 respiro | f3 GESTO: cabeça+barba descem 1px (olha a
+-- peça) + nós 'd' nos punhos | f4 respiro + cabeça assenta 1px a mais.
 -- Costas: crânio raspado 's' com stubble 'd' e nuca; a barba prata
 -- espreita só como linha 'g' sob a mandíbula (âncora preservada de
 -- perfil/frente, não de costas). Colete castanho fechado atrás, avental
@@ -40,6 +42,12 @@ local function overlay(ga, gb)
         out[i] = table.concat(row)
     end
     return table.concat(out, '\n')
+end
+local function patch(map, edits)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(edits) do t[r] = s end
+    return t
 end
 
 local body = {
@@ -177,6 +185,15 @@ local strap = {
 
 local garb = overlay(R(apron), R(strap))
 
+-- f3: olha a peça — cabeça+barba descem 1px + punhos flexionam; nós 'd'
+-- em bloco 2x2 por punho (1px sumia a 1x).
+local gesto = patch(shift(body, 1, 9, 29), {
+    [58] = '..............kssddkkllvvvvvvvvvvvvvvvvvvvvvllkkssddk',
+    [59] = '..............kssddkkllvvvvvvvvvvvvvvvvvvvvvllkkssddk',
+})
+-- f4: respiro com a cabeça assentando 1px a mais (sem olhos de costas).
+local respiroAssenta = shift(shift(body, 1, 9, 29), 1, 38, 56)
+
 return {
     name = 'npc_doro_n',
     w = 64, h = 96,
@@ -209,7 +226,9 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 38, 56)),
+            R(gesto),
+            R(respiroAssenta),
         }},
-        {name = 'garb', h = 6, albedo = {garb, garb}},
+        {name = 'garb', h = 6, albedo = {garb, garb, garb, garb}},
     },
 }

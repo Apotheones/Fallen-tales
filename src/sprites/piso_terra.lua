@@ -254,6 +254,7 @@ return {
     name = 'piso_terra',
     w = 64, h = 64,
     origin = 'topleft',
+    frameUse = 'variant', -- 4 frames = variantes por seed, nunca animação
 
     legend = {
         a = { ramp = 'earth', step = 4, h = 1 }, -- massa de barro

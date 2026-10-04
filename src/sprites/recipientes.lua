@@ -1,8 +1,14 @@
 -- RECIPIENTES do poço — tile de chão, 64x64, origem topleft.
 -- Refúgio (docs/DIRECAO_AMBIENTAL_HD.md §REFÚGIO, "recipiente e
 -- tigela"): balde, tigela e pote agrupados ao pé do poço, apoio gasto.
--- Bocas viradas para cima — água partilhada: o balde e a tigela ainda
--- guardam fundo d'água com reflexo claro.
+-- 3 frames = variantes por seed:
+--   f1 = bocas viradas para cima — água partilhada: balde e tigela
+--        guardam fundo d'água com reflexo claro
+--   f2 = tombado/uso — alguém acabou de usar: balde deitado de lado
+--        com resto d'água na boca e poça na terra, tigela virada para
+--        baixo, pote inclinado
+--   f3 = empilhado/guardado — pote dentro do balde, tigela virada por
+--        cima da pilha, ordem apertada e seca
 -- Relevo: pote 8-9, balde 6-7, tigela 4-5, água 3, terra 1-2.
 
 local function L(s)
@@ -38,7 +44,7 @@ local function terra()
     return table.concat(t, '\n')
 end
 
--- POTE de barro à direita-trás: bojo redondo, gargalo, boca para cima
+-- f1 — POTE de barro à direita-trás: bojo redondo, gargalo, boca para cima
 local pote = {
     [10] = '..............................................kkkkkkk',
     [11] = '.............................................kpppppppk',
@@ -61,7 +67,47 @@ local pote = {
     [28] = '............................................kkkkkkkkkk',
 }
 
--- BALDE de madeira à esquerda: arco da boca com água dentro,
+-- f2 — POTE inclinado: escorado para a direita, boca aberta no alto
+local pote2 = {
+    [12] = '.........................................................kkkkk',
+    [13] = '........................................................kpkkkkpk',
+    [14] = '.....................................................kpppkkkpppk',
+    [15] = '....................................................kppppppppppk',
+    [16] = '...................................................kppPppppPppk',
+    [17] = '..................................................kpppPppppPpppk',
+    [18] = '.................................................kppppPppppPpppk',
+    [19] = '................................................kpppppPppppPpppk',
+    [20] = '................................................kppppppPpppPpppk',
+    [21] = '...............................................kpppppppPpppppppk',
+    [22] = '...............................................kppppppppPppppppk',
+    [23] = '..............................................kpppppppppppppppk',
+    [24] = '..............................................kpppppppppppppppk',
+    [25] = '...............................................kpppppppppppppk',
+    [26] = '...............................................kopppppppppppok',
+    [27] = '................................................kooppppppppook',
+    [28] = '.................................................kooooooooook',
+    [29] = '..................................................kkkkkkkkkk',
+}
+
+-- f3 — POTE dentro do balde: só o fundo/bojo invertido sai da boca
+local pote3 = {
+    [22] = '.............................kkkkkkk',
+    [23] = '...........................kooooooooook',
+    [24] = '..........................kopppppppppok',
+    [25] = '.........................kppppppppppppk',
+    [26] = '.........................kpppPppppppPppk',
+    [27] = '........................kpppppPpppppPpppk',
+    [28] = '........................kppppppPpppPpppppk',
+    [29] = '........................kpppppppPpPppppppk',
+    [30] = '........................kppppppppPpppppppk',
+    [31] = '.........................kpppppppppppppk',
+    [32] = '.........................kpppppppppppppk',
+    [33] = '..........................kpppppppppppk',
+    [34] = '..........................kpppppppppppk',
+    [35] = '...........................kppppppppk',
+}
+
+-- f1 — BALDE de madeira à esquerda: arco da boca com água dentro,
 -- aduelas verticais e duas cintas de ferro
 local balde = {
     [16] = '....kwwwwwwwwwwwwwwk',
@@ -88,7 +134,44 @@ local balde = {
     [37] = '.....kkkkkkkkkkkkk',
 }
 
--- TIGELA de osso à frente-centro: rasa e larga, boca aberta com
+-- f2 — BALDE deitado de lado: boca elíptica à esquerda com resto
+-- d'água, aduelas na horizontal e cintas verticais; poça na terra
+local balde2 = {
+    [19] = '......kkkkkkkk',
+    [20] = '....kkwwwwwwwwkk.kwwwwiwwwwwwwwiwwwwk',
+    [21] = '...kwwddddddddwwkkwwwwiwwwwwwwwiwwwwk',
+    [22] = '..kwdddddddddddwwkuuuuiuuuuuuuuiuuuuk',
+    [23] = '.kwwdddddddddddwwkuuuuiuuuuuuuuiuuuuk',
+    [24] = '.kwwdddddddddddwwkuuuuiuuuuuuuuiuuuuk',
+    [25] = '.kwwddssSsssssdwwkuuuuiuuuuuuuuiuuuuk',
+    [26] = '.kwwdssssssssssdwwkuuuuiuuuuuuuuiuuuuk',
+    [27] = '...kwwssssssssswwkkuuuiuuuuuuuuiuuuuk',
+    [28] = '....kksssssssskk.kuuuiuuuuuuuuiuuuuk',
+    [29] = '......kkkkkkkk...kuuuiuuuuuuuuiuuuuk',
+    [30] = '........kkkk.....kuuuiuuuuuuuuiuuuuk',
+    [31] = '.................kkkkkkkkkkkkkkkkkkkk',
+    -- poça derramada na terra, embaixo da boca
+    [33] = '......xxsxxxxsxx',
+    [34] = '.........xsxx',
+}
+
+-- f3 — BALDE em pé com o pote dentro: boca escura, aduelas e cintas
+local balde3 = {
+    [36] = '.................kwwkkkkkkkkkkkkkkkwwk',
+    [37] = '.................kuuuuiuuuuuiuuuuuiuuuuk',
+    [38] = '.................kuuuuiuuuuuiuuuuuiuuuuk',
+    [39] = '.................kiiiiiiiiiiiiiiiiiiiiik',
+    [40] = '.................kuuuuiuuuuuiuuuuuiuuuuk',
+    [41] = '.................kuuuuiuuuuuiuuuuuiuuuuk',
+    [42] = '.................kiiiiiiiiiiiiiiiiiiiiik',
+    [43] = '.................kuuuuiuuuuuiuuuuuiuuuuk',
+    [44] = '.................kuuuuiuuuuuiuuuuuiuuuuk',
+    [45] = '..................kuuuuiuuuuiuuuuiuuuuk',
+    [46] = '..................kuuuuiuuuuiuuuuiuuuuk',
+    [47] = '...................kkkkkkkkkkkkkkkkkkk',
+}
+
+-- f1 — TIGELA de osso à frente-centro: rasa e larga, boca aberta com
 -- fundo d'água
 local tigela = {
     [40] = '........................kBBBBBBBBBBBBBBBBk',
@@ -101,6 +184,27 @@ local tigela = {
     [47] = '........................kbbbBBBBBBBbbbk',
     [48] = '.........................kbbbbbbbbbbbk',
     [49] = '..........................kkkkkkkkkkk',
+}
+
+-- f2 — TIGELA virada para baixo: domo fechado com a base para cima
+local tigela2 = {
+    [40] = '..............................kbbk',
+    [41] = '...........................kkkkkkkkkkkk',
+    [42] = '........................kBbbbbbbbbbbbbBk',
+    [43] = '......................kBbbbbbbbbbbbbbbbbBk',
+    [44] = '.....................kBBBbbbbbbbbbbbbbbbbBk',
+    [45] = '....................kbbbbbbbbbbbbbbbbbbbbbbk',
+    [46] = '....................kbbbbbbbbbbbbbbbbbbbbbbk',
+    [47] = '.....................kkkkkkkkkkkkkkkkkkkkkk',
+}
+
+-- f3 — TIGELA virada em cima da pilha: domo pequeno de tampa
+local tigela3 = {
+    [17] = '............................kkkkkkkk',
+    [18] = '..........................kBbbbbbbbbBk',
+    [19] = '.........................kBbbbbbbbbbbBk',
+    [20] = '.........................kbbbbbbbbbbbbk',
+    [21] = '..........................kkkkkkkkkkkkkk',
 }
 
 return {
@@ -133,8 +237,8 @@ return {
 
     layers = {
         {name = 'terra', h = 1, albedo = terra()},
-        {name = 'pote', h = 8, albedo = R(pote)},
-        {name = 'balde', h = 6, albedo = R(balde)},
-        {name = 'tigela', h = 4, albedo = R(tigela)},
+        {name = 'pote', h = 8, albedo = {R(pote), R(pote2), R(pote3)}},
+        {name = 'balde', h = 6, albedo = {R(balde), R(balde2), R(balde3)}},
+        {name = 'tigela', h = 4, albedo = {R(tigela), R(tigela2), R(tigela3)}},
     },
 }

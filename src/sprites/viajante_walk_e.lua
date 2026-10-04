@@ -560,6 +560,17 @@ return {
     w = 64, h = 96,
     origin = 'feet',
     legend = legend,
+    -- Metadados W4: contatos f1/f4; âncoras por frame (probe do kit_w4).
+    -- viajante_walk_w espelha âncoras/regiões via código.
+    anchors = {
+        pe = {{36, 94}, {34, 94}, {33, 94}, {37, 94}},
+        cabeca = {38, 18},
+        ferramenta = {51, 50},               -- punhadura 'WW' do arco
+        emissao = {35, 48},                  -- pingente jade no peito
+    },
+    markers = { contact = {1, 4} },
+    sequences = { walk = {1, 4, loop = true} },
+    frameDuration = 1 / 9,
     layers = {
         {name = 'body', h = 4, albedo = {
             bodyFrame(1), bodyFrame(2), bodyFrame(3), bodyFrame(4),

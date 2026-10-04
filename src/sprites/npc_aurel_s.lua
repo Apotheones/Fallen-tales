@@ -1,4 +1,6 @@
--- AUREL — Primeiro Zelador, idle SUL, 64x96, origem nos pés, 2f.
+-- AUREL — Primeiro Zelador, idle SUL, 64x96, origem nos pés, 4f.
+-- f1 repouso | f2 respiro | f3 GESTO: cabeça sobe 1px (olha o Marco
+-- acima) + pano desdobra 1px | f4 respiro + piscar.
 -- §8 do doc de personagens: 56-62a, 178cm, magro de tórax comprido.
 -- Pele castanha dourada (skin.3), rosto longo, barba raspada; cabelo
 -- GRISALHO puxado para trás com linha recuada (testa alta de pele) e
@@ -46,6 +48,12 @@ local function overlay(ga, gb)
         out[i] = table.concat(row)
     end
     return table.concat(out, '\n')
+end
+local function patch(map, edits)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(edits) do t[r] = s end
+    return t
 end
 
 --------------------------------------------------------------------------------
@@ -163,6 +171,21 @@ local band = {
 
 local garb = R(band)
 
+-- f3: olha o Marco acima — cabeça sobe 1px (o queixo sai da gola; a
+-- linha do pescoço é reposta no vão); pano desdobra 1px à direita.
+local gesto = patch(shift(body, -1, 8, 29), {
+    [29] = '............................kssssk',
+    [62] = '...................kpppk..kttttttttttttttttk',
+    [63] = '...................kpppk..kttttttttttttttttk',
+    [64] = '...................kpppk..kttttttttttttttttk',
+    [65] = '...................kpppk..kttttttttttttttttk',
+    [66] = '....................kkk...kttttttttttttttttk',
+})
+-- f4: respiro com piscar — olhos 'ee' viram pálpebra 'dd'.
+local respiroPisca = shift(patch(body, {
+    [18] = '......................ksskksddsssddkkssk',
+}), 1, 36, 56)
+
 return {
     name = 'npc_aurel_s',
     w = 64, h = 96,
@@ -190,7 +213,9 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 36, 56)),
+            R(gesto),
+            R(respiroPisca),
         }},
-        {name = 'trab', h = 8, albedo = {garb, garb}},
+        {name = 'trab', h = 8, albedo = {garb, garb, garb, garb}},
     },
 }

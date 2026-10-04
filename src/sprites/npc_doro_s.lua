@@ -1,4 +1,6 @@
--- DORO — coveiro e marceneiro, idle SUL, 64x96, origem nos pés, 2f.
+-- DORO — coveiro e marceneiro, idle SUL, 64x96, origem nos pés, 4f.
+-- f1 repouso | f2 respiro (tórax desce 1) | f3 GESTO: cabeça desce 1px
+-- (olha a peça) + nós 'd' nos punhos (flexiona) | f4 respiro + piscar.
 -- §3 do doc de personagens: 58-64a, 181cm, tronco largo — retângulo
 -- baixo nos ombros (~30px vs ~21 do Viajante). Pele parda escura
 -- (skin.2); cabeça raspada com stubble 'd' e BARBA CURTA PRATA/PRETO
@@ -44,6 +46,12 @@ local function overlay(ga, gb)
         out[i] = table.concat(row)
     end
     return table.concat(out, '\n')
+end
+local function patch(map, edits)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(edits) do t[r] = s end
+    return t
 end
 
 --------------------------------------------------------------------------------
@@ -207,6 +215,17 @@ local strap = {
 
 local garb = overlay(R(apron), R(strap))
 
+-- f3: olha a peça (cabeça toda desce 1px) + punhos flexionam — nós 'd'
+-- em bloco 2x2 por punho (1px sumia a 1x).
+local gesto = patch(shift(body, 1, 9, 36), {
+    [59] = '..............kssddkkllvvvvvvvvvvvvvvvvvvvvvllkkssddk',
+    [60] = '..............kssddkkpppppppppppppppppppppppkkssddk',
+})
+-- f4: respiro com piscar — olhos 'ee' viram pálpebra 'dd'.
+local respiroPisca = shift(patch(body, {
+    [18] = '.............................kssddssssssddssk',
+}), 1, 38, 56)
+
 return {
     name = 'npc_doro_s',
     w = 64, h = 96,
@@ -239,8 +258,12 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 38, 56)),
+            R(gesto),
+            R(respiroPisca),
         }},
         {name = 'garb', h = 6, albedo = {
+            garb,
+            garb,
             garb,
             garb,
         }},

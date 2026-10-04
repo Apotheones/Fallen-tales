@@ -1,8 +1,14 @@
 -- CISTERNA_RUA — boca de cisterna da rua, prop 64x96, pés.
 -- Refúgio (vida-refugio-props §1/§4): o poço secundário — menor que
 -- poco.lua: anel de pedra baixo, tampa de tábua meio-aberta sobre a
--- boca, balde deixado ao lado. 2 frames = estado da água por flag:
+-- boca, balde deixado ao lado. Frames 1-2 = estado da água por flag:
 -- f1 turvo (sea escuro + musgo) / f2 claro (sea claro + fio de luz).
+--
+-- LOOP AMBIENTAL (frente micro-animações): f3-f4 anexados DEPOIS dos
+-- estados — continuam o estado CLARO com o gleam 'L' deslocado (fase
+-- -2/+2: o fio de luz e a faixa deslizam). Loop ambiental do claro =
+-- f2->f3->f4->f2; o estado turvo não anima. Anel, tampa, balde e chão
+-- são estáticos (corpo/chao repetem o estado correspondente).
 -- Relevo: água 4-5, anel 6-8, tampa 10, balde 5-6, chão 1-2.
 
 local W, H = 64, 96
@@ -89,8 +95,11 @@ local function corpo(claro)
     return str(g)
 end
 
--- água: f1 turva (verde-escura, parada) / f2 clara (sea + luz)
-local function agua(claro)
+-- água: f1 turva (verde-escura, parada) / f2+ clara (sea + luz).
+-- `fase` desloca o gleam 'L' em x — f3/f4 do loop ambiental do estado
+-- claro (fase -2/+2 vs fase 0 do estado-base).
+local function agua(claro, fase)
+    fase = fase or 0
     local g = nova('.')
     if claro then
         for y = 66, 76 do
@@ -99,12 +108,12 @@ local function agua(claro)
                 local dy = (y - 71) / 5.5
                 if dx * dx + dy * dy <= 1 then
                     local ch = 'A'
-                    if h2(x, y, 8) < 16 then ch = 'L' end    -- fio de luz
+                    if h2(x - fase, y, 8) < 16 then ch = 'L' end
                     set(g, x, y, ch)
                 end
             end
         end
-        faixa(g, 30, 38, 68, 'L')
+        faixa(g, 30 + fase, 38 + fase, 68, 'L')   -- fio de luz desliza
     else
         for y = 66, 76 do
             for x = 26, 43 do
@@ -184,8 +193,14 @@ return {
     },
 
     layers = {
-        { name = 'corpo', h = 7, albedo = { corpo(false), corpo(true) } },
-        { name = 'agua',  h = 4, albedo = { agua(false), agua(true) } },
-        { name = 'chao',  h = 1, albedo = { chao(false), chao(true) } },
+        -- f1/f2 = estados por flag (turvo/claro); f3/f4 = loop ambiental
+        -- do estado claro — corpo e chão repetem o frame claro, só a
+        -- água desloca o gleam.
+        { name = 'corpo', h = 7, albedo = { corpo(false), corpo(true),
+            corpo(true), corpo(true) } },
+        { name = 'agua',  h = 4, albedo = { agua(false), agua(true, 0),
+            agua(true, -2), agua(true, 2) } },
+        { name = 'chao',  h = 1, albedo = { chao(false), chao(true),
+            chao(true), chao(true) } },
     },
 }

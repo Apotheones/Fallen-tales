@@ -222,6 +222,7 @@ return {
     name = 'piso_laje',
     w = 64, h = 64,
     origin = 'topleft',
+    frameUse = 'variant', -- 4 frames = variantes por seed, nunca animação
 
     legend = {
         j = { ramp = 'stone', step = 1, h = 0 }, -- junta rebaixada

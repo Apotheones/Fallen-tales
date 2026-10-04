@@ -5,6 +5,12 @@
 -- no canal emissivo: bloom contido, não farol. O emissivo é derivado
 -- dos pavios 'k' do albedo — cada pavio ganha núcleo 'F' e ponta 'f'.
 -- Relevo: prato 4-5, velas 7-9, pavio 9, chama 12.
+--
+-- LOOP AMBIENTAL (frente micro-animações): f1..f3 = flicker miúdo.
+-- Só o canal EMISSIVO anima (as chamas não existem no albedo):
+-- f1 = base ei .55/.40; f2 acende (J/j, ei+.10) com pontas pendendo
+-- ±1 px; f3 apaga (H/h, ei-.10), algumas pontas caem 1 px (chama mais
+-- baixa). O grupo nunca mexe junto — cada vela tem seu próprio dx.
 
 local function L(s)
     assert(#s <= 64, 'linha de sprite > 64 colunas')
@@ -66,9 +72,15 @@ local ALBEDO = grid {
     E,                                                -- 64
 }
 
--- Emissivo derivado do albedo: onde há pavio 'k', núcleo 'F' no pavio
--- e ponta 'f' um pixel acima — chama nasce na mecha, nunca solta.
-local function chamas(albedo)
+-- Emissivo derivado do albedo: onde há pavio 'k', núcleo no pavio e
+-- ponta um pixel acima — chama nasce na mecha, nunca solta. `fase`
+-- (1..3) escolhe o par de chars (brilho) e desloca as pontas:
+--   f1 = F/f base; f2 = J/j (+.10 ei), pontas pendem; f3 = H/h (-.10),
+--   uma a cada 4 velas perde a ponta (chama agacha 1 px).
+local NUC = {'F', 'J', 'H'}
+local PONTA = {'f', 'j', 'h'}
+
+local function chamas(albedo, fase)
     local rows = {}
     for r in albedo:gmatch('([^\n]+)\n?') do rows[#rows + 1] = r end
     local g = {}
@@ -77,12 +89,25 @@ local function chamas(albedo)
         for x = 1, 64 do linha[x] = '.' end
         g[y] = linha
     end
+    local i = 0
     for y = 1, #rows do
         local r = rows[y]
         for x = 1, #r do
             if r:sub(x, x) == 'k' then
-                g[y][x] = 'F'
-                if y > 1 and g[y - 1][x] == '.' then g[y - 1][x] = 'f' end
+                i = i + 1
+                g[y][x] = NUC[fase]
+                -- ponta treme 1 px para os lados; no f3 cada 4ª vela
+                -- fica sem ponta (chama baixa)
+                local dx = fase == 1 and 0
+                    or ((i * 5 + fase * 3) % 3) - 1
+                local semPonta = fase == 3 and (i % 4 == 0)
+                if not semPonta and y > 1 then
+                    local tx = math.max(1, math.min(64, x + dx))
+                    if g[y - 1][tx] == '.' then g[y - 1][tx] = PONTA[fase]
+                    elseif g[y - 1][x] == '.' then
+                        g[y - 1][x] = PONTA[fase]
+                    end
+                end
             end
         end
     end
@@ -106,19 +131,27 @@ return {
         b = { ramp = 'bone', step = 4, h = 8 },
         B = { ramp = 'bone', step = 5, h = 9 },
         w = { ramp = 'bone', step = 3, h = 7 },
-        -- chamas pequenas: núcleo e ponta, ei contido
+        -- chamas pequenas: núcleo e ponta, ei contido — f1 base,
+        -- J/j aceso (+.10) e H/h apagado (-.10) para o loop f1..f3
         F = { ramp = 'ember', step = 6, h = 12, e = 'ember.6', ei = 0.55 },
         f = { ramp = 'ember', step = 4, h = 12, e = 'ember.4', ei = 0.4 },
+        J = { ramp = 'ember', step = 6, h = 12, e = 'ember.6', ei = 0.65 },
+        j = { ramp = 'ember', step = 4, h = 12, e = 'ember.4', ei = 0.5 },
+        H = { ramp = 'ember', step = 6, h = 12, e = 'ember.6', ei = 0.45 },
+        h = { ramp = 'ember', step = 4, h = 12, e = 'ember.4', ei = 0.3 },
         -- contato
         e = { ramp = 'earth', step = 3, h = 1 },
     },
 
     layers = {
         {
+            -- f1..f3 = loop de flicker das chamas (ver cabeçalho); a
+            -- cera/prato (albedo) é estável.
             name = 'grupo',
             h = 5,
             albedo = ALBEDO,
-            emissive = chamas(ALBEDO),
+            emissive = {chamas(ALBEDO, 1), chamas(ALBEDO, 2),
+                chamas(ALBEDO, 3)},
         },
     },
 }

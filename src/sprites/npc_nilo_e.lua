@@ -1,4 +1,6 @@
--- NILO — idle LESTE (perfil olhando para a direita), 64x96, 2f.
+-- NILO — idle LESTE (perfil olhando para a direita), 64x96, 4f.
+-- f1 repouso, f2 respiro, f3 gesto (punho sobre o instrumento),
+-- f4 variante (cabeça inclina 1px sobre a peça).
 -- npc_nilo_w = espelho via código.
 -- Perfil: massa de cabelo cobre metade de trás da cabeça e a mecha
 -- alta desponta do topo-frontal (âncora); rosto oval com nariz
@@ -23,6 +25,25 @@ local function shift(map, dy, rmin, rmax)
     local t = {}
     for r, s in pairs(map) do
         if rmin and r >= rmin and r <= rmax then t[r + dy] = s
+        else t[r] = s end
+    end
+    return t
+end
+-- Variante por linhas: rows sobrescreve o mapa base.
+local function patch(map, rows)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(rows) do t[r] = s end
+    return t
+end
+-- Deslocamento horizontal por faixa de linhas (cabeça que inclina).
+local function hshift(map, dx, rmin, rmax)
+    local t = {}
+    for r, s in pairs(map) do
+        if s and rmin and r >= rmin and r <= rmax then
+            if dx > 0 then t[r] = (string.rep('.', dx) .. s):sub(1, 64)
+            elseif dx < 0 then t[r] = s:sub(-dx + 1)
+            else t[r] = s end
         else t[r] = s end
     end
     return t
@@ -130,6 +151,23 @@ local gear = {
     [55] = '............................kBBBBBBk',
 }
 
+--------------------------------------------------------------------------------
+-- f3 — gesto: o punho da frente desliza para o instrumento pendurado,
+-- manga desce cobrindo onde a mão pendia.
+--------------------------------------------------------------------------------
+local bodyGesto = patch(body, {
+    [55] = '.....................kddk.kyyyyyyyyyyyyk.kyyk',
+    [56] = '.....................kddk.krrrrrrrrrrrrk.kyyk',
+    [57] = '.....................kddk.kppppppppppppk.kyyk',
+    [58] = '.....................kddk.kppppppppppppk.kssk',
+    [59] = '.....................kkkk.kppppppppppppk.kssk',
+})
+
+--------------------------------------------------------------------------------
+-- f4 — variante: cabeça inclina 1px à frente, sobre a peça.
+--------------------------------------------------------------------------------
+local bodyMecha = hshift(body, 1, 6, 27)
+
 return {
     name = 'npc_nilo_e',
     w = 64, h = 96,
@@ -162,8 +200,12 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 28, 54)),
+            R(bodyGesto),
+            R(bodyMecha),
         }},
         {name = 'gear', h = 8, albedo = {
+            R(gear),
+            R(gear),
             R(gear),
             R(gear),
         }},

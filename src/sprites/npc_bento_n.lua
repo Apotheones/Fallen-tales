@@ -1,4 +1,6 @@
--- BENTO — idle NORTE (de costas), 64x96, origem nos pés, 2f.
+-- BENTO — idle NORTE (de costas), 64x96, origem nos pés, 4f.
+-- f1 repouso, f2 respiro, f3 gesto (mão direita na toalha), f4
+-- variante (prova o ar: cabeça sobe 1px).
 -- Costas: faixa 'F' continua em volta da cabeça (âncora horizontal
 -- lida de qualquer ângulo), cabelo crespo abaixo dela; colete 'v'
 -- fecha o dorso redondo com camisa 'g' nas bordas; o avental 'a'
@@ -41,6 +43,13 @@ local function overlay(ga, gb)
         out[i] = table.concat(row)
     end
     return table.concat(out, '\n')
+end
+-- Variante por linhas: rows sobrescreve o mapa base.
+local function patch(map, rows)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(rows) do t[r] = s end
+    return t
 end
 
 local body = {
@@ -198,6 +207,36 @@ local towel = {
 
 local garb = overlay(R(apron), R(towel))
 
+--------------------------------------------------------------------------------
+-- f3 — gesto: mão direita sobe e esfrega a toalha (que nesta vista
+-- cai à direita da tela). Punho encosta na borda do pano.
+--------------------------------------------------------------------------------
+local bodyGesto = patch(body, {
+    [54] = '...............kgggvvvvvvvvvvvvvvvvvvvvvvgggkkssk',
+    [55] = '...............kgggvvvvvvvvvvvvvvvvvvvvvvgggkkssk',
+    [56] = '...............kgggvvvvvvvvvvvvvvvvvvvvvvgggkkssk',
+    [57] = '...............kgggvvvvvvvvvvvvvvvvvvvvvvgggkkssk',
+    [58] = '.........ksssk..kgggvvvvvvvvvvvvvvvvvvvvvvgggk..kggk',
+    [59] = '.........ksssk..kgggvvvvvvvvvvvvvvvvvvvvvvgggk..kggk',
+    [60] = '.........kcck...kgggvvvvvvvvvvvvvvvvvvvvvvgggk..kggk',
+    [61] = '.........kcck....kggppppppppppppppppppppppggk',
+    [62] = '..........kck....kppppppppppppppppppppppppk',
+    [63] = '..........kkk....kppppppppppppppppppppppppk',
+})
+
+-- punho por cima da toalha = a mão que esfrega
+local garbGesto = overlay(garb, R {
+    [54] = '.............................................kssk',
+    [55] = '.............................................kssk',
+    [56] = '.............................................kssk',
+})
+
+--------------------------------------------------------------------------------
+-- f4 — prova o ar: cabeça sobe 1px, cabelo/nuca emendam no pescoço.
+--------------------------------------------------------------------------------
+local bodyFareja = shift(body, -1, 12, 26)
+bodyFareja[26] = body[26]
+
 return {
     name = 'npc_bento_n',
     w = 64, h = 96,
@@ -230,7 +269,9 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 31, 57)),
+            R(bodyGesto),
+            R(bodyFareja),
         }},
-        {name = 'garb', h = 7, albedo = {garb, garb}},
+        {name = 'garb', h = 7, albedo = {garb, garb, garbGesto, garb}},
     },
 }

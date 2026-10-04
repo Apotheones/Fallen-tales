@@ -8,6 +8,12 @@
 -- aparece em filetes quentes de reflexo (ei baixo, sem bloom).
 -- Relevo: lamparina 11-15 (o mais alto), braço/cap 9-10, poste 7-9,
 -- base de pedra 2-4.
+--
+-- LOOP AMBIENTAL (frente micro-animações): f1..f4 = flicker de
+-- lamparina. f1 = base; f2 pende à direita e o vidro direito ganha
+-- reflexos 'g' extras; f3 estica (ponta sobe 1 px, base emagrece);
+-- f4 pende à esquerda. Gaiola, braço e poste são estáticos — só os
+-- chars de chama f/F/O e os reflexos 'g' mudam de frame.
 
 local function L(s)
     assert(#s <= 64, 'linha de sprite > 64 colunas')
@@ -134,20 +140,55 @@ local lamp = {
     [64] = '.........................................ktk',
 }
 
-local emis = {
-    [51] = '...........................................f',
-    [52] = '..........................................fFf',
-    [53] = '.........................................fFOFf',
-    [54] = '.........................................fFOFf',
-    [55] = '..........................................fOFf',
-    [56] = '..........................................fFf',
-    [57] = '...........................................f',
-    -- reflexos quentes do vidro
-    [49] = '......................................g',
-    [53] = '......................................g.......g',
-    [56] = '...............................................g',
-    [57] = '......................................g',
-}
+-- LOOP de flicker: quatro mapas derivados de `lamp` — só as linhas do
+-- interior da gaiola (r50-r57) mudam; a moldura 'kt...tk' segue firme.
+local function copia(t)
+    local o = {}
+    for k, v in pairs(t) do o[k] = v end
+    return o
+end
+local P = '....................................' -- prefixo até a col 37
+
+local lamp2 = copia(lamp)   -- pende à direita + reflexos no vidro dir
+lamp2[50] = P .. 'kt........gtk'
+lamp2[51] = P .. 'kt.....f...tk'
+lamp2[52] = P .. 'kt....fFf..tk'
+lamp2[54] = P .. 'kt...fFOFf.tk'
+lamp2[55] = P .. 'kt....fOFf.tk'
+lamp2[56] = P .. 'kt....fFf.gtk'
+
+local lamp3 = copia(lamp)   -- estica: ponta sobe 1 px, base emagrece
+lamp3[50] = P .. 'kt....f....tk'
+lamp3[57] = P .. 'ktg........tk'
+
+local lamp4 = copia(lamp)   -- pende à esquerda
+lamp4[51] = P .. 'kt...f.....tk'
+lamp4[52] = P .. 'kt..fFf....tk'
+lamp4[53] = P .. 'ktgfFOFf..gtk'
+lamp4[54] = P .. 'kt.fFOFf...tk'
+lamp4[55] = P .. 'kt..fOFf...tk'
+lamp4[56] = P .. 'kt..fFf...gtk'
+
+-- Emissivo derivado do albedo do frame: onde há chama (f/F/O) ou
+-- reflexo de vidro (g) o pixel emite — alinhado, sem drift por frame.
+local function emisDe(map)
+    local out = {}
+    for r = 1, 96 do
+        local src = map[r]
+        if src then
+            local chars = {}
+            for x = 1, #src do
+                local c = src:sub(x, x)
+                chars[x] = (c == 'f' or c == 'F' or c == 'O'
+                    or c == 'g') and c or '.'
+            end
+            out[r] = L(table.concat(chars))
+        else
+            out[r] = E
+        end
+    end
+    return table.concat(out, '\n')
+end
 
 return {
     name = 'lampiao',
@@ -180,6 +221,11 @@ return {
 
     layers = {
         {name = 'poste', h = 7, albedo = R(poste)},
-        {name = 'lamp', h = 10, albedo = R(lamp), emissive = R(emis)},
+        {   -- f1..f4 = loop de flicker da lamparina (ver cabeçalho)
+            name = 'lamp', h = 10,
+            albedo = {R(lamp), R(lamp2), R(lamp3), R(lamp4)},
+            emissive = {emisDe(lamp), emisDe(lamp2),
+                emisDe(lamp3), emisDe(lamp4)},
+        },
     },
 }

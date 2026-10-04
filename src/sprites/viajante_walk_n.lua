@@ -514,6 +514,16 @@ return {
     w = 64, h = 96,
     origin = 'feet',
     legend = legend,
+    -- Metadados W4: contatos f1/f4; âncoras por frame (probe do kit_w4).
+    anchors = {
+        pe = {{31, 94}, {34, 94}, {33, 94}, {41, 94}},
+        cabeca = {35, 14},
+        ferramenta = {50, 55},               -- acento jade do arco (costas)
+        emissao = {49, 55},
+    },
+    markers = { contact = {1, 4} },
+    sequences = { walk = {1, 4, loop = true} },
+    frameDuration = 1 / 9,
     layers = {
         {name = 'body', h = 4, albedo = {
             bodyFrame(1), bodyFrame(2), bodyFrame(3), bodyFrame(4),

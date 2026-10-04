@@ -1,4 +1,6 @@
--- AUREL — idle NORTE (de costas), 64x96, origem nos pés, 2f.
+-- AUREL — idle NORTE (de costas), 64x96, origem nos pés, 4f.
+-- f1 repouso | f2 respiro | f3 GESTO: cabeça sobe 1px (olha o Marco
+-- acima) + pano desdobra 1px | f4 respiro + cabeça assenta.
 -- Costas: cabelo grisalho puxado para trás cobre a nuca (âncora
 -- "cabelo claro recuado" mantida: massa clara 'g' sem rosto); gola
 -- 'z' vista por trás; sobrecasaca 'c' fecha o dorso inteiro; faixa
@@ -24,6 +26,12 @@ local function shift(map, dy, rmin, rmax)
         if rmin and r >= rmin and r <= rmax then t[r + dy] = s
         else t[r] = s end
     end
+    return t
+end
+local function patch(map, edits)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(edits) do t[r] = s end
     return t
 end
 
@@ -123,6 +131,20 @@ local band = {
     [55] = '............................kffffffffffk',
 }
 
+-- f3: olha o Marco acima — cabeça sobe 1px (pescoço reposto no vão);
+-- pano desdobra 1px à direita.
+local gesto = patch(shift(body, -1, 8, 29), {
+    [29] = '............................kssssk',
+    [61] = '...................kkkk..kcccccccccccccccck..kpppk',
+    [62] = '.........................kcccccccccccccccck..kpppk',
+    [63] = '.........................kttttttttttttttttk..kpppk',
+    [64] = '.........................kttttttttttttttttk..kpppk',
+    [65] = '.........................kttttttttttttttttk..kpppk',
+    [66] = '.........................kttttttttttttttttk...kkk',
+})
+-- f4: respiro com a cabeça assentando 1px a mais (sem olhos de costas).
+local respiroAssenta = shift(shift(body, 1, 8, 28), 1, 36, 56)
+
 return {
     name = 'npc_aurel_n',
     w = 64, h = 96,
@@ -151,8 +173,12 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 36, 56)),
+            R(gesto),
+            R(respiroAssenta),
         }},
         {name = 'trab', h = 8, albedo = {
+            R(band),
+            R(band),
             R(band),
             R(band),
         }},

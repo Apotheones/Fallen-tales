@@ -1,4 +1,6 @@
--- BENTO — idle LESTE (perfil olhando para a direita), 64x96, 2f.
+-- BENTO — idle LESTE (perfil olhando para a direita), 64x96, 4f.
+-- f1 repouso, f2 respiro, f3 gesto (concha levantada à frente,
+-- provando o ar), f4 variante (cabeça inclina 1px à frente).
 -- npc_bento_w = espelho via código.
 -- Perfil: a faixa 'F' corta a cabeça na horizontal (âncora segue
 -- lendo); rosto redondo com nariz largo e bigode 'u' à frente; a
@@ -41,6 +43,25 @@ local function overlay(ga, gb)
         out[i] = table.concat(row)
     end
     return table.concat(out, '\n')
+end
+-- Variante por linhas: rows sobrescreve o mapa base.
+local function patch(map, rows)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(rows) do t[r] = s end
+    return t
+end
+-- Deslocamento horizontal por faixa de linhas (cabeça que inclina).
+local function hshift(map, dx, rmin, rmax)
+    local t = {}
+    for r, s in pairs(map) do
+        if s and rmin and r >= rmin and r <= rmax then
+            if dx > 0 then t[r] = (string.rep('.', dx) .. s):sub(1, 64)
+            elseif dx < 0 then t[r] = s:sub(-dx + 1)
+            else t[r] = s end
+        else t[r] = s end
+    end
+    return t
 end
 
 local body = {
@@ -195,6 +216,30 @@ local towel = {
 
 local garb = overlay(R(apron), R(towel))
 
+--------------------------------------------------------------------------------
+-- f3 — gesto: a mão da frente sobe com a concha à altura do peito,
+-- cabo na horizontal = provar o ar antes de servir.
+--------------------------------------------------------------------------------
+local bodyGesto = patch(body, {
+    [52] = '.................kggk.gvvvvvvvvvvvvvvvvvvvgk.ksskcck',
+    [53] = '.................kggk.gvvvvvvvvvvvvvvvvvvvgk.ksskcck',
+    [54] = '.................kggk.gvvvvvvvvvvvvvvvvvvvgk.kkkkkkk',
+    [55] = '.................kggk.gvvvvvvvvvvvvvvvvvvvgk',
+    [56] = '.................kggk.gvvvvvvvvvvvvvvvvvvvgk',
+    [57] = '.................kggk.gvvvvvvvvvvvvvvvvvvvgk',
+    [58] = '.................kddk.gvvvvvvvvvvvvvvvvvvvgk',
+    [59] = '.................kddk.kppppppppppppppppppppk',
+    [60] = '.................kddk.kppppppppppppppppppppk',
+    [61] = '.................kkkk.kppppppppppppppppppppk',
+    [62] = '......................kppppppppppppppppppppk',
+    [63] = '......................kppppppppppppppppppppk',
+})
+
+--------------------------------------------------------------------------------
+-- f4 — variante: cabeça inclina 1px à frente, na direção da concha.
+--------------------------------------------------------------------------------
+local bodyFareja = hshift(body, 1, 12, 30)
+
 return {
     name = 'npc_bento_e',
     w = 64, h = 96,
@@ -228,7 +273,9 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 31, 57)),
+            R(bodyGesto),
+            R(bodyFareja),
         }},
-        {name = 'garb', h = 7, albedo = {garb, garb}},
+        {name = 'garb', h = 7, albedo = {garb, garb, garb, garb}},
     },
 }

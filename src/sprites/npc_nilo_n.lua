@@ -1,4 +1,6 @@
--- NILO — idle NORTE (de costas), 64x96, origem nos pés, 2f.
+-- NILO — idle NORTE (de costas), 64x96, origem nos pés, 4f.
+-- f1 repouso, f2 respiro, f3 gesto (dedo no instrumento, que nesta
+-- vista pende à esquerda), f4 variante (mecha balança 1px).
 -- Costas: massa de cabelo denso cobre a cabeça (a mecha alta segue
 -- despontando do topo — âncora lê de costas também); colete 'v'
 -- fecha o dorso com camisa 'y' nas bordas e capuz de bolso escondido
@@ -22,6 +24,25 @@ local function shift(map, dy, rmin, rmax)
     local t = {}
     for r, s in pairs(map) do
         if rmin and r >= rmin and r <= rmax then t[r + dy] = s
+        else t[r] = s end
+    end
+    return t
+end
+-- Variante por linhas: rows sobrescreve o mapa base.
+local function patch(map, rows)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(rows) do t[r] = s end
+    return t
+end
+-- Deslocamento horizontal por faixa de linhas (mecha que balança).
+local function hshift(map, dx, rmin, rmax)
+    local t = {}
+    for r, s in pairs(map) do
+        if s and rmin and r >= rmin and r <= rmax then
+            if dx > 0 then t[r] = (string.rep('.', dx) .. s):sub(1, 64)
+            elseif dx < 0 then t[r] = s:sub(-dx + 1)
+            else t[r] = s end
         else t[r] = s end
     end
     return t
@@ -119,6 +140,24 @@ local body = {
     [94] = '.........................kkkkkkk..kkkkkkk',
 }
 
+--------------------------------------------------------------------------------
+-- f3 — gesto: manga esquerda desce, punho pousa no instrumento e um
+-- dedo 's' fica sobre a junção cabo/corpo (dedo no instrumento).
+--------------------------------------------------------------------------------
+local bodyGesto = patch(body, {
+    [55] = '..................kyyk.kyyyyyyyyyyyyyyk.kssk',
+    [56] = '..................kyyk.krrrrrrrrrrrrrrrk.kssk',
+    [57] = '..................kyyk.kpppppppppppppppk.kssk',
+    [58] = '..................kyyk.kpppppppppppppppk.kssk',
+    [59] = '..................kssk.kpppppppppppppppk.kkkk',
+    [60] = '.................kWsk...kppppppk..kppppppk',
+})
+
+--------------------------------------------------------------------------------
+-- f4 — variante: a mecha alta balança 1px para o lado da peça.
+--------------------------------------------------------------------------------
+local bodyMecha = hshift(body, 1, 6, 9)
+
 return {
     name = 'npc_nilo_n',
     w = 64, h = 96,
@@ -149,6 +188,8 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 28, 54)),
+            R(bodyGesto),
+            R(bodyMecha),
         }},
     },
 }

@@ -373,6 +373,20 @@ return {
         j = {spec = 'jade', h = 9, e = 'jadeLight', ei = 0.8},
     },
 
+    -- Metadados W4: âncoras (1-based), sequência e exposição por frame.
+    anchors = {
+        pe = {34, 94},                       -- contato dos pés
+        cabeca = {35, 14},                   -- massa de cabelo nas costas
+        ferramenta = {50, 55},               -- acento jade do arco (atrás)
+        emissao = {49, 55},                  -- mesmo acento, emissivo
+    },
+    sequences = { idle = {1, 2, loop = true} },
+    frameDuration = {0.5, 0.5},
+    regions = {
+        costas = {x = 20, y = 38, w = 26, h = 24},
+        aljava = {x = 42, y = 50, w = 8, h = 29},
+    },
+
     layers = {
         {name = 'body', h = 4, albedo = {
             R(body),

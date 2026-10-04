@@ -1,4 +1,6 @@
--- TECA — idle NORTE (de costas), 64x96, origem nos pés, 2f.
+-- TECA — idle NORTE (de costas), 64x96, origem nos pés, 4f.
+-- f1 repouso, f2 respiro, f3 gesto (aponta explicando), f4 variante
+-- (cabeça inclina 1px na direção do gesto).
 -- Costas: cabelo preto grisalho cobre a cabeça; o nó baixo lateral
 -- passa para a direita da tela (mesmo lado do corpo); vestido 'w'
 -- fecha o dorso em triângulo; sobressaia 'o' por trás; o xale 'x'
@@ -39,6 +41,25 @@ local function overlay(ga, gb)
         out[i] = table.concat(row)
     end
     return table.concat(out, '\n')
+end
+-- Variante por linhas: rows sobrescreve o mapa base.
+local function patch(map, rows)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(rows) do t[r] = s end
+    return t
+end
+-- Deslocamento horizontal por faixa de linhas (cabeça que inclina).
+local function hshift(map, dx, rmin, rmax)
+    local t = {}
+    for r, s in pairs(map) do
+        if s and rmin and r >= rmin and r <= rmax then
+            if dx > 0 then t[r] = (string.rep('.', dx) .. s):sub(1, 64)
+            elseif dx < 0 then t[r] = s:sub(-dx + 1)
+            else t[r] = s end
+        else t[r] = s end
+    end
+    return t
 end
 
 local body = {
@@ -171,6 +192,31 @@ local xale = {
 
 local garb = overlay(R(overskirt), R(xale))
 
+--------------------------------------------------------------------------------
+-- f3 — gesto: aponta explicando, mesmo braço dobrado da frente sul
+-- (de costas o antebraço sai na horizontal à direita).
+--------------------------------------------------------------------------------
+local bodyGesto = patch(body, {
+    [48] = '..................kwwk.kwwwwwwwwwwwwwwk.kwwwwwsk',
+    [49] = '..................kwwk.kwwwwwwwwwwwwwwk.kwwwwwsk',
+    [50] = '..................kwwk.kwwwwwwwwwwwwwwk.kkkkkkkk',
+    [51] = '..................kwwk.kwwwwwwwwwwwwwwk',
+    [52] = '..................kwwk.kwwwwwwwwwwwwwwk',
+    [53] = '..................kwwk.kwwwwwwwwwwwwwwk',
+    [54] = '..................kwwk.kwwwwwwwwwwwwwwk',
+    [55] = '..................kwwk.kwwwwwwwwwwwwwwk',
+    [56] = '..................kllk.kwwwwwwwwwwwwwwk',
+    [57] = '..................kllk.kwwwwwwwwwwwwwwk',
+    [58] = '..................kssk.kwwwwwwwwwwwwwwk',
+    [59] = '..................kssk.kwwwwwwwwwwwwwwk',
+    [60] = '..................kkkk.kwwwwwwwwwwwwwwk',
+})
+
+--------------------------------------------------------------------------------
+-- f4 — variante: cabeça (massa de cabelo + nó) inclina 1px à direita.
+--------------------------------------------------------------------------------
+local bodyOlha = hshift(body, 1, 14, 27)
+
 return {
     name = 'npc_teca_n',
     w = 64, h = 96,
@@ -197,7 +243,9 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 31, 55)),
+            R(bodyGesto),
+            R(bodyOlha),
         }},
-        {name = 'garb', h = 6, albedo = {garb, garb}},
+        {name = 'garb', h = 6, albedo = {garb, garb, garb, garb}},
     },
 }

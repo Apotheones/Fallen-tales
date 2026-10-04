@@ -1,4 +1,6 @@
--- TECA — idle LESTE (perfil olhando para a direita), 64x96, 2f.
+-- TECA — idle LESTE (perfil olhando para a direita), 64x96, 4f.
+-- f1 repouso, f2 respiro, f3 gesto (aponta à frente explicando),
+-- f4 variante (cabeça baixa 1px, olhando os alunos).
 -- npc_teca_w = espelho via código.
 -- Perfil: cabelo 'h' na metade de trás com o nó baixo espremido
 -- atrás da nuca (à esquerda); rosto comprido à direita, nariz de
@@ -41,6 +43,13 @@ local function overlay(ga, gb)
         out[i] = table.concat(row)
     end
     return table.concat(out, '\n')
+end
+-- Variante por linhas: rows sobrescreve o mapa base.
+local function patch(map, rows)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(rows) do t[r] = s end
+    return t
 end
 
 local body = {
@@ -173,6 +182,20 @@ local xale = {
 
 local garb = overlay(R(overskirt), R(xale))
 
+--------------------------------------------------------------------------------
+-- f3 — gesto: aponta à frente. Antebraço sai do peito do vestido em
+-- linha reta, acima da ponta do xale; ponta 's' = dedo indicando.
+--------------------------------------------------------------------------------
+local bodyGesto = patch(body, {
+    [48] = '.......................kwwwwwwwwwwwkwwsk',
+    [49] = '.......................kwwwwwwwwwwwkwwsk',
+})
+
+--------------------------------------------------------------------------------
+-- f4 — variante: cabeça baixa 1px, olhando a turma mais baixa que ela.
+--------------------------------------------------------------------------------
+local bodyOlha = shift(body, 1, 14, 25)
+
 return {
     name = 'npc_teca_e',
     w = 64, h = 96,
@@ -199,7 +222,9 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 31, 55)),
+            R(bodyGesto),
+            R(bodyOlha),
         }},
-        {name = 'garb', h = 6, albedo = {garb, garb}},
+        {name = 'garb', h = 6, albedo = {garb, garb, garb, garb}},
     },
 }

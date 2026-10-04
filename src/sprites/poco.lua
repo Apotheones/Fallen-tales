@@ -5,6 +5,11 @@
 -- cantos da pedra, sem parecer novo demais.
 -- Relevo: boca 9-11 (anel alto), sarilho 11-12, abertura afunda (h 3),
 -- face frontal 8-9, base 6-7.
+--
+-- LOOP AMBIENTAL (frente micro-animações): f1..f4 — o fio de luz 'l'/'L'
+-- na água do fundo desliza em pingue-pongue (f1=f3 neutro, f2=f4 iguais
+-- por simetria: +0/+1/+2/+1). Anel, sarilho, balde e chão são estáticos;
+-- a camada 'agua' é a única com frames.
 
 local function L(s)
     assert(#s <= 64, 'linha de sprite > 64 colunas')
@@ -12,6 +17,43 @@ local function L(s)
 end
 local function grid(rows) return table.concat(rows, '\n') end
 local E = string.rep('.', 64)
+
+local W, H = 64, 96
+local function nova(fill)
+    local g = {}
+    for y = 1, H do
+        local r = {}
+        for x = 1, W do r[x] = fill end
+        g[y] = r
+    end
+    return g
+end
+local function set(g, x, y, ch)
+    if x >= 1 and x <= W and y >= 1 and y <= H then g[y][x] = ch end
+end
+local function lin(g, x, y, s)
+    for i = 1, #s do set(g, x + i - 1, y, s:sub(i, i)) end
+end
+local function str(g)
+    local t = {}
+    for y = 1, H do t[y] = table.concat(g[y]) end
+    return table.concat(t, '\n')
+end
+
+-- Fio de luz na água lá no fundo do poço: fica nas linhas 65-67 da boca
+-- ('a' abissal), livre do balde (cols 30-39, linhas 58-66). Desliza
+-- ±2 px à esquerda do balde e rebate na parede direita — shimmer, não
+-- correnteza.
+local function agua(fase)
+    local g = nova('.')
+    local dx = ({0, 1, 2, 1})[fase]
+    lin(g, 18 + dx, 65, 'll')        -- esquerda do balde
+    lin(g, 20 + dx, 66, 'llLl')
+    lin(g, 23 + dx, 67, 'lLll')
+    lin(g, 41 - dx, 65, 'lL')        -- rebate na parede direita
+    lin(g, 33 - dx, 67, 'lLl')       -- sob o balde, linha do fundo
+    return str(g)
+end
 
 return {
     name = 'poco',
@@ -45,6 +87,10 @@ return {
         u = {ramp = 'wood', step = 4, h = 11},
         U = {ramp = 'wood', step = 6, h = 11},
         i = {ramp = 'iron', step = 3, h = 11},
+        -- fio de luz na água do fundo (loop f1..f4): albedo claro de mar,
+        -- brilho frio contido — brilha sem competir com braseiro/lampião
+        l = {ramp = 'sea', step = 4, h = 2, e = 'sea.4', ei = 0.18},
+        L = {ramp = 'sea', step = 6, h = 2, e = 'sea.6', ei = 0.25},
         -- chão ao redor
         e = {ramp = 'earth', step = 3, h = 1},
     },
@@ -173,6 +219,14 @@ return {
                 E, E, E, E, E, E, E, E, E, E,            -- 77-86
                 E, E, E, E, E, E, E, E, E, E,            -- 87-96
             },
+        },
+        {   -- ÁGUA: fio de luz no fundo da boca — f1..f4 = loop de
+            -- shimmer (ver cabeçalho). Por cima do abismo 'a', atrás de
+            -- nada: só pixels livres da parede e do balde.
+            name = 'agua',
+            h = 2,
+            albedo = { agua(1), agua(2), agua(3), agua(4) },
+            emissive = { agua(1), agua(2), agua(3), agua(4) },
         },
     },
 }

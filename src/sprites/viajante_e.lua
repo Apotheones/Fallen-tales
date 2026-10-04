@@ -390,6 +390,23 @@ return {
         j = {spec = 'jade', h = 9, e = 'jadeLight', ei = 0.8},
     },
 
+    -- Metadados W4: âncoras (1-based), sequências, exposição (0.5s/frame =
+    -- o t*2 do hd_world). viajante_w espelha âncoras/regiões via código.
+    anchors = {
+        pe = {34, 94},                       -- contato dos pés
+        cabeca = {37, 16},                   -- massa de cabelo/rosto
+        ferramenta = {51, 50},               -- punhadura 'WW' do arco
+        mao_arco = {51, 52},                 -- punho na empunhadura
+        emissao = {{35, 48}, {35, 49}},      -- pingente jade no peito
+    },
+    sequences = { idle = {1, 2, loop = true} },
+    frameDuration = {0.5, 0.5},
+    regions = {
+        rosto = {x = 30, y = 14, w = 12, h = 21},
+        arco = {x = 45, y = 5, w = 11, h = 78},
+        aljava = {x = 20, y = 50, w = 8, h = 29},
+    },
+
     layers = {
         {name = 'body', h = 4, albedo = {
             R(body),

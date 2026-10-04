@@ -9,6 +9,11 @@
 -- tronco de 4-5 px não sustentava o porte — agora a copa são massas
 -- sobrepostas assimétricas com borda recortada e pingentes, e o tronco
 -- engrossa de 7 para 13 px com raízes abrindo mais largo.
+--
+-- LOOP AMBIENTAL (frente micro-animações): f1..f3 = copa no vento.
+-- f1 = base; f2/f3 deslocam cada massa de folha 1-2 px em fases
+-- diferentes (ONDA) e os pingentes pendulam — tronco, raízes e chão são
+-- estáticos (a camada 'copa' é a única com frames).
 
 local function L(s)
     assert(#s <= 64, 'linha de sprite > 64 colunas')
@@ -95,28 +100,45 @@ local function remendo(g, cx, cy, rx, ry, ch)
     end
 end
 
-local function copa()
+-- Deslocamento {dx,dy} por massa nas fases 2-3 do loop de vento (fase 1
+-- = repouso). Cada lobo recebe uma fase própria — a copa respira por
+-- partes em vez de deslizar como um bloco. Deltas f3->f1 <= 1-2 px.
+local ONDA = {
+    [2] = { {1, -1}, {0, -1}, {1, 0}, {1, 1}, {-1, 0}, {0, 1} },
+    [3] = { {-1, 0}, {1, 0}, {0, 1}, {-1, 0}, {0, -1}, {-1, 0} },
+}
+-- Pêndulo extra dos pingentes (somam ao deslocamento da massa-mãe).
+local PENDE = { [2] = {1, 1, 1, 1, 1}, [3] = {-1, -1, 0, 0, -1} }
+
+local function copa(fase)
     local g = nova()
+    local o = ONDA[fase] or {}
+    local p = PENDE[fase] or {}
+    local function d(i)
+        local v = o[i]
+        return v and v[1] or 0, v and v[2] or 0
+    end
     -- massas sobrepostas assimétricas: crista alta à esquerda, lobo
     -- direito mais baixo, lobo pendente e massa baixa ligando ao tronco
-    massa(g, 22, 13, 11, 9)   -- crista
-    massa(g, 23, 26, 17, 14)  -- massa principal esquerda
-    massa(g, 40, 28, 13, 12)  -- lobo direito
-    massa(g, 51, 38, 7, 8)    -- lobo pendente direito
-    massa(g, 12, 38, 8, 9)    -- lobo baixo esquerdo
-    massa(g, 30, 42, 11, 9)   -- massa baixa central (liga ao tronco)
-    -- pingentes sob a borda inferior
-    pingente(g, 10, 44, 7, 4)
-    pingente(g, 20, 50, 9, 5)
-    pingente(g, 33, 50, 8, 4)
-    pingente(g, 46, 46, 7, 3)
-    pingente(g, 55, 44, 5, 2)
-    -- folha seca: remendos quentes quebrando o verde por baixo
-    remendo(g, 18, 36, 4, 3, 'D')
-    remendo(g, 30, 40, 5, 3, 'd')
-    remendo(g, 42, 44, 4, 3, 'D')
-    remendo(g, 24, 46, 3, 2, 'D')
-    remendo(g, 50, 42, 3, 2, 'D')
+    local x1, y1 = d(1); massa(g, 22 + x1, 13 + y1, 11, 9)   -- crista
+    local x2, y2 = d(2); massa(g, 23 + x2, 26 + y2, 17, 14)  -- principal esq.
+    local x3, y3 = d(3); massa(g, 40 + x3, 28 + y3, 13, 12)  -- lobo direito
+    local x4, y4 = d(4); massa(g, 51 + x4, 38 + y4, 7, 8)    -- pendente dir.
+    local x5, y5 = d(5); massa(g, 12 + x5, 38 + y5, 8, 9)    -- baixo esq.
+    local x6, y6 = d(6); massa(g, 30 + x6, 42 + y6, 11, 9)   -- baixa central
+    -- pingentes sob a borda inferior: acompanham a massa-mãe + pêndulo
+    pingente(g, 10 + x5 + (p[1] or 0), 44 + y5, 7, 4)
+    pingente(g, 20 + x6 + (p[2] or 0), 50 + y6, 9, 5)
+    pingente(g, 33 + x6 + (p[3] or 0), 50 + y6, 8, 4)
+    pingente(g, 46 + x4 + (p[4] or 0), 46 + y4, 7, 3)
+    pingente(g, 55 + x4 + (p[5] or 0), 44 + y4, 5, 2)
+    -- folha seca: remendos quentes quebrando o verde por baixo —
+    -- seguem a massa onde moram (principal/baixa-central/lobo direito)
+    remendo(g, 18 + x2, 36 + y2, 4, 3, 'D')
+    remendo(g, 30 + x6, 40 + y6, 5, 3, 'd')
+    remendo(g, 42 + x3, 44 + y3, 4, 3, 'D')
+    remendo(g, 24 + x6, 46 + y6, 3, 2, 'D')
+    remendo(g, 50 + x4, 42 + y4, 3, 2, 'D')
     return str(g)
 end
 
@@ -240,9 +262,10 @@ return {
         {   -- COPA: massas de folhagem sobrepostas e assimétricas, geradas
             -- por elipse com luz própria — cada lobo tem seu topo claro e
             -- sua banda inferior escura; silhueta recortada por hash.
+            -- f1..f3 = loop de vento (ver cabeçalho).
             name = 'copa',
             h = 11,
-            albedo = copa(),
+            albedo = {copa(1), copa(2), copa(3)},
         },
         {   -- CHÃO: folhas caídas, tufo de capim e terra ao redor das
             -- raízes (camada por cima para o mato cobrir a ponta delas)

@@ -1,4 +1,6 @@
--- TECA — costureira, idle SUL, 64x96, origem nos pés, 2f.
+-- TECA — costureira, idle SUL, 64x96, origem nos pés, 4f.
+-- f1 repouso, f2 respiro, f3 gesto (aponta explicando, braço direito
+-- estendido), f4 variante (olha os alunos: olhos de lado).
 -- §5 do doc de personagens: 51-57a, 158cm — a mais baixa do elenco;
 -- corpo estreito de quadris largos: TRIÂNGULO comprido (ombros ~14px,
 -- barra ~28px). Pele castanha clara dourada (skin.4), rosto
@@ -46,6 +48,13 @@ local function overlay(ga, gb)
         out[i] = table.concat(row)
     end
     return table.concat(out, '\n')
+end
+-- Variante por linhas: rows sobrescreve o mapa base.
+local function patch(map, rows)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(rows) do t[r] = s end
+    return t
 end
 
 --------------------------------------------------------------------------------
@@ -192,6 +201,33 @@ local xale = {
 
 local garb = overlay(R(overskirt), R(xale))
 
+--------------------------------------------------------------------------------
+-- f3 — gesto: aponta explicando. Braço direito dobra no cotovelo e o
+-- antebraço sai na horizontal, ponta 's' = dedo indicando.
+--------------------------------------------------------------------------------
+local bodyGesto = patch(body, {
+    [48] = '..................kwwk.kwwwwwwwwwwwwwwk.kwwwwwsk',
+    [49] = '..................kwwk.kwwwwwwwwwwwwwwk.kwwwwwsk',
+    [50] = '..................kwwk.kwwwwwwwwwwwwwwk.kkkkkkkk',
+    [51] = '..................kwwk.kwwwwwwwwwwwwwwk',
+    [52] = '..................kwwk.kwwwwwwwwwwwwwwk',
+    [53] = '..................kwwk.kwwwwwwwwwwwwwwk',
+    [54] = '..................kwwk.kwwwwwwwwwwwwwwk',
+    [55] = '..................kwwk.kwwwwwwwwwwwwwwk',
+    [56] = '..................kllk.kwwwwwwwwwwwwwwk',
+    [57] = '..................kllk.kwwwwwwwwwwwwwwk',
+    [58] = '..................kssk.kwwwwwwwwwwwwwwk',
+    [59] = '..................kssk.kwwwwwwwwwwwwwwk',
+    [60] = '..................kkkk.kwwwwwwwwwwwwwwk',
+})
+
+--------------------------------------------------------------------------------
+-- f4 — olha os alunos: os dois olhos correm 1px para a esquerda.
+--------------------------------------------------------------------------------
+local bodyOlha = patch(body, {
+    [21] = '....................khhhkkseesssseesk',
+})
+
 return {
     name = 'npc_teca_s',
     w = 64, h = 96,
@@ -218,7 +254,9 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 31, 55)),
+            R(bodyGesto),
+            R(bodyOlha),
         }},
-        {name = 'garb', h = 6, albedo = {garb, garb}},
+        {name = 'garb', h = 6, albedo = {garb, garb, garb, garb}},
     },
 }

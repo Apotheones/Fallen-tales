@@ -1,4 +1,6 @@
--- SABELA — idle NORTE (de costas), 64x96, origem nos pés, 2f.
+-- SABELA — idle NORTE (de costas), 64x96, origem nos pés, 4f.
+-- f1 repouso | f2 respiro | f3 GESTO: olha o caderno (cabeça inclina
+-- 1px baixo+dir, caderno sobe 1px) | f4 respiro + cabeça assenta.
 -- Costas: tranças curtas puxadas para trás cobrem a cabeça inteira
 -- (sem rosto); casaco petróleo 'c' fecha o dorso com a linha dos
 -- dois painéis lendo na queda das costas; faixa 'r' na cintura;
@@ -22,6 +24,24 @@ local function shift(map, dy, rmin, rmax)
     local t = {}
     for r, s in pairs(map) do
         if rmin and r >= rmin and r <= rmax then t[r + dy] = s
+        else t[r] = s end
+    end
+    return t
+end
+local function patch(map, edits)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(edits) do t[r] = s end
+    return t
+end
+-- Desloca o conteúdo das linhas [rmin..rmax] em dx colunas (linhas de
+-- só-cabeça: o miolo todo anda junto).
+local function hshift(map, dx, rmin, rmax)
+    local t = {}
+    for r, s in pairs(map) do
+        if rmin and r >= rmin and r <= rmax then
+            if dx > 0 then t[r] = ('.'):rep(dx) .. s:sub(1, #s - dx)
+            else t[r] = s:sub(1 - dx) .. ('.'):rep(-dx) end
         else t[r] = s end
     end
     return t
@@ -78,8 +98,10 @@ local body = {
     [54] = '..................kcck..kcccccccccccccccck..kcck',
     [55] = '..................kcck..kcccccccccccccccck..kcck',
     [56] = '..................kcck..kcccccccccccccccck..kcck',
-    [57] = '..................kssk..kcccccccccccccccck..kssk',
-    [58] = '..................kssk..kcccccccccccccccck..kssk',
+    -- punho dir. engordado 1px p/ dentro, por cima da borda do caderno
+    -- (pele extra na linha do gesto — segura, não faixa solta)
+    [57] = '..................kssk..kcccccccccccccccck.ksssk',
+    [58] = '..................kssk..kcccccccccccccccck.ksssk',
     [59] = '........................kcccccccccccccccck..kssk',
     [60] = '........................kcccccccccccccccck..kssk',
     [61] = '........................kcccccccccccccccck..kssk',
@@ -124,7 +146,7 @@ local gear = {
     [55] = '........................krrrrrrrrrrrrrrrrk',
     [57] = '...........kQQk',
     [58] = '...........kQQk',
-    [59] = '...........kQqk..........................kPPPPk',
+    [59] = '...........kQqk..........................kPPssk',
     [60] = '...........kQqk..........................kPppPk',
     [61] = '...........kQqk..........................kPPPPk',
     [62] = '...........kQqk..........................kPPPPk',
@@ -141,6 +163,22 @@ local gear = {
     [73] = '...........kQqk',
     [74] = '............kQk',
 }
+
+-- f3: olha o caderno — cabeça desce 1px e inclina 1px p/ a direita
+-- (lado do caderno de costas); o caderno sobe 1px.
+local gesto = hshift(shift(body, 1, 8, 29), 1, 8, 30)
+local gearGesto = patch(gear, {
+    [58] = '...........kQQk..........................kPPssk',
+    [59] = '...........kQqk..........................kPppPk',
+    [60] = '...........kQqk..........................kPPPPk',
+    [61] = '...........kQqk..........................kPPPPk',
+    [62] = '...........kQqk..........................kPPPPk',
+    [63] = '...........kQqk..........................kPPPPk',
+    [64] = '...........kQqk...........................kkkk',
+    [65] = '...........kQqk',
+})
+-- f4: respiro com a cabeça assentando 1px a mais (sem olhos de costas).
+local respiroAssenta = shift(shift(body, 1, 8, 29), 1, 31, 56)
 
 return {
     name = 'npc_sabela_n',
@@ -171,9 +209,13 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 31, 56)),
+            R(gesto),
+            R(respiroAssenta),
         }},
         {name = 'gear', h = 7, albedo = {
             R(gear),
+            R(gear),
+            R(gearGesto),
             R(gear),
         }},
     },

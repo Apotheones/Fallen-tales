@@ -1,4 +1,6 @@
--- SABELA — registra/protege, idle SUL, 64x96, origem nos pés, 2f.
+-- SABELA — registra/protege, idle SUL, 64x96, origem nos pés, 4f.
+-- f1 repouso | f2 respiro | f3 GESTO: olha o caderno (cabeça inclina
+-- 1px baixo+esq, caderno sobe 1px) | f4 respiro + piscar.
 -- §6 do doc de personagens: 47-53a, 176cm, ALTA de ombros estreitos
 -- e pernas longas — a silhueta mais vertical e fina do elenco. Pele
 -- negra de tom profundo (skin.1; sombras em hair.1, olhos em osso
@@ -28,6 +30,24 @@ local function shift(map, dy, rmin, rmax)
     local t = {}
     for r, s in pairs(map) do
         if rmin and r >= rmin and r <= rmax then t[r + dy] = s
+        else t[r] = s end
+    end
+    return t
+end
+local function patch(map, edits)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(edits) do t[r] = s end
+    return t
+end
+-- Desloca o conteúdo das linhas [rmin..rmax] em dx colunas (linhas de
+-- só-cabeça: o miolo todo anda junto).
+local function hshift(map, dx, rmin, rmax)
+    local t = {}
+    for r, s in pairs(map) do
+        if rmin and r >= rmin and r <= rmax then
+            if dx > 0 then t[r] = ('.'):rep(dx) .. s:sub(1, #s - dx)
+            else t[r] = s:sub(1 - dx) .. ('.'):rep(-dx) end
         else t[r] = s end
     end
     return t
@@ -89,8 +109,10 @@ local body = {
     [54] = '..................kcck..kcccccllllllccccck..kcck',
     [55] = '..................kcck..kcccccllllllccccck..kcck',
     [56] = '..................kcck..kcccccllllllccccck..kcck',
-    [57] = '..................kssk..kcccccllllllccccck..kssk',
-    [58] = '..................kssk..kcccccllllllccccck..kssk',
+    -- punho esq. engordado 1px p/ fora (pele extra na linha do gesto:
+    -- segura o caderno, não uma faixa solta)
+    [57] = '.................ksssk..kcccccllllllccccck..kssk',
+    [58] = '.................ksssk..kcccccllllllccccck..kssk',
     [59] = '........................kcccccllllllccccck..kssk',
     [60] = '........................kcccccllllllccccck..kssk',
     [61] = '........................kcccccllllllccccck..kssk',
@@ -140,7 +162,7 @@ local gear = {
     [55] = '........................krrrrrrrrrrrrrrrrk',
     [57] = '.................................................kQQk',
     [58] = '.................................................kQQk',
-    [59] = '.................kPPPPk.........................kQqk',
+    [59] = '.................kPssPk.........................kQqk',
     [60] = '.................kPppPk.........................kQqk',
     [61] = '.................kPPPPk.........................kQqk',
     [62] = '.................kPPPPk.........................kQqk',
@@ -157,6 +179,24 @@ local gear = {
     [73] = '.................................................kQqk',
     [74] = '..................................................kQk',
 }
+
+-- f3: olha o caderno — cabeça desce 1px e inclina 1px p/ a esquerda
+-- (lado do caderno); o caderno sobe 1px ao encontro do olhar.
+local gesto = hshift(shift(body, 1, 8, 29), -1, 8, 30)
+local gearGesto = patch(gear, {
+    [58] = '.................kPssPk.........................kQQk',
+    [59] = '.................kPppPk.........................kQqk',
+    [60] = '.................kPPPPk.........................kQqk',
+    [61] = '.................kPPPPk.........................kQqk',
+    [62] = '.................kPPPPk.........................kQqk',
+    [63] = '.................kPPPPk.........................kQqk',
+    [64] = '..................kkkk..........................kQqk',
+    [65] = '.................................................kQqk',
+})
+-- f4: respiro com piscar — olhos claros 'ee' viram pálpebra 'dd'.
+local respiroPisca = shift(patch(body, {
+    [17] = '..........................ksddsssddsk',
+}), 1, 31, 56)
 
 return {
     name = 'npc_sabela_s',
@@ -187,9 +227,13 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 31, 56)),
+            R(gesto),
+            R(respiroPisca),
         }},
         {name = 'gear', h = 7, albedo = {
             R(gear),
+            R(gear),
+            R(gearGesto),
             R(gear),
         }},
     },

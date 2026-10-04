@@ -1,4 +1,6 @@
--- AUREL — idle LESTE (perfil olhando para a direita), 64x96, 2f.
+-- AUREL — idle LESTE (perfil olhando para a direita), 64x96, 4f.
+-- f1 repouso | f2 respiro | f3 GESTO: cabeça sobe 1px (olha o Marco
+-- acima) + pano desdobra 1px | f4 respiro + piscar.
 -- npc_aurel_w = espelho via código.
 -- Perfil: cabelo grisalho varrido para a nuca (metade de trás da
 -- cabeça é 'g'), rosto longo à direita com nariz reto saindo 1px;
@@ -26,6 +28,12 @@ local function shift(map, dy, rmin, rmax)
         if rmin and r >= rmin and r <= rmax then t[r + dy] = s
         else t[r] = s end
     end
+    return t
+end
+local function patch(map, edits)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(edits) do t[r] = s end
     return t
 end
 
@@ -126,6 +134,21 @@ local band = {
     [55] = '.............................kffffffffk',
 }
 
+-- f3: olha o Marco acima — cabeça sobe 1px (pescoço reposto no vão);
+-- pano desdobra 1px à direita.
+local gesto = patch(shift(body, -1, 8, 29), {
+    [29] = '............................ksssk',
+    [61] = '.....................kkkk.kccccttttttttcck.kpppk',
+    [62] = '..........................kccccttttttttcck.kpppk',
+    [63] = '..........................kttttttttttttk..kpppk',
+    [64] = '..........................kttttttttttttk..kpppk',
+    [65] = '..........................kttttttttttttk...kkk',
+})
+-- f4: respiro com piscar — olho 'e' vira pálpebra 'd'.
+local respiroPisca = shift(patch(body, {
+    [18] = '..........................kgggsssssdk',
+}), 1, 36, 56)
+
 return {
     name = 'npc_aurel_e',
     w = 64, h = 96,
@@ -156,8 +179,12 @@ return {
         {name = 'body', h = 4, albedo = {
             R(body),
             R(shift(body, 1, 36, 56)),
+            R(gesto),
+            R(respiroPisca),
         }},
         {name = 'trab', h = 8, albedo = {
+            R(band),
+            R(band),
             R(band),
             R(band),
         }},
