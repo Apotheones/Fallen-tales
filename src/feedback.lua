@@ -2,6 +2,7 @@ local flux = require('vendor.flux')
 local ripple = require('vendor.ripple')
 local Environment = require('src.environment')
 local Music = require('src.music')
+local Fx = require('src.fx_play')
 local Feedback = {}; Feedback.__index = Feedback
 local colors = {
     hit = {1, .76, .40}, death = {.98, .46, .34}, block = {.40, .94, .88},
@@ -53,7 +54,8 @@ end
 function Feedback.new()
     local self = setmetatable({particles = {}, rings = {}, popups = {}, landings = {},
         bolts = {}, tweens = flux.group(), time = 0, trauma = 0, flash = 0, banner = 0,
-        fade = 0, muted = false, reducedMotion = false, sounds = {}}, Feedback)
+        fade = 0, muted = false, reducedMotion = false, sounds = {},
+        fx = Fx.new()}, Feedback)
     -- Original, synthesized sounds: no samples or assets from the reference project.
     local specs = {hit = {155, .15, 'impact'}, death = {88, .3, 'fall'},
         block = {670, .23, 'metal'}, pulse = {240, .30, 'rise'}, ready = {880, .18, 'rise'},
@@ -111,6 +113,8 @@ function Feedback:consume(event, game)
     elseif kind == 'hit' then
         self:burst(x, y - 8, 11, color); self:ring(x, y, color, 22, .19)
         self.trauma = math.min(1, self.trauma + .28)
+        Fx.spawn(self.fx, 'fx_hit_jade', x, y - 8,
+            {reduced = self.reducedMotion, born = self.time})
         local popup = {x = x, y = y - 22, alpha = 1, size = 1.25, text = tostring(event.value), color = color,
             born = self.time}
         self.popups[#self.popups + 1] = popup
@@ -120,12 +124,20 @@ function Feedback:consume(event, game)
     elseif kind == 'death' then
         color = event.value == 'hole' and {.54, .46, .75} or event.value == 'crushed' and colors.pillarFall or color
         self:burst(x, y - 8, 22, color, 1.3); self:ring(x, y, color, 42, .34)
+        Fx.spawn(self.fx, 'fx_morte', x, y - 8,
+            {reduced = self.reducedMotion, born = self.time})
         if not self.reducedMotion then self.trauma = math.min(1, self.trauma + .23) end
         self:play(event.value == 'crushed' and 'pillarFall' or kind, event.value == 'hole' and .65 or 1)
     elseif kind == 'block' then
-        self:burst(x, y, 15, color); self:ring(x, y, color, 32, .25); self:play(kind)
+        self:burst(x, y, 15, color); self:ring(x, y, color, 32, .25)
+        Fx.spawn(self.fx, 'fx_bloco', x, y - 8,
+            {reduced = self.reducedMotion, born = self.time})
+        self:play(kind)
     elseif kind == 'armor' then
-        self:burst(x, y - 6, 9, color, .65, 'metal'); self:play(kind, 1, .45)
+        self:burst(x, y - 6, 9, color, .65, 'metal')
+        Fx.spawn(self.fx, 'fx_bloco', x, y - 6,
+            {reduced = self.reducedMotion, born = self.time})
+        self:play(kind, 1, .45)
         local popup = {x = x, y = y - 25, alpha = 1, size = .7, text = 'FLANQUEIE', color = color, born = self.time}
         self.popups[#self.popups + 1] = popup
         self.tweens:to(popup, .7, {y = y - 48, alpha = 0}):ease('quadout')
@@ -175,7 +187,10 @@ function Feedback:consume(event, game)
         self.trauma = math.min(1, self.trauma + .5); self:play('clear', .6, .55)
     elseif kind == 'ready' then
         self:burst(x, y - 15, 7, color, .45); self:ring(x, y, color, 25, .28); self:play(kind, 1, .4)
-    elseif kind == 'fire' then self:burst(x, y - 8, 4, color, .6); self:play(kind, 1, .4)
+    elseif kind == 'fire' then self:burst(x, y - 8, 4, color, .6)
+        Fx.spawn(self.fx, 'fx_tiro', x, y - 8,
+            {reduced = self.reducedMotion, born = self.time})
+        self:play(kind, 1, .4)
     elseif kind == 'shot' then
         -- Flecha em voo: a trajetória é anotada em células e o renderer a
         -- desenha como vulto — dourado nosso, rubro quando vem do inimigo.
@@ -234,6 +249,7 @@ function Feedback:consume(event, game)
             return kept
         end
         self.particles, self.rings = fresh(self.particles), fresh(self.rings)
+        self.fx.list = fresh(self.fx.list)
         self.popups, self.bolts = fresh(self.popups), fresh(self.bolts)
         for key, tile in pairs(self.landings or {}) do
             if not (tile.born and tile.born >= self.time) then self.landings[key] = nil end
@@ -298,6 +314,7 @@ function Feedback:update(dt, game, screen)
         local p = self.rings[i]; p.life = p.life - dt
         if p.life <= 0 then table.remove(self.rings, i) end
     end
+    Fx.update(self.fx, dt)
     for i = #self.popups, 1, -1 do if self.popups[i].alpha <= 0 then table.remove(self.popups, i) end end
     if self.bolts then
         for i = #self.bolts, 1, -1 do

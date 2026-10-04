@@ -87,15 +87,15 @@ function Kit.hash(x, y, s) return ((x * 73 + y * 151 + (s or 0) * 997) % 97) / 9
 -- a dominante de cada região esquenta por cima. Valores calibrados na
 -- praça: ~0.3 × nível 'amb' da nota, matiz do fill da região.
 Kit.AMBIENT = {
-    refugio = {.18, .20, .32},      -- sol SO âmbar + fill azul-violeta
-    colina = {.18, .19, .32},       -- crepúsculo violeta, sem dominante
-    necropole = {.12, .18, .15},    -- esverdeado úmido, ilhas de lamparina
-    saloes = {.16, .14, .11},       -- dourado escuro de teatro
-    oficinas = {.16, .17, .22},     -- cinza difuso + brasas
-    reservatorio = {.16, .21, .18}, -- calcário + reflexo verde da água
-    mercado = {.27, .23, .21},      -- ocre de toldo, mais claro
-    fundacao = {.20, .21, .27},     -- cal azulada, dia cinza
-    hub = {.18, .20, .32},
+    refugio = {.24, .26, .38},      -- sol SO âmbar + fill azul-violeta
+    colina = {.22, .24, .34},       -- crepúsculo violeta, sem dominante
+    necropole = {.16, .22, .19},    -- esverdeado úmido, ilhas de lamparina
+    saloes = {.20, .18, .15},       -- dourado escuro de teatro
+    oficinas = {.20, .21, .26},     -- cinza difuso + brasas
+    reservatorio = {.20, .25, .22}, -- calcário + reflexo verde da água
+    mercado = {.30, .26, .24},      -- ocre de toldo, mais claro
+    fundacao = {.24, .25, .31},     -- cal azulada, dia cinza
+    hub = {.24, .26, .38},
     neutro = {.18, .19, .26},
 }
 

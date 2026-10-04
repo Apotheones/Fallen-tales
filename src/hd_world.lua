@@ -11,6 +11,7 @@
 local G = love.graphics
 local Kit = require('src.hd_kit')
 local Lighting = require('src.lighting')
+local Fx = require('src.fx_play')
 local PostFX = require('src.postfx')
 local Props = require('src.props')
 local Pal = require('src.palettes')
@@ -49,6 +50,16 @@ local PROP_SPRITE = {
     marcaImpro = 'marca_impro', pecaInacabada = 'peca_inacabada',
     baldeTempera = 'balde_tempera', brasaForja = 'brasa_forja',
     canteiro = 'canteiro_a',
+    -- Bancos por feitio (Botica pediu divergência):
+    bancoCapela = 'banco_capela', bancoMadeira = 'banco_madeira',
+    bancoPedra = 'banco_pedra', bancoSerra = 'banco_serra',
+    bancoTerraco = 'banco_terraco',
+    -- Vida/ambiente (Traço redesign):
+    mesaLonga = 'mesa_longa', mesaOferenda = 'mesa_oferenda',
+    varal = 'varal_vento', vela = 'vela_votiva_anim',
+    tocha = 'tocha', chamine = 'fumaca_chamine',
+    madeiraParede = 'madeira_encostada', cargas = 'fardos',
+    ervasSecas = 'rack_ervas',
 }
 
 local function dirSuffix(f)
@@ -103,9 +114,14 @@ local function sheetsFor(self)
     put('terra', Kit.sheet('piso_terra', 64, 64, nil))
     put('grama', Kit.sheet('piso_grama', 64, 64, nil))
     put('caminho', Kit.sheet('piso_caminho', 64, 64, nil))
+    put('arena', Kit.sheet('piso_arena', 64, 64, nil))
     put('parede', Kit.sheet('parede', 64, 96, nil))
     put('porta', Kit.sheet('parede_porta', 64, 96, nil))
     put('pilar', Kit.sheet('pilar', 64, 96, nil))
+    -- Borda de transição de terreno (W5): overlay direcional por vizinho;
+    -- só existe se o def do Traço estiver assado (senão, sem overlay).
+    local tb = Kit.bakeViaDSL('piso_terra_borda')
+    if tb then s.trans_terra = tb; s.trans_terra_q = Kit.quads(tb) end
     put('propStub', Kit.stubSheet(64, 96, propStub))
     put('actorStub', Kit.stubSheet(64, 96, actorStub))
     for _, dir in ipairs({'s', 'n', 'e', 'w'}) do
@@ -131,26 +147,55 @@ local function quadsOf(s, sheet)
     return q
 end
 
+-- Props com animação ambiental (loop, não variante por seed).
+local ANIM_PROPS = {
+    fumaca_chamine = 5, varal_vento = 4.5, vela_votiva_anim = 5,
+    velas = 4, tocha = 6, brasa_forja = 5, braseiro = 5,
+}
+
 local function propQuad(self, s, prop)
     -- Ordem: mapa explícito (id, kind) → tenta o próprio id/kind como def —
     -- o Traço nomeia a maioria das defs pelo kind da ficha.
-    local name = PROP_SPRITE[prop.id] or PROP_SPRITE[prop.kind]
+    local defName = PROP_SPRITE[prop.id] or PROP_SPRITE[prop.kind]
     local c
-    if name then
-        c = s.propCache[name]
+    if defName then
+        c = s.propCache[defName]
         if c == nil then
-            c = Kit.bakeViaDSL(name) or false
-            s.propCache[name] = c
+            c = Kit.bakeViaDSL(defName) or false
+            s.propCache[defName] = c
+        end
+        -- Estado de gameplay (W5): <def>_<state> vence quando existe —
+        -- braseiro_quiet/varal_vento_quiet cobrem 'quiet'; 'lit'/'done'
+        -- sem def própria caem no def base (que já é o estado aceso).
+        if prop.state then
+            local sn = defName .. '_' .. prop.state
+            local sc = s.propCache[sn]
+            if sc == nil then
+                sc = Kit.bakeViaDSL(sn) or false
+                s.propCache[sn] = sc
+            end
+            if sc then c = sc end
         end
     else
         c = s.propCache[prop.id]
         if c == nil then
-            c = Kit.bakeViaDSL(prop.id) or Kit.bakeViaDSL(prop.kind) or false
+            -- snakeCase do id cobre ids de feitio: bancoSerra → banco_serra
+            local snake = prop.id and prop.id:gsub('%u', function(c)
+                return '_' .. c:lower() end)
+            c = Kit.bakeViaDSL(prop.id)
+                or (snake and Kit.bakeViaDSL(snake))
+                or Kit.bakeViaDSL(prop.kind) or false
             s.propCache[prop.id] = c
         end
     end
     if not c then return s.propStub, s.propStub_q[1] end
-    return c, quadsOf(s, c)[1]
+    local qs = quadsOf(s, c)
+    local fps = ANIM_PROPS[defName]
+    if fps and #qs > 1 then
+        local ph = (prop.x or 0) * .37 + (prop.y or 0) * .11
+        return c, qs[1 + math.floor((self.time or 0) * fps + ph) % #qs]
+    end
+    return c, qs[1]
 end
 
 local function entityQuad(self, s, ent, t)
@@ -166,26 +211,49 @@ local function entityQuad(self, s, ent, t)
             or (n > 1 and 1 + math.floor(t * 2) % n or 1)
         return sh, qs[math.min(f, n)]
     end
-    -- NPC real por id quando a DSL cobre a família (aurel/doro/bento/
-    -- nilo/sabela/teca): 'npc_<id>_<dir>'; sem def, cai no doro-legado e
-    -- depois no stub — troca automática quando o Traço assar mais.
+    -- NPC real por id: 'npc_<id>_trabalho' (gesto de ofício do Traço) tem
+    -- prioridade — a cena de vida pede o ator TRABALHANDO, não parado.
+    -- Sem trabalho assado cai no idle direcional, depois doro, depois stub.
     local npcId = ent.npc and ent.npc.id
     local sh, qs
     if npcId then
-        local key = 'npc_' .. npcId .. '_' .. dir
-        local c = s.propCache[key]
-        if c == nil then
-            c = Kit.bakeViaDSL(key) or false
-            s.propCache[key] = c
+        for _, key in ipairs({'npc_' .. npcId .. '_trabalho',
+                              'npc_' .. npcId .. '_' .. dir}) do
+            local c = s.propCache[key]
+            if c == nil then
+                c = Kit.bakeViaDSL(key) or false
+                s.propCache[key] = c
+            end
+            if c then sh, qs = c, quadsOf(s, c); break end
         end
-        if c then sh, qs = c, quadsOf(s, c) end
+    end
+    if not sh then
+        -- Figurante: família de trabalho por hash do id — gestos variados
+        -- (Aurel cuida, Doro martela, Sabela escreve, Bento mexe a panela)
+        -- sem clonar o mesmo boneco. 'sit/play/watch' ficam no idle doro.
+        local workActs = {hammer = 1, chop = 1, tend = 1, write = 1,
+            stir = 1, wash = 1, weed = 1, fill = 1, carry = 1, help = 1,
+            sweep = 1, tinker = 1, serve = 1}
+        local act = ent.npc and ent.npc.act
+        if act and workActs[act] then
+            local fam = {'doro', 'aurel', 'sabela', 'bento', 'nilo', 'teca'}
+            local who = fam[1 + math.floor(Kit.hash(
+                #(npcId or 'f') * 7, 13, 31) * 5.99)]
+            local key = 'npc_' .. who .. '_trabalho'
+            local c = s.propCache[key]
+            if c == nil then
+                c = Kit.bakeViaDSL(key) or false
+                s.propCache[key] = c
+            end
+            if c then sh, qs = c, quadsOf(s, c) end
+        end
     end
     if not sh then
         sh, qs = s['npc_' .. dir], s['npc_' .. dir .. '_q']
     end
     if sh.stub then return s.actorStub, s.actorStub_q[1] end
     local n = #qs
-    local f = n > 1 and 1 + math.floor(t * 2 + (ent.grid and ent.grid.x or 0)) % n or 1
+    local f = n > 1 and 1 + math.floor(t * 5 + (ent.grid and ent.grid.x or 0)) % n or 1
     return sh, qs[math.min(f, n)]
 end
 
@@ -271,12 +339,58 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
         local buf = ch == 'albedo' and hd.bufA or ch == 'normal' and hd.bufN
             or hd.bufE
         G.setCanvas(buf); G.clear(unpack(CLEAR[ch])); G.setColor(1, 1, 1, 1)
+        -- Mirante (Calina): faixa lavanda→creme além do parapeito — céu e
+        -- vale à distância dão identidade à cota +2. Só albedo: a dominante
+        -- não projeta sombra, então a faixa recebe só luz e gradeamento.
+        if ch == 'albedo' and map.id == 'hub' then
+            local x0, x1 = 4 * CELL, 38 * CELL
+            local bands = {
+                {.62, .54, .72}, {.76, .66, .78},
+                {.88, .80, .74}, {.93, .85, .72},
+            }
+            for i, c in ipairs(bands) do
+                G.setColor(c[1], c[2], c[3], 1)
+                G.rectangle('fill', x0, (i - 1) * CELL * 0.9 - CELL * 0.6,
+                    x1 - x0, CELL * 0.9 + 1)
+            end
+            -- Mar distante: linha fina de brilho logo acima do parapeito.
+            G.setColor(.80, .88, .92, .8)
+            G.rectangle('fill', x0, 2.45 * CELL, x1 - x0, 5)
+            G.setColor(1, 1, 1, 1)
+        end
         for _, tile in pairs(map.tiles or {}) do
             if tile.ground ~= 'hole' then
                 local kind = floorKind(map, tile.x, tile.y)
                 local sh = s[kind]
+                local px, py = (tile.x - 1) * CELL, (tile.y - 1) * CELL
                 G.draw(sh[ch], s[kind .. '_q'][Kit.variant(sh, tile.x, tile.y)],
-                    (tile.x - 1) * CELL, (tile.y - 1) * CELL)
+                    px, py)
+                -- Transição de terreno (W5): vizinho com overlay invade a
+                -- aresta — terra sobre laje, nunca o contrário. Cantos
+                -- internos (2 vizinhos ortogonais iguais) usam frame de
+                -- canto; arestas soltas usam frame direcional n/e/s/w.
+                local dir = {}
+                for d, o in ipairs({{0, -1}, {1, 0}, {0, 1}, {-1, 0}}) do
+                    local nk = floorKind(map, tile.x + o[1], tile.y + o[2])
+                    if nk ~= kind and s['trans_' .. nk]
+                        and not s['trans_' .. kind] then
+                        dir[d] = nk
+                    end
+                end
+                local usado = {}
+                for _, c in ipairs({{1, 2, 5}, {4, 1, 6}, {2, 3, 7}, {3, 4, 8}}) do
+                    if dir[c[1]] and dir[c[1]] == dir[c[2]] then
+                        G.draw(s['trans_' .. dir[c[1]]][ch],
+                            s['trans_' .. dir[c[1]] .. '_q'][c[3]], px, py)
+                        usado[c[1]], usado[c[2]] = true, true
+                    end
+                end
+                for d, nk in pairs(dir) do
+                    if not usado[d] then
+                        G.draw(s['trans_' .. nk][ch],
+                            s['trans_' .. nk .. '_q'][d], px, py)
+                    end
+                end
             end
         end
         for _, p in ipairs(pieces) do
@@ -292,13 +406,18 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                 local prop = p.p
                 if sh.stub and ((prop.w or 1) > 1 or (prop.h or 1) > 1) then
                     -- Massa real do placeholder: prop multi-célula sem def
-                    -- (casas, cercas grandes) lê como caixa solitária se
-                    -- o stub vier uma vez só — repete por célula.
+                    -- repete por célula COM jitter por hash — a grade de
+                    -- caixas 4×4 do quintal lia como tabuleiro (Mira r3);
+                    -- o deslocamento quebra o alinhamento sem mover o sim.
                     for cx = 0, (prop.w or 1) - 1 do
                         for cy = 0, (prop.h or 1) - 1 do
+                            local jx = (Kit.hash(prop.x + cx, prop.y + cy, 7)
+                                - .5) * 14
+                            local jy = (Kit.hash(prop.x + cx, prop.y + cy, 19)
+                                - .5) * 10
                             Kit.drawFeet(sh, q, ch,
-                                (prop.x + cx - 1) * CELL + CELL / 2,
-                                (prop.y + cy) * CELL)
+                                (prop.x + cx - 1) * CELL + CELL / 2 + jx,
+                                (prop.y + cy) * CELL + jy)
                         end
                     end
                 else
@@ -308,6 +427,13 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                 end
             else
                 local sh, q = entityQuad(renderer, s, p.e, t)
+                if ch == 'albedo' then
+                    -- Sombra de contato: mancha estável sob os pés, segue
+                    -- a posição visual — nunca re-projeta nem cintila.
+                    G.setColor(.033, .046, .071, .34)
+                    G.ellipse('fill', p.fx, p.fy - 2, 15, 5)
+                    G.setColor(1, 1, 1, 1)
+                end
                 Kit.drawFeet(sh, q, ch, p.fx, p.fy)
             end
         end
@@ -328,19 +454,56 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
             colina = {c = {.62, .70, 1.0}, i = 3.2},
         })[region] or {c = {1.0, .76, .44}, i = 6.5}
         L:addLight({x = -640, y = map.h * CELL + 560, z = 460,
-            color = sun.c, intensity = sun.i, radius = 8600})
+            color = sun.c, intensity = sun.i, radius = 8600,
+            shadow = false})
     else
         -- Interior sem dominante: o ambiente É a luz — frio-neutro legível
         -- (escuro legível != preto, Calina), os pools de brasa aquecem.
         L:setAmbient({.42, .41, .46})
     end
+    -- Mapa de luzes do Pátio (layout-refugio-hd §6): vivas = fogo real e
+    -- piscam suave (≤2 por tela); quietas = janela/lampião/jade, estáveis.
+    -- Coordenadas em célula do mapa 54×40, z/raio já em px-64.
+    local HUB_LIGHTS = map.id == 'hub' and {
+        {x = 24, y = 6, c = {1.0, .55, .22}, i = 1.7, r = 260, z = 92,
+            flicker = {amp = .05, speed = 4, phase = .3}},        -- braseiro
+        {x = 22, y = 19, c = {1.0, .62, .30}, i = 1.2, r = 192, z = 110}, -- lampião
+        {x = 21, y = 17.4, c = {.25, .85, .70}, i = .65, r = 173, z = 80}, -- jade
+        {x = 28, y = 16, c = {1.0, .72, .38}, i = .8, r = 160, z = 120}, -- janela pensão
+        {x = 31, y = 16, c = {1.0, .72, .38}, i = .7, r = 160, z = 120}, -- janela 2
+        {x = 15, y = 25.5, c = {1.0, .72, .38}, i = .7, r = 160, z = 120}, -- varanda
+        {x = 50, y = 25, c = {1.0, .50, .20}, i = 1.2, r = 192, z = 92,
+            flicker = {amp = .05, speed = 5, phase = 2.4}},       -- brasa forja
+    } or nil
+    if HUB_LIGHTS then
+        for _, ls in ipairs(HUB_LIGHTS) do
+            L:addLight({x = ls.x * CELL - 32, y = ls.y * CELL - 32, z = ls.z,
+                color = ls.c, intensity = ls.i, radius = ls.r,
+                flicker = ls.flicker})
+        end
+    end
     for _, prop in ipairs(map.props or {}) do
         local ax, ay, tint, r = Props.lightAnchor(prop)
         if ax then
-            L:addLight({x = ax * 2, y = ay * 2, z = 92,
-                color = tint and {tint[1], tint[2], tint[3]} or {1.0, .58, .24},
-                intensity = 1.6, radius = math.max((r or 14) * 2, 140),
-                flicker = {amp = .12, speed = 6, phase = prop.x * 1.7}})
+            -- Sem duplicar: âncoras próximas do mapa do Pátio já estão
+            -- representadas (o braseiro do mirante é o mesmo (24,6)).
+            local dup = false
+            if HUB_LIGHTS then
+                for _, ls in ipairs(HUB_LIGHTS) do
+                    local dx = ax * 2 - (ls.x * CELL - 32)
+                    local dy = ay * 2 - (ls.y * CELL - 32)
+                    if dx * dx + dy * dy < 96 * 96 then dup = true break end
+                end
+            end
+            if not dup then
+                -- Flicker suave: brasas respiram ~5% — ±12% a 6-7Hz lia
+                -- como estroboscopia na praça (bug reportado).
+                L:addLight({x = ax * 2, y = ay * 2, z = 92,
+                    color = tint and {tint[1], tint[2], tint[3]}
+                        or {1.0, .58, .24},
+                    intensity = 1.6, radius = math.max((r or 14) * 2, 140),
+                    flicker = {amp = .05, speed = 4, phase = prop.x * 1.7}})
+            end
         end
     end
     -- Occluders: muros (merge em fileiras), pilares, props com altura, gente.
@@ -382,12 +545,9 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                 w = (prop.w or 1) * CELL, h = 16, height = hgt * 2})
         end
     end
-    for _, p in ipairs(pieces) do
-        if p.kind == 'ent' then
-            L:addOccluder({x = p.fx - 15, y = p.fy - 7, w = 30, h = 12,
-                height = 90})
-        end
-    end
+    -- Atores NÃO lançam sombra projetada (política Vespa): a sombra do
+    -- jogador re-projetava a cada frame de movimento e cintilava junto à
+    -- luz. Todo ator recebe só a mancha de contato desenhada no albedo.
     L:update(t, renderer.reducedMotion)
 
     local P = hd.postfx
@@ -595,13 +755,9 @@ end
 -- Chão da arena por região de origem: laje de refúgio, terra do resto —
 -- a borda do tabuleiro delimita a área jogável (ground 'hole' = vazio).
 local function battleFloor(region, x, y)
-    if region == 'hub' or region == 'refugio' then
-        return Kit.hash(math.floor(x / 3), math.floor(y / 3), 21) < .30
-            and 'terra' or 'laje'
-    elseif region == 'colina' then
-        return Kit.hash(x, y, 22) < .30 and 'grama' or 'terra'
-    end
-    return 'terra'
+    -- piso_arena (Traço) dentro do tabuleiro, sempre — a arena é um lugar
+    -- próprio, não o piso da região ao redor.
+    return 'arena'
 end
 
 -- Offsets de apresentação da batalha, replicados do legado
@@ -861,6 +1017,10 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
             color(st.light); G.rectangle('fill',
                 f.x * 2 - 14, f.y * 2 - 14, f.w * 2 + 28, 4)
             G.rectangle('fill', f.x * 2 - 14, f.y * 2 - 14, 4, f.h * 2 + 28)
+            -- O tabuleiro é um lugar: laje mais escura e fechada dentro do
+            -- meio-fio — separa "arena" do chão vivo em volta.
+            color(C.ink, .34)
+            G.rectangle('fill', f.x * 2, f.y * 2, f.w * 2, f.h * 2)
             color(C.ink, .5)
             G.rectangle('fill', f.x * 2 - 2, f.y * 2 - 2, f.w * 2 + 4, 4)
             G.rectangle('fill', f.x * 2 - 2, f.y * 2 - 2, 4, f.h * 2 + 4)
@@ -869,10 +1029,20 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
             s.brazier = Kit.sheet('braseiro', 64, 96, nil)
             s.brazier_q = Kit.quads(s.brazier)
         end
+        if not s.tocha then
+            s.tocha = Kit.sheet('tocha', 64, 96, nil)
+            s.tocha_q = Kit.quads(s.tocha)
+        end
         for _, sgn in ipairs({-1, 1}) do
             local bx = sgn == -1 and f.x * 2 - 14 or (f.x + f.w) * 2 + 14
             local by = (f.y + f.h / 2) * 2
             Kit.drawFeet(s.brazier, s.brazier_q[1], ch, bx, by + 8)
+            -- Tochas nos cantos superiores da moldura (loop de chama).
+            local tq = s.tocha_q[1 + math.floor(
+                (renderer.time or 0) * 6 + sgn) % #s.tocha_q]
+            Kit.drawFeet(s.tocha, tq, ch,
+                sgn == -1 and (f.x - 12) * 2 or (f.x + f.w + 12) * 2,
+                (f.y + 2) * 2)
         end
         if ch ~= 'normal' then decals(ch == 'emissive' and .30 or 1) end
         for _, p in ipairs(pieces) do
@@ -910,9 +1080,19 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
                     sh, q = foeQuad(renderer, s, p.e, t)
                 end
                 if p.alpha then G.setColor(1, 1, 1, p.alpha) end
+                if ch == 'albedo' then
+                    color(C.ink, .34)
+                    G.ellipse('fill', p.fx, p.fy - 2, 15, 5)
+                    color({1, 1, 1})
+                end
                 Kit.drawFeet(sh, q, ch, p.fx, p.fy)
                 if p.alpha then G.setColor(1, 1, 1, 1) end
             end
+        end
+        -- FX autorados (W6): sheets DSL sobre os atores, por canal — o
+        -- emissivo entra no bufE e floresce no postfx junto com o resto.
+        if renderer.feedback and renderer.feedback.fx then
+            Fx.draw(renderer.feedback.fx, ch)
         end
     end
     channel('albedo'); channel('normal'); channel('emissive')
@@ -921,21 +1101,32 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
     -- Luzes: ambiente da região + os dois braseiros da moldura.
     local L = hd.lighting
     L:beginFrame()
-    -- Arena cerimonial: lê-se tática, não stealth — ambiente mais claro
-    -- que o mundo (os braseiros do flanco aquecem as bordas).
-    L:setAmbient({.48, .47, .55})
-    -- Lume cerimonial: sobre o centro do tabuleiro, z alto — modela as
-    -- unidades por normal map sem vencer os telegrafos de chão.
-    L:addLight({x = (f.x + f.w / 2) * 2, y = (f.y + f.h / 2) * 2 - 60,
-        z = 260, color = {.98, .88, .70}, intensity = 2.2,
-        radius = f.w * 2 + 220})
+    -- Arena de tocha (refaço): o ambiente fica baixo e neutro — quem
+    -- descreve o lugar são os pools de fogo. As unidades modelam por
+    -- normal map; o tabuleiro não vira "xadrez azul".
+    L:setAmbient({.17, .15, .19})
+    local cx, cy = (f.x + f.w / 2) * 2, (f.y + f.h / 2) * 2
+    -- Lume cerimonial alto sobre o tabuleiro — quente, modela as
+    -- unidades de frente sem apagar os telegrafos de chão.
+    L:addLight({x = cx, y = cy - 90, z = 240, color = {1.0, .74, .44},
+        intensity = 3.4, radius = f.w * 2 + 300, shadow = false})
+    -- Braseiros de flanco + tochas nos cantos da moldura: os pools de
+    -- fogo desenham a arena como lugar, não como tabuleiro iluminado.
     for _, sgn in ipairs({-1, 1}) do
         local bx = sgn == -1 and f.x * 2 - 18 or (f.x + f.w) * 2 + 18
         local by = (f.y + f.h / 2) * 2
-        L:addLight({x = bx, y = by - 20, z = 92, color = {1.0, .58, .24},
-            intensity = 1.8, radius = 340,
-            flicker = {amp = .14, speed = 7, phase = sgn * 2}})
+        L:addLight({x = bx, y = by - 20, z = 92, color = {1.0, .55, .22},
+            intensity = 2.2, radius = 420,
+            flicker = {amp = .06, speed = 4.5, phase = sgn * 2}})
+        L:addLight({x = sgn == -1 and (f.x - 14) * 2 or (f.x + f.w + 14) * 2,
+            y = (f.y - 10) * 2, z = 110, color = {1.0, .58, .25},
+            intensity = 1.6, radius = 360,
+            flicker = {amp = .05, speed = 4, phase = sgn * 3.1}})
     end
+    -- Fill frontal frio e raso: separa unidade do fundo escuro — a face
+    -- sul de cada peça lê sem perder o drama do fogo.
+    L:addLight({x = cx, y = cy + f.h + 40, z = 130, color = {.55, .62, .82},
+        intensity = 1.1, radius = f.w * 2 + 160, shadow = false})
     -- Occluders: pilares/caixotes + unidades.
     for _, tile in pairs(map.tiles or {}) do
         if tile.piece == 'pillar' then
@@ -946,12 +1137,9 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
                 y = (tile.y - 1) * CELL + 48, w = 48, h = 12, height = 56})
         end
     end
-    for _, p in ipairs(pieces) do
-        if p.kind == 'ent' then
-            L:addOccluder({x = p.fx - 15, y = p.fy - 7, w = 30, h = 12,
-                height = 90})
-        end
-    end
+    -- Atores NÃO lançam sombra projetada (política Vespa): a sombra do
+    -- jogador re-projetava a cada frame de movimento e cintilava junto à
+    -- luz. Todo ator recebe só a mancha de contato desenhada no albedo.
     L:update(t, renderer.reducedMotion)
 
     local P = hd.postfx
@@ -973,8 +1161,9 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
     -- nítidos por cima da imagem iluminada (camada de informação).
     G.push('all')
     G.scale(2, 2)
-    -- Grade do tabuleiro: informação tática — trama sutil sobre o piso.
-    color(C.ink, .24)
+    -- Grade do tabuleiro: informação tática mas sutil — o mandato pede
+    -- "arena que lê como lugar", não xadrez.
+    color(C.ink, .15)
     for _, tile in pairs(map.tiles or {}) do
         if tile.ground == 'floor' and not tile.protected then
             G.rectangle('line', (tile.x - 1) * 32 + .5, (tile.y - 1) * 32 + .5,

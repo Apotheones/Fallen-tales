@@ -352,7 +352,7 @@ function Scene:draw()
     -- Lampião/braseiro: eixo do calor humano, raio ~4 células, flicker leve.
     L:addLight({x = self.firePos.x, y = self.firePos.y, z = 46,
         color = {1.0, .55, .22}, intensity = 1.7, radius = 260,
-        flicker = {amp = .12, speed = 6, phase = 2.1}})
+        flicker = {amp = .06, speed = 4, phase = 2.1}})
     -- Janela acesa: terceiro ponto quente, pequeno e alto na fachada.
     L:addLight({x = self.windowPos.x, y = self.windowPos.y, z = 70,
         color = {1.0, .72, .38}, intensity = .9, radius = 190})
@@ -362,7 +362,7 @@ function Scene:draw()
     -- Lampião real (Traço): lamparina ember alta no poste, pool ~3 células.
     L:addLight({x = self.lampiaoPos.x, y = self.lampiaoPos.y - 70, z = 80,
         color = {1.0, .62, .28}, intensity = 1.1, radius = 210,
-        flicker = {amp = .10, speed = 5, phase = 4.4}})
+        flicker = {amp = .05, speed = 3.5, phase = 4.4}})
     local want = self._wantLights
     for i = L:lightCount() + 1, math.min(want, 8) do
         local ph = i * 2.1

@@ -2733,10 +2733,12 @@ function Render:campaignHud(campaign, w, h)
         -- o rodapé virou uma única linha fina de informação.
         local v = self.view
         local f = b.frame or {x = 0, y = 0, w = 0, h = 0}
-        local boardL = math.floor((v.x + (f.x - v.left) * v.scale) / 2)
-        local boardR = math.floor((v.x + (f.x + f.w - v.left) * v.scale) / 2)
-        local boardT = math.floor((v.y + (f.y - v.top) * v.scale) / 2)
-        local boardB = math.floor((v.y + (f.y + f.h - v.top) * v.scale) / 2)
+        -- frame é px-32; no caminho HD a view é px-64 — ajusta a unidade.
+        local fs = self.hdEnabled and 2 or 1
+        local boardL = math.floor((v.x + (f.x * fs - v.left) * v.scale) / 2)
+        local boardR = math.floor((v.x + (f.x + f.w) * fs - v.left) * v.scale / 2)
+        local boardT = math.floor((v.y + (f.y * fs - v.top) * v.scale) / 2)
+        local boardB = math.floor((v.y + (f.y + f.h) * fs - v.top) * v.scale / 2)
         local boardM = math.floor((boardT + boardB) / 2)
         -- PLACA DE ESTADO no canto superior direito: a fase física real da
         -- arena (AÇÃO em jogo, VAGA na pausa social, FIM no desfecho), VIDA
@@ -2810,7 +2812,9 @@ function Render:campaignHud(campaign, w, h)
             local col = math.floor((i - 1) / 9)
             local row = (i - 1) % 9
             local sx = qx - col * (cw + cgap)
-            local qy = boardT + 6 + row * (cw + cgap)
+            -- Deslocada 1 célula abaixo do topo (Mira r3): a fila de
+            -- iniciativa encostava no painel de missão no canto.
+            local qy = boardT + 6 + 32 + row * (cw + cgap)
             local dead = c.u.health.current <= 0
             local focused = b.mode == 'inspect' and b.inspect == i
             color(C.ink, .85); G.rectangle('fill', sx - 1, qy + 1, cw + 2, cw + 2)

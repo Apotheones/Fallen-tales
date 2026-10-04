@@ -175,11 +175,12 @@ local function shadowPoly(o, l, camX, camY)
     if dl < 0.001 then dx, dy, dl = 0, 1, 1 end -- luz exatamente acima: direção arbitrária estável
     dx, dy = dx / dl, dy / dl
     local H = o.height or 32
-    -- Comprimento físico h × distância-chão/z, uma regra só: teto de ~2.5×
-    -- a altura do occluder — peças baixas ficam naturalmente curtas (sombra
-    -- de contato alongada), peças altas não cruzam a praça.
+    -- Comprimento físico h × distância-chão/z, dupla trava: ~2× a altura
+    -- do occluder E teto absoluto de 3 células (192px) — parede de 340px
+    -- não vira faixa de 680px atravessando a praça; a sombra de pontual
+    -- fica próxima do pé (drama, não listra).
     local len = H * dl / math.max(l.z, 20)
-    len = math.max(H * 0.5, math.min(len, H * 2.5))
+    len = math.max(H * 0.5, math.min(len, H * 2, 192))
     local sx, sy = dx * len, dy * len
     local pts = {
         { x = o.x,         y = o.y },
@@ -207,6 +208,10 @@ end
 -- AABB do casco toca a vista? Occluder fora da tela (ou cuja sombra cai
 -- fora) não precisa rasterizar nada — no mapa real são ~100 occluders e
 -- só ~15 pousam na vista (corte de custo dominante do gameplay).
+-- Margem de cull (Vespa): ~2 células do lightmap além da borda — o
+-- conjunto de polígonos soma/subtrai longe da tela, nunca num passo
+-- de 1px da câmera. Também cobre o anel de penumbra além do casco.
+local CULL_MARGIN = 160
 local function hullVisible(verts, w, h)
     local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
     for i = 1, #verts, 2 do
@@ -216,7 +221,8 @@ local function hullVisible(verts, w, h)
         if y < minY then minY = y end
         if y > maxY then maxY = y end
     end
-    return maxX >= 0 and minX <= w and maxY >= 0 and minY <= h
+    return maxX >= -CULL_MARGIN and minX <= w + CULL_MARGIN
+        and maxY >= -CULL_MARGIN and minY <= h + CULL_MARGIN
 end
 
 -- Scratch reutilizado por occluder×luz×frame (M10): sem isso cada sombra
@@ -418,7 +424,9 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
     for i = 1, nLights do
         local l = self.lights[i]
         local set = {}
-        if l.z > 4 then
+        -- shadow=false: a fonte dominante (sol/céu) modela por normal
+        -- map + ambiente, sem sombra geométrica — drama é das pontuais.
+        if l.z > 4 and l.shadow ~= false then
             local rr = l.radius * 1.3
             for j = 1, #self.occluders do
                 local o = self.occluders[j]
@@ -534,10 +542,13 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
                         sh:send('sdir', { p.dx, p.dy })
                         sh:send('slen', math.max(p.len * ls, 1))
                         G.setShader(sh)
-                        sh:send('core', 0.80)
-                        G.polygon('fill', dilate(sv, ccx, ccy, 1.10,
+                        -- Penumbra mais larga (dilate 1.24) + núcleos
+                        -- suavizados: a transição na face do muro esmaece
+                        -- em vez de cortar (crítica Mira/Calina r3).
+                        sh:send('core', 0.70)
+                        G.polygon('fill', dilate(sv, ccx, ccy, 1.24,
                             dvScratch))
-                        sh:send('core', 0.275)
+                        sh:send('core', 0.24)
                         G.polygon('fill', sv)
                         G.setShader()
                     else
