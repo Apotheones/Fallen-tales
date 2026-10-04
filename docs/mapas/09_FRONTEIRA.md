@@ -1,6 +1,6 @@
 # Mapa 9 — Fronteira da Volta
 
-Ficha de implementação futura. Segue a [base narrativa](../BASE_NARRATIVA.md), as [cenas de revelação e finais](../CENAS_REVELACAO_E_FINAIS.md) e a [proposta de combate](../COMBATE_PROPOSTA.md). Personagens e nomes são propostas. Este mapa não apresenta Lia em pessoa, por transmissão ou aparição. Ausência/morte de civis abaixo é salvaguarda para revisão futura, não pedido de fogo amigo contra Calo ou moradores do hub.
+Ficha de implementação futura. Segue a [base narrativa](../BASE_NARRATIVA.md), as [cenas de revelação e finais](../CENAS_REVELACAO_E_FINAIS.md) e a [proposta de combate](../BATALHA_ACT_MERCY.md). Personagens e nomes são propostas. Este mapa não apresenta Lia em pessoa, por transmissão ou aparição. Ausência/morte de civis abaixo é salvaguarda para revisão futura, não pedido de fogo amigo contra Calo ou moradores do hub.
 
 ## Função e acesso
 

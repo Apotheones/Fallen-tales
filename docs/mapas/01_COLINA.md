@@ -1,6 +1,6 @@
 # Mapa 1 — Colina dos Sepultados
 
-Ficha de trabalho para revisão. Descreve o começo jogável, não uma sequência já implementada. Ler a [base narrativa](../BASE_NARRATIVA.md), o [hub inicial](../HUB_INICIAL.md) e o [plano](../PLANO_CAMPANHA.md).
+Ficha de trabalho para revisão. Descreve o começo jogável, não uma sequência já implementada. Ler a [base narrativa](../BASE_NARRATIVA.md), o [hub inicial](../PLANO_REFUGIO_ANDLAR.md) e o [plano](../PLANO_CAMPANHA.md).
 
 ## 1. Função, entrada e conclusão
 

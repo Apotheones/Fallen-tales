@@ -1,6 +1,6 @@
 # Mapa 10 — Túmulo Primeiro
 
-Ficha de implementação futura. Proposta coordenada com a [base narrativa](../BASE_NARRATIVA.md), o [roteiro dos finais](../CENAS_REVELACAO_E_FINAIS.md) e o [combate](../COMBATE_PROPOSTA.md). O acesso exige a resolução principal da fronteira, mapa 9. Não exige terminar quests, aprimorar todos os status ou reconciliar-se com o hub.
+Ficha de implementação futura. Proposta coordenada com a [base narrativa](../BASE_NARRATIVA.md), o [roteiro dos finais](../CENAS_REVELACAO_E_FINAIS.md) e o [combate](../BATALHA_ACT_MERCY.md). O acesso exige a resolução principal da fronteira, mapa 9. Não exige terminar quests, aprimorar todos os status ou reconciliar-se com o hub.
 
 Civis do hub não são atacáveis. Falas para acompanhantes ausentes/mortos e para Aurel morto antes deste mapa são salvaguardas de futuras revisões narrativas; não pedem essas mortes como eventos novos. Na campanha proposta, Aurel está disponível para o confronto final, e sua derrota não significa morte automática.
 

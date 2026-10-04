@@ -1,6 +1,6 @@
 # Mapa 8 — Necrópole dos Nomes
 
-Ficha de implementação futura. Nomes e encontros são propostas. Referências: [base narrativa](../BASE_NARRATIVA.md), [cenas de revelação](../CENAS_REVELACAO_E_FINAIS.md) e [combate](../COMBATE_PROPOSTA.md). Ausência/morte de civis abaixo é salvaguarda para revisão narrativa futura; não exige criar combate contra Rima ou pessoas do hub.
+Ficha de implementação futura. Nomes e encontros são propostas. Referências: [base narrativa](../BASE_NARRATIVA.md), [cenas de revelação](../CENAS_REVELACAO_E_FINAIS.md) e [combate](../BATALHA_ACT_MERCY.md). Ausência/morte de civis abaixo é salvaguarda para revisão narrativa futura; não exige criar combate contra Rima ou pessoas do hub.
 
 ## Função e acesso
 

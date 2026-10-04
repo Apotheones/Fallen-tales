@@ -25,7 +25,7 @@ Descrever entrada, lugares garantidos, ramificações opcionais, segredos e saí
 
 Marcar a sequência indispensável de acontecimentos e o que o gerador pode variar. Pistas essenciais precisam de fonte garantida e acessível em cada resolução prevista.
 
-> **Decisão de 02/10/2026:** os mapas da campanha são **autorais** — os "trechos que o gerador pode variar" mencionados nas fichas passam a ser seções desenhadas à mão. O gerador procedural permanece apenas no modo interno de três andares. Ver [MEGAPLAN_CAMPANHA.md](../MEGAPLAN_CAMPANHA.md).
+> **Decisão de 02/10/2026:** os mapas da campanha são **autorais** — os "trechos que o gerador pode variar" mencionados nas fichas passam a ser seções desenhadas à mão. O gerador procedural permanece apenas no modo interno de três andares. A divisão em reinos segue [PLANO_REFUGIO_ANDLAR.md](../PLANO_REFUGIO_ANDLAR.md).
 
 ## 4. NPCs
 

@@ -1,4 +1,9 @@
-# Arrowfallen — combate de tabuleiro em tempo real
+# Design do protótipo interno — legado
+
+Prática e expedição procedural em tempo real são usadas por testes e cenas
+internas. Para controles e progressão da Nova Campanha, consulte o
+[README](../README.md).
+
 
 Contrato atualizado em **01/10/2026**: apenas arco; SPACE carrega ao pressionar
 e dispara ao soltar pronta. Iluminação dinâmica e fog of war foram removidos.
@@ -217,7 +222,7 @@ volta aos tópicos. **Odete, a Zeladora** mora no refúgio e entrega uma
 carta na primeira conversa. Falas, tópicos e nomes são dados em
 `src/lore.lua`; a máquina de diálogo está em `src/dialogue.lua` e o balcão
 em `src/shop.lua`. A lore das Ruínas dos Ecos está em
-`docs/MEGAPLAN_LORE.md`, com as cinco etapas implementadas.
+este documento e `src/lore.lua`.
 
 A tecla **E** também lê **inscrições**: marcas de laje no piso de salas
 especiais, segredos e da sala inicial do andar 1. O prompt `E · LER` cede a
@@ -269,3 +274,62 @@ Busca cardinal valida desvios sem ferramentas em 100 seeds e direções de queda
 `test-results.txt` e `ui-test-results.txt` guardam a execução atual. Nenhum pacote
 portátil foi atualizado. Teclado humano, leitura durante combate e sensação de
 jogo continuam como aceite manual; automação não substitui essa sessão.
+
+
+## Terreno do protótipo — contrato preservado
+
+Estas regras pertencem ao modo interno em tempo real. Para a arena atual,
+consulte [BATALHA_ACT_MERCY.md](BATALHA_ACT_MERCY.md).
+
+### Interações
+
+| Regra | Comportamento |
+| --- | --- |
+| Alcance | Somente peça adjacente cardinal; sem diagonal ou mineração distante |
+| Toques | Uma pancada por toque WASD; hold e repetição do teclado não repetem |
+| Parede | Três hits; os dois primeiros mantêm estoque; o terceiro gasta uma picareta |
+| Estoque | 20 no começo da tentativa; zero impede qualquer progresso parcial |
+| Movimento após quebra | Terceiro hit não avança; solte e dê novo toque para entrar |
+| Chegar segurando WASD | Movimento para na peça; novo toque é necessário para minerar |
+| Persistência | Hits/peças/estoque permanecem nas revisitas; nova tentativa restaura |
+| Recuperação | Pancada 0,16s; no máximo uma intenção pendente, consumida uma vez |
+| Arco e guarda | Pancada espera ação do arco, cancela carga; guarda ativa impede mineração |
+| Pilar | Três hits; o terceiro lado fixa queda oposta ao lado de onde veio o hit |
+| Corpo caído | Até cinco células além da base; base abre; cada segmento é peça independente |
+| Aviso | 0,62s, direção e células congeladas; custo único no terceiro hit |
+| Segmento | Três hits e outra picareta para cada vão |
+| Sólido/portal/limite | Queda para antes do primeiro obstáculo |
+| Buraco na trajetória | Trecho terminal afunda; buraco permanece; sem ponte automática |
+| Ator no aviso | Esmagamento fatal; não cancelar queda para salvar ocupação/conectividade |
+| Entrada em buraco | Compromete queda e bloqueia novas ações; morte no pouso |
+| Prioridade fatal | Morte vem antes de limpeza, recompensa, vitória ou travessia |
+| Proteção | Moldura externa e estrutura dos portais; peças comuns internas mineráveis |
+| Força externa | Dash/explosão completam transformações sem gastar picaretas |
+| Tiro | Flechas comuns bloqueadas por sólidos e não mineram; passam sobre buracos |
+| Navegação | Busca voluntária usa piso seguro; dash comprometido pode entrar no buraco |
+
+Os números **20, 3, 5, 0,16s e 0,62s**, além da letalidade de esmagamento,
+ficam em valores nomeados para ajuste. Escudo, armadura e imunidade de dano
+não anulam morte por queda/esmagamento. Inimigos andando não usam ferramentas.
+
+
+### Células e transformações
+
+```lua
+room.tiles[key] = {x = x, y = y, ground = "floor", piece = "wall", hits = 0}
+```
+
+Solo distingue `floor`/`hole`; peça distingue `wall`/`pillar`/`fallen`/`portal`.
+Células vazias guardam só solo. Estado/direção/timer/células de queda pertencem
+ao pilar pendente. Não existem mapas mutáveis separados de walls/structures/
+rubble. Remover peça preserva solo. Células são dados da sala, não entidades ECS.
+
+`Rooms` oferece consultas distintas para piso seguro, entrada física e bloqueio
+de ataque. `Environment` transforma peças; `Game` guarda estoque e resolve
+movimento/morte; `Input`/`Systems.Player` separam toque/hold/soltura. Desenho
+apenas apresenta estado. A revisão da sala muda com transformações.
+
+Quedas simultâneas têm ordem por prazo/coordenada. Nova obstrução pode encurtar
+resultado; remover barreira durante aviso nunca amplia a área. Dash, explosão
+e tiros inimigos também ficam limitados ao aviso emitido. Explosão se expande
+pelo piso e para em buracos; paredes atingidas são terminais.

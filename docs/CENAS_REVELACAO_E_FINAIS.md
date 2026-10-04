@@ -1,6 +1,6 @@
 # Cenas de revelação e finais — A Cidade Que Me Enterrou
 
-Proposta de roteiro jogável, 02/10/2026. Segue a [base narrativa](BASE_NARRATIVA.md). Nomes, locais e marcações são propostas para revisão; nenhum sistema descrito aqui foi implementado. Exploração livre, com mudança para arena separada nos confrontos; sequência de turnos conforme a [proposta de combate](COMBATE_PROPOSTA.md).
+Proposta de roteiro jogável, 02/10/2026. Segue a [base narrativa](BASE_NARRATIVA.md). Nomes, locais e marcações são propostas para revisão; nenhum sistema descrito aqui foi implementado. Exploração livre, com mudança para arena separada nos confrontos; sequência de turnos conforme a [proposta de combate](BATALHA_ACT_MERCY.md).
 
 Civis do hub não são atacáveis na proposta atual. Menções à ausência ou morte anterior de acompanhantes são salvaguardas para futuras revisões narrativas, não instruções para implementar fogo amigo, mortes aleatórias ou confrontos novos contra esses personagens. Derrota de chefe não significa morte automática.
 

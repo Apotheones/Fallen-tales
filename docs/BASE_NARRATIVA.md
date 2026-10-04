@@ -1,6 +1,6 @@
 # Base comum de escrita — A Cidade Que Me Enterrou
 
-Versão de trabalho, 02/10/2026. As escolhas do usuário estão em [CONTEXTO_REIMAGINACAO.md](CONTEXTO_REIMAGINACAO.md). Os detalhes fixados aqui são **propostas coordenadas para este conjunto de fichas**, ainda revisáveis. Servem para evitar versões incompatíveis entre mapas.
+Versão de trabalho, 02/10/2026. A direção espacial atual está em [PLANO_REFUGIO_ANDLAR.md](PLANO_REFUGIO_ANDLAR.md). Os detalhes fixados aqui são **propostas coordenadas para este conjunto de fichas**, ainda revisáveis. Servem para evitar versões incompatíveis entre mapas.
 
 ## Pessoas e passado
 
@@ -41,7 +41,7 @@ Doro conhecia a sepultura e a história contada pelos moradores; não conhecia o
 
 Informações indispensáveis têm fontes estáveis e garantidas nos próprios lugares. Testemunhas acrescentam intenção e relações. Um NPC morto, uma negociação recusada ou uma subquest ignorada não apagam a compreensão do arco principal.
 
-## Dependências propostas
+## Dependências das fichas — estrutura anterior a adaptar
 
 1. Mapa 1 dá chegada, equipamento e hub; abre 2 e 3.
 2. Mapa 2 fornece ferramentas e o traçado da manutenção; abre 4.
@@ -56,7 +56,7 @@ Informações indispensáveis têm fontes estáveis e garantidas nos próprios l
 
 ## Regras de apresentação
 
-Exploração livre; arena de grid separada nos encontros. A [proposta de combate](COMBATE_PROPOSTA.md) usa intenções anunciadas, movimento de até duas células e uma ação por turno, sem cronômetro. É a base concreta para testar, ainda revisável; vida, dano, alcance e economia não estão fechados.
+Exploração livre; arena de grid separada nos encontros. O [contrato de combate](BATALHA_ACT_MERCY.md) usa intenções anunciadas, movimento de até três células antes de uma ação que encerra a fase, sem cronômetro. As regras atuais estão implementadas; balanceamento continua revisável.
 
 Morte não restaura o mapa nem desfaz escolhas. Entradas tardias reconhecem o que já se descobriu. 2/3, 4/5 e 7/8 têm variantes de diálogo para ambas as ordens.
 
@@ -71,3 +71,25 @@ O usuário escolheu **2–3 encontros comuns e um chefe nas regiões intermediá
 Cada encontro possui lugar e gatilho visíveis, passa para uma arena separada e volta ao ponto do mapa com resultado persistente. Não sortear luta a cada passo. Ameaças comuns reaproveitam os papéis de inimigos atuais; seus nomes, aparência e relação com a catástrofe ainda são propostas. Chefes podem ter acordo que evita ou interrompe confronto físico.
 
 Uma quest pode incluir o terceiro encontro comum como conflito opcional ou oferecer outro modo de resolver. Não adicionar sistematicamente duas lutas extras ao orçamento escolhido. Diálogo, inventário e pausa suspendem ações hostis; abrir uma conversa não pode deixar o jogador sofrendo ataques por baixo.
+
+
+## Direção escolhida e limites
+
+A campanha escolhida é **A Cidade Que Me Enterrou**: passado próprio e Lia
+organizam a descoberta pessoal, enquanto o pacto acompanha esse fio. Cartas
+não tornam a viajante uma carteira nem definem a missão principal. O refúgio
+foi preservado pelo assassinato ritual, mas sofre escassez e manutenção; os
+habitantes têm responsabilidades diferentes. A história aparece durante a
+exploração, nas relações, nos conflitos e nas mudanças da comunidade.
+
+Os dois finais escolhidos são sacrifício definitivo para preservar os
+vinculados ou restituição da própria vida, com o custo descrito acima e
+reencontro com Lia. Não há terceira solução oculta nem pontuação de bondade.
+Nomes, cronologia, natureza definitiva da catástrofe e cenas das fichas são
+propostas coordenadas; não representam aprovação criativa de cada detalhe.
+
+As dez fichas preservam arcos e requisitos narrativos da organização anterior.
+Sua geografia, divisão em regiões e dependências precisam ser adaptadas aos
+reinos: não autorizam dez destinos no Marco. Mapas da campanha são autorais,
+inclusive corredores intermediários; o gerador procedural fica no protótipo
+interno. Pistas essenciais, locais e recursos nunca dependem de sorteio.

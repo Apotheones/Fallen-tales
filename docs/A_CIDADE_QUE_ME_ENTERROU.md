@@ -10,9 +10,9 @@ Tratamento narrativo inicial de Arrowfallen — 02/10/2026.
 
 **Ainda proposto:** nomes, duração da ausência, profissão do protagonista, personagens adicionais, catástrofe, regras detalhadas do pacto e distribuição das regiões. Não são mudanças implementadas.
 
-Referências de trabalho: [contexto](CONTEXTO_REIMAGINACAO.md) e [estudo de storytelling](GUIA_STORYTELLING_UNDERTALE.md). Este tratamento foi desenvolvido com apoio de três subagentes, com revisão de lógica, relações e progressão.
+Referências de trabalho: [base narrativa](BASE_NARRATIVA.md) e [estudo de storytelling](GUIA_STORYTELLING_UNDERTALE.md). Este tratamento foi desenvolvido com apoio de três subagentes, com revisão de lógica, relações e progressão.
 
-**Detalhamento atual:** [base comum](BASE_NARRATIVA.md), [plano com dez fichas](PLANO_CAMPANHA.md), [hub](HUB_INICIAL.md), [cenas de revelação/finais](CENAS_REVELACAO_E_FINAIS.md) e [combate proposto](COMBATE_PROPOSTA.md). Esses documentos coordenam esta versão: Aurel é o executor/adversário final proposto; visitantes não recebem vínculo automaticamente; as responsabilidades e pistas possuem fontes garantidas.
+**Detalhamento atual:** [base comum](BASE_NARRATIVA.md), [plano com dez fichas](PLANO_CAMPANHA.md), [hub](PLANO_REFUGIO_ANDLAR.md), [cenas de revelação/finais](CENAS_REVELACAO_E_FINAIS.md) e [combate proposto](BATALHA_ACT_MERCY.md). Esses documentos coordenam esta versão: Aurel é o executor/adversário final proposto; visitantes não recebem vínculo automaticamente; as responsabilidades e pistas possuem fontes garantidas.
 
 ## 1. O conflito que sustenta a campanha
 
@@ -297,7 +297,7 @@ As escolhas alteram o quanto essa mudança acontece. A rota de sacrifício prese
 
 Exploração: movimento livre, colisões e interação com pessoas e objetos.
 
-Encontro: transição para uma cena separada usando o grid e a linguagem visual atuais. A [proposta de protótipo](COMBATE_PROPOSTA.md) controla apenas o protagonista: até duas células de movimento e uma ação; intenções adversárias anunciadas antes da resolução. Vida, dano, alcance e função das cartas continuam abertos. As regras não estão implementadas nem aprovadas definitivamente.
+Encontro: transição para uma cena separada usando o grid e a linguagem visual atuais. O [contrato atual](BATALHA_ACT_MERCY.md) controla apenas a viajante: até três células de movimento antes de uma ação que encerra a fase; intenções adversárias anunciadas antes da resolução. Combate está implementado; balanceamento e função das cartas permanecem revisáveis.
 
 Paredes bloqueiam linhas de tiro, pilares alteram cobertura, cristais e buracos produzem decisões táticas. Não conservar automaticamente a morte instantânea atual por esmagamento ou queda: essas consequências precisam ser reconsideradas para cada tipo de encontro.
 

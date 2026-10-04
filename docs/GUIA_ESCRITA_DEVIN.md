@@ -12,13 +12,13 @@ Este guia orienta o processo de escrita; não aprova fatos novos, não substitui
 
 Consultar, nesta ordem:
 
-1. [Contexto escolhido pelo usuário](CONTEXTO_REIMAGINACAO.md).
-2. [Base narrativa](BASE_NARRATIVA.md): passado, responsabilidades e regras do pacto.
-3. [Plano e fichas dos mapas](PLANO_CAMPANHA.md): lugar, missão, pessoas e consequências.
-4. [Hub](HUB_INICIAL.md) e [cenas de revelação e finais](CENAS_REVELACAO_E_FINAIS.md).
-5. [Combate](COMBATE_PROPOSTA.md), quando a cena envolve uma arena.
+1. [Refúgio e Andlar](PLANO_REFUGIO_ANDLAR.md): direção espacial atual.
+2. [Base narrativa](BASE_NARRATIVA.md): passado, responsabilidades e pacto.
+3. [Plano e fichas](PLANO_CAMPANHA.md): arcos preservados, geografia a adaptar.
+4. [Cenas de revelação e finais](CENAS_REVELACAO_E_FINAIS.md): roteiro futuro.
+5. [Combate e inventário](BATALHA_ACT_MERCY.md), quando a cena envolve arena.
 
-O [estudo de Undertale](GUIA_STORYTELLING_UNDERTALE.md) fundamenta a aproximação entre narrativa e ações do jogador. O [guia de implementação](GUIA_IMPLEMENTACAO_DEVIN.md) orienta a produção.
+O [estudo de Undertale](GUIA_STORYTELLING_UNDERTALE.md) fundamenta a aproximação entre narrativa e ações do jogador. O [contrato de QA](QA_MUNDOS.md) orienta a verificação.
 
 Antes da primeira fala, conferir quem sabe o quê, quando soube e o que já aconteceu. Doro não participou do crime; Sabela tentou impedir; Bento participou da decisão; Aurel executou o rito. Não mudar responsabilidades para tornar uma cena mais dramática. O protagonista lembra a perseguição: descobrir o passado para o jogador não exige amnésia. Lia não aparece presencialmente nem por comunicação ao vivo nos mapas 1–9; sua situação recente é descoberta principal de 9.
 
