@@ -35,11 +35,16 @@ function Region.load(id, legacy)
 end
 
 function Region.build(def)
+    -- map.encounters gets its own array: the def is a require-cached module
+    -- table, and appends to the shared list would leak into the next
+    -- Region.load (injected/test encounters surviving a region revisit).
+    local encounters = {}
+    for _, e in ipairs(def.encounters or {}) do encounters[#encounters + 1] = e end
     local map = {
         id = def.id, uid = def.uid, name = def.name, w = def.w, h = def.h,
         tiles = {}, props = {}, propCells = {}, hotspots = {}, npcs = {},
         exits = {}, doors = {}, arrivals = def.arrivals or {},
-        encounters = def.encounters or {},
+        encounters = encounters,
         spawn = def.spawn, cleared = true, campaignRegion = true,
         realm = def.realm, outdoor = def.outdoor, zones = def.zones,
         paths = def.paths,

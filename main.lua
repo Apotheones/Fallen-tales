@@ -109,7 +109,22 @@ function love.load(args)
         local px, py = arg:match("^%-%-pos=(%d+%.?%d*),(%d+%.?%d*)$")
         if px then warpTo = {x = tonumber(px), y = tonumber(py)} end
         local width, height = arg:match("^%-%-size=(%d+)x(%d+)$")
-        if width then love.window.setMode(tonumber(width), tonumber(height), {resizable = true, minwidth = 900, minheight = 680}) end
+        if width then
+            local wx, wy = love.window.getPosition()
+            love.window.setMode(tonumber(width), tonumber(height),
+                {resizable = true, minwidth = 900, minheight = 680, x = wx, y = wy})
+        end
+    end
+    -- Harness nao-interativo (teste/captura headless): stdout sem buffer p/
+    -- o log sobreviver a um kill, e erro fatal morre no console em vez de
+    -- pendurar na tela azul esperando input.
+    if testing or uiTesting or os.getenv("ARROWFALLEN_HEADLESS") then
+        io.stdout:setvbuf('no')
+        function love.errorhandler(msg)
+            io.stderr:write(debug.traceback(tostring(msg), 2) .. '\n')
+            io.stderr:flush()
+            os.exit(1)
+        end
     end
     if testing then
         local ok, err = xpcall(function()
@@ -147,6 +162,9 @@ function love.load(args)
         return
     end
     renderer = require("src.render").new()
+    -- Render HD da exploração (Fase 2): flag de ambiente — arte apresenta,
+    -- a simulação segue idêntica e o fallback é o render legado.
+    renderer.hdEnabled = os.getenv('ARROWFALLEN_HD') == '1'
     -- The arcade/three-floor session only exists for internal scenes and tests;
     -- the campaign is the real title flow.
     game = (showcase or uiTesting) and Game.new(42042, true) or nil

@@ -15,6 +15,7 @@ local G = love.graphics
 local Render = require('src.render')
 local Lighting = require('src.lighting')
 local PostFX = require('src.postfx')
+local Kit = require('src.hd_kit')
 
 local CELL = Render.CELL_HD
 local Scene = {}; Scene.__index = Scene
@@ -209,9 +210,10 @@ function Scene:assemble(v)
     -- base na linha do piso (y = 2*CELL) e as laterais sobem em passos de
     -- célula, a base de cada tile na base da célula.
     local function channel(ch)
-        G.clear(ch == 'albedo' and .03 or ch == 'normal' and .5 or 0,
-            ch == 'albedo' and .035 or ch == 'normal' and .5 or 0,
-            ch == 'albedo' and .05 or 1, 1)
+        local bg = ch == 'albedo' and {.03, .035, .05, 1}
+            or ch == 'normal' and {.5, .5, 1, 1}
+            or {0, 0, 0, 0} -- emissivo nasce PRETO: só a arte emite
+        G.clear(unpack(bg))
         G.setColor(1, 1, 1, 1)
         world(function()
             for cy = 2, self.room.h - 1 do for cx = 0, self.room.w - 1 do
@@ -274,7 +276,7 @@ function Scene:draw()
     end
     local L = self.lighting
     L:beginFrame()
-    L:setAmbient({.10, .115, .17})
+    L:setAmbient(Kit.ambient('refugio'))
     -- Key quente do braseiro (pontual, com flicker) e fill frio vindo do
     -- alto-esquerda — a sombra do ator nasce coerente com as duas.
     L:addLight({x = self.firePos.x, y = self.firePos.y, z = 44,

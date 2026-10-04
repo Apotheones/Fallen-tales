@@ -20,18 +20,20 @@ local Scene = {}; Scene.__index = Scene
 -- ── Pinturas stub (só até os defs do Traço chegarem) ───────────────────
 
 local function terraPaint(x, y)
-    local v = Kit.hash(x, y) * .035
-    local lump = Kit.hash(math.floor(x / 7), math.floor(y / 9), 3)
-    return {.20 + v + lump * .04, .165 + v, .125 + v * .8, 1}, 2 + lump * 2
+    -- Variação por MANCHA (não por texel): ruído por pixel vira confete sob
+    -- luz forte; a praça precisa de superfície tranquila que recua.
+    local v = Kit.hash(x, y) * .008
+    local lump = Kit.hash(math.floor(x / 11), math.floor(y / 9), 3)
+    return {.20 + v + lump * .035, .165 + v, .125 + v * .8, 1}, 2 + lump * 1.5
 end
 
 local function lajePaint(x, y)
     -- Lajotas de 32 com junta rebaixada; variação de tom por lajota quebra
     -- a leitura de grade que a Calina apontou na prova.
     local jx, jy = x % 32, y % 32
-    local joint = jx < 2 or jy < 2
+    local joint = jx < 1 or jy < 1
     local v = Kit.hash(math.floor(x / 32), math.floor(y / 32), 1) * .05
-    if joint then return {.13, .135, .16, 1}, 1 end
+    if joint then return {.16, .165, .19, 1}, 1.5 end
     return {.19 + v, .195 + v, .235 + v, 1}, 3
 end
 
@@ -184,6 +186,11 @@ function Scene.new(opts)
     S.aurel = Kit.sheet('npc_doro_s', 64, 96, aurelPaint)
     S.mesa = Kit.sheet('mesa', 64, 96, mesaPaint)
     S.cadeira = Kit.sheet('cadeira', 64, 96, cadeiraPaint)
+    -- Conjunto da Botica (vida-refugio-props §1): poço da rua + placa de
+    -- rotas — peças baixas e quentes; só o marco é alto e emissivo.
+    S.poco = Kit.sheet('poco', 64, 96, mesaPaint)
+    S.placa = Kit.sheet('placa', 64, 96, cadeiraPaint)
+    S.bancada = Kit.sheet('bancada', 64, 96, mesaPaint)
     self.sheets = S
     self.quads = {}
     for k, s in pairs(S) do self.quads[k] = Kit.quads(s) end
@@ -195,16 +202,31 @@ function Scene.new(opts)
     self.mesaPos = {x = 14.4 * CELL, y = 9.5 * CELL}
     self.cadeiraPos = {x = 13.8 * CELL, y = 10 * CELL}
     self.firePos = {x = self.brazierPos.x, y = self.brazierPos.y - 46}
-    self.sunPos = {x = -320, y = H + 280, z = 300}
+    self.sunPos = {x = -640, y = H + 560, z = 460}
     self.windowPos = {x = 10 * CELL + 32, y = 1.9 * CELL}
-    self.postfx:setRegion('refugio')
+    self.postfx:setRegion(os.getenv('ARROWFALLEN_REGION') or 'refugio')
     self.postfx:setVignette(.16)
+    -- Debug: cena composta crua, sem bloom/LUT/vignette. Envs içadas no
+    -- ctor (M5): os.getenv por frame é syscall por chamada.
+    if os.getenv('ARROWFALLEN_NO_POSTFX') then self.postfx.enabled = false end
+    self._dumpG = os.getenv('ARROWFALLEN_DUMP_GBUFFER') ~= nil
+    self._showLM = os.getenv('ARROWFALLEN_SHOW_LIGHTMAP') ~= nil
+    self._probe = os.getenv('ARROWFALLEN_PROBE_LIGHT') ~= nil
+    self._wantLights = tonumber(os.getenv('ARROWFALLEN_LIGHTS') or '0') or 0
     -- Ordem de pintor por y dos pés.
     self.pieces = {
         {key = 'marco', pos = self.marcoPos, occ = {x = -20, y = -10, w = 40, h = 14, height = 150}},
         {key = 'brazier', pos = self.brazierPos, occ = {x = -20, y = -10, w = 40, h = 14, height = 62}},
         {key = 'aurel', pos = self.aurelPos, occ = {x = -15, y = -7, w = 30, h = 12, height = 88}},
         {key = 'actor', pos = self.actorPos, occ = {x = -15, y = -7, w = 30, h = 12, height = 90}},
+        {key = 'bancada', pos = {x = 4.4 * CELL, y = 4.9 * CELL},
+            occ = {x = -24, y = -10, w = 48, h = 14, height = 46}, frame = 1},
+        {key = 'bancada', pos = {x = 15.4 * CELL, y = 8.6 * CELL},
+            occ = {x = -24, y = -10, w = 48, h = 14, height = 46}, frame = 2},
+        {key = 'poco', pos = {x = 12.6 * CELL, y = 6.4 * CELL},
+            occ = {x = -22, y = -12, w = 44, h = 18, height = 55}},
+        {key = 'placa', pos = {x = 2.2 * CELL, y = 8.3 * CELL},
+            occ = {x = -10, y = -6, w = 20, h = 10, height = 75}},
         {key = 'mesa', pos = self.mesaPos, occ = {x = -24, y = -14, w = 48, h = 18, height = 48}},
         {key = 'cadeira', pos = self.cadeiraPos, occ = {x = -13, y = -8, w = 26, h = 12, height = 40}},
     }
@@ -222,10 +244,13 @@ function Scene:assemble(v)
     local function world(fn)
         G.push('all'); G.translate(-v.left, -v.top); fn(); G.pop()
     end
+    local CLEAR = {
+        albedo = {.045, .055, .075, 1},   -- escuridão além da fachada
+        normal = {.5, .5, 1, 1},          -- plano, neutro (contrato DSL)
+        emissive = {0, 0, 0, 0},          -- PRETO: emissivo só onde a arte emite
+    }
     local function channel(ch)
-        G.clear(ch == 'albedo' and .045 or ch == 'normal' and .5 or 0,
-            ch == 'albedo' and .055 or ch == 'normal' and .5 or 0,
-            ch == 'albedo' and .075 or 1, 1)
+        G.clear(unpack(CLEAR[ch]))
         G.setColor(1, 1, 1, 1)
         world(function()
             -- piso por célula
@@ -235,20 +260,26 @@ function Scene:assemble(v)
                 local q = Q[kind == 'caminho' and 'caminho' or kind][Kit.variant(s, cx, cy)]
                 G.draw(s[ch], q, cx * CELL, cy * CELL)
             end end
-            -- fachada: dois pavimentos de parede; janelas e quina cega.
+            -- fachada: dois pavimentos de parede; UMA janela acesa (cx=10,
+            -- Calina) — as demais usam o mesmo albedo e nada no emissivo.
             for cx = 0, self.room.w - 1 do
-                local lo = cx == 17 and S.canto or (cx == 10 and S.janela
-                    or cx == 4 and S.janelaDark or S.wall)
-                local hi = cx == 17 and S.canto or (cx == 12 and S.janelaDark or S.wall)
-                G.draw(lo[ch], Q[cx == 17 and 'canto' or cx == 10 and 'janela'
-                    or cx == 4 and 'janelaDark' or 'wall'][1], cx * CELL, 2 * CELL - lo.h)
-                G.draw(hi[ch], Q[cx == 17 and 'canto' or cx == 12 and 'janelaDark'
-                    or 'wall'][1], cx * CELL, CELL - hi.h)
+                local loK = cx == 17 and 'canto' or (cx == 10 and 'janela'
+                    or cx == 4 and 'janelaDark' or 'wall')
+                local hiK = cx == 17 and 'canto'
+                    or (cx == 12 and 'janelaDark' or 'wall')
+                local lo = (ch == 'emissive' and loK == 'janelaDark')
+                    and S.wall or S[loK]
+                local hi = (ch == 'emissive' and hiK == 'janelaDark')
+                    and S.wall or S[hiK]
+                G.draw(lo[ch], Q[loK][1], cx * CELL, 2 * CELL - lo.h)
+                G.draw(hi[ch], Q[hiK][1], cx * CELL, CELL - hi.h)
             end
-            -- peças em ordem de pintor
+            -- peças em ordem de pintor; frame fixo para variantes de prop,
+            -- idle animado para atores
             for _, p in ipairs(self.pieces) do
                 local s = S[p.key]
-                Kit.drawFeet(s, Q[p.key][math.min(#Q[p.key], self:animFrame(p.key))],
+                local f = p.frame or math.min(#Q[p.key], self:animFrame(p.key))
+                Kit.drawFeet(s, Q[p.key][math.min(f, #Q[p.key])],
                     ch, p.pos.x, p.pos.y)
             end
             -- motes/pólen só dentro do feixe do sol (Calina): pontos quentes
@@ -299,7 +330,7 @@ function Scene:draw()
     self.view = v
     self:ensureBuffers(v.w, v.h)
     self:assemble(v)
-    if not self._dumped and os.getenv('ARROWFALLEN_DUMP_GBUFFER') then
+    if not self._dumped and self._dumpG then
         self._dumped = true
         for name, buf in pairs({albedo = self.bufAlbedo, normal = self.bufNormal,
             emissive = self.bufEmissive}) do
@@ -312,9 +343,9 @@ function Scene:draw()
     local L = self.lighting
     L:beginFrame()
     -- Sol baixo do SO: âmbar dominante, quase direcional; sombras longas NE.
-    L:setAmbient({.07, .09, .17})
+    L:setAmbient(Kit.ambient('refugio'))
     L:addLight({x = self.sunPos.x, y = self.sunPos.y, z = self.sunPos.z,
-        color = {1.0, .78, .5}, intensity = 7.0, radius = 3200})
+        color = {1.0, .76, .44}, intensity = 6.5, radius = 8600})
     -- Lampião/braseiro: eixo do calor humano, raio ~4 células, flicker leve.
     L:addLight({x = self.firePos.x, y = self.firePos.y, z = 46,
         color = {1.0, .55, .22}, intensity = 1.7, radius = 260,
@@ -324,8 +355,8 @@ function Scene:draw()
         color = {1.0, .72, .38}, intensity = .9, radius = 190})
     -- Jade do marco: emissivo já floresce no bloom; este é só o ar em volta.
     L:addLight({x = self.marcoPos.x, y = self.marcoPos.y - 56, z = 40,
-        color = {.25, .85, .70}, intensity = .4, radius = 140})
-    local want = tonumber(os.getenv('ARROWFALLEN_LIGHTS') or '0') or 0
+        color = {.25, .85, .70}, intensity = .65, radius = 175})
+    local want = self._wantLights
     for i = L:lightCount() + 1, math.min(want, 8) do
         local ph = i * 2.1
         L:addLight({x = 100 + (i * 173) % (self.worldW - 200),
@@ -342,16 +373,37 @@ function Scene:draw()
             w = o.w, h = o.h, height = o.height})
     end
     L:update(self.t, reduced)
-    if not self._dumpedLight and os.getenv('ARROWFALLEN_DUMP_LIGHTMAP') then
-        self._dumpedLight = true
-        local fd = L.lightmap:newImageData():encode('png')
-        local f = assert(io.open('screenshots/refugio-hd-lightmap.png', 'wb'))
-        f:write(fd:getString()); f:close()
-    end
     local P = self.postfx
     P:beginScene()
     L:compose(self.bufAlbedo, self.bufNormal, self.bufEmissive, v.left, v.top)
     P:endScene()
+    -- Debug: mostra o lightmap cru na tela (ARROWFALLEN_SHOW_LIGHTMAP=1).
+    if self._showLM then
+        G.clear(0, 0, 0, 1); G.setColor(1, 1, 1, 1)
+        G.draw(L.lightmap, 8, 8, 0, .5, .5)
+        return
+    end
+    if self._probe and not self._probed then
+        self._probed = true
+        local id = L.lightmap:newImageData()
+        for _, p in ipairs{{.25, .7}, {.5, .5}, {.8, .8}, {.5, .25}} do
+            local r, g, b = id:getPixel(math.floor(p[1] * L.lw),
+                math.floor(p[2] * L.lh))
+            print(string.format('[probe] light(%.2f,%.2f) = %.3f %.3f %.3f',
+                p[1], p[2], r, g, b))
+        end
+        local idA = self.bufAlbedo:newImageData()
+        local idS = P.scene:newImageData()
+        for _, p in ipairs{{.25, .7}, {.5, .5}, {.8, .8}, {.5, .25}} do
+            local x, y = math.floor(p[1] * idA:getWidth()),
+                math.floor(p[2] * idA:getHeight())
+            local ar, ag, ab = idA:getPixel(x, y)
+            local sr, sg, sb = idS:getPixel(x, y)
+            print(string.format(
+                '[probe] uv(%.2f,%.2f) albedo=%.3f %.3f %.3f  scene=%.3f %.3f %.3f',
+                p[1], p[2], ar, ag, ab, sr, sg, sb))
+        end
+    end
     P:setEmissive(self.bufEmissive)
     G.clear(.016, .024, .043, 1)
     P:present(v.x, v.y, v.scale)
