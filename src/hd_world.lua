@@ -755,19 +755,11 @@ local function sunMaskFor(L, map)
     return baked
 end
 
-function HDWorld.draw(renderer, campaign, v, map, shake)
-    local tFrame = love.timer.getTime()
-    shake = shake or {0, 0}
-    ensureBuffers(renderer, v.w, v.h)
-    local hd = renderer.hd
-    local s = sheetsFor(renderer)
-    local t = renderer.time or 0
-    local region = map.id or 'neutro'
-    local prevCanvas = G.getCanvas()
-
-    -- Camada por profundidade: tiles com peça (muro/pilar/portal), props e
-    -- entidades, mesma ordem de pintor do render legado.
-    local tFill = love.timer.getTime()
+-- Camada por profundidade: tiles com peça (muro/pilar/portal), props e
+-- entidades, mesma ordem de pintor do render legado. Núcleo do fill de
+-- HDWorld.draw — extraído p/ tools/mapshot reaproveitar a mesma lógica
+-- com vista = retângulo do mapa inteiro (visão-de-deus).
+local function fillGBuffer(renderer, hd, s, campaign, v, map, t)
     -- Células da vista + margem: peças altas (~96px sobre o pé) e decals
     -- encostam na borda sem piscar. A lista de células visíveis substitui
     -- a varredura do hash inteiro do mapa em cada um dos 3 canais.
@@ -1125,6 +1117,20 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
         end
     end
     channel('albedo'); channel('normal'); channel('emissive')
+end
+
+function HDWorld.draw(renderer, campaign, v, map, shake)
+    local tFrame = love.timer.getTime()
+    shake = shake or {0, 0}
+    ensureBuffers(renderer, v.w, v.h)
+    local hd = renderer.hd
+    local s = sheetsFor(renderer)
+    local t = renderer.time or 0
+    local region = map.id or 'neutro'
+    local prevCanvas = G.getCanvas()
+
+    local tFill = love.timer.getTime()
+    fillGBuffer(renderer, hd, s, campaign, v, map, t)
     G.setCanvas(prevCanvas)
     local fillMs = (love.timer.getTime() - tFill) * 1000
 
@@ -1986,5 +1992,26 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
             (L.stats and L.stats.shadowQuads) or 0))
     end
 end
+
+-- API de ferramenta (tools/mapshot, visão-de-deus): preenche o G-buffer
+-- para a vista dada — sem campanha real, atores dinâmicos ficam de fora
+-- (figurantes autorados entram: são decoração do mapa). Retorna hd.buf*.
+-- Caller desenha com translate(-v.left, -v.top) — para o mapa inteiro
+-- basta v.left = v.top = 0.
+function HDWorld.fillView(renderer, map, v)
+    v = v or {left = 0, top = 0, w = map.w * CELL, h = map.h * CELL}
+    ensureBuffers(renderer, v.w, v.h)
+    fillGBuffer(renderer, renderer.hd, sheetsFor(renderer),
+        {entities = function() return {} end}, v, map, renderer.time or 0)
+    G.setCanvas()
+    G.setColor(1, 1, 1, 1)
+    return renderer.hd
+end
+
+-- Superfícies de tool: o diagrama esquemático classifica pelo mesmo
+-- floorKind do render (zona > caminho > mix por hash).
+HDWorld.floorKind = floorKind
+HDWorld.pathInfo = pathInfo
+HDWorld.CELL = CELL
 
 return HDWorld

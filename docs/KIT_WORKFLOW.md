@@ -142,6 +142,7 @@ $LV = 'C:\Program Files\LOVE\lovec.exe'
 & $LV tools/kit_w6 --test            # checks de VFX (Cinzel)
 & $LV tools/kit_workbench --asset=<nome|arquivo.lua> ...   # bancada de revisão
 & $LV tools/kit_workbench --test     # self-check da bancada
+& $LV tools/mapshot --map=hub        # visão-de-deus: scheme + albedo (§9)
 ```
 
 Exit codes `kit_run`: 0 ok · 1 check · 2 autoria · 3 bake · 4 render · 5 uso.
@@ -212,3 +213,41 @@ evidência de revisão em `screenshots/` e o relatório não acusa erros.
 - `lovec tools/kit_workbench` é CLI headless (janela offscreen) — `--play`
   é o único modo que abre janela visível.
 - Report do workbench é texto greppável, não JSON.
+
+## 9. Mapshot — visão-de-deus dos mapas (tools/mapshot)
+
+Para quem edita `src/regions/*.lua` às cegas: o mapa inteiro num PNG só,
+fora da câmera de 1120x800. CLI headless como os demais tools (janela
+offscreen 64x64; erros vão para `screenshots/mapshot-erro.txt`).
+
+```powershell
+& $LV tools/mapshot --map=hub                    # gera scheme + albedo
+& $LV tools/mapshot --map=hub --mode=scheme      # só o diagrama
+& $LV tools/mapshot --map=colina --mode=albedo   # só a arte composta
+& $LV tools/mapshot --stamp=screenshots/x.png --map=hub --pos=21,20
+```
+
+Modos:
+
+- **`--mode=scheme`** → `screenshots/mapshot-<id>-scheme.png`: diagrama
+  top-down ~18px/célula (`--cellpx=N` muda). Célula colorida por
+  `floorKind` (a MESMA classificação do render: zona > caminho > mix por
+  hash), muros/pilares como massa, props como glyph colorido por
+  categoria (casa/fogo/água/genérico; sólido ganha contorno) com rótulo
+  curto, `paths` como polilinhas âmbar, `zones` com contorno+nome,
+  spawn/arrivals/exits/npcs/hotspots marcados, grade de coordenadas de
+  célula (1-based, igual ao def) nos eixos.
+- **`--mode=albedo`** → `screenshots/mapshot-<id>-albedo.png`: o mapa
+  inteiro composto com as sheets reais — reuso do fill do G-buffer de
+  `hd_world` (`HDWorld.fillView`), sem atores dinâmicos (figurantes
+  autorados entram). Escala reduzida p/ caber em 2048px no lado maior
+  (passos de 1/2/4/8).
+- **`--stamp=<arquivo.png>`** → `screenshots/mapshot-<base>-stamped.png`:
+  carimba uma captura existente com grade de células 64px + coordenadas
+  nos eixos — crítica endereçável ("olha a célula 22,19"). Câmera:
+  `--cam=wx,wy` em px de mundo, ou deduzida de `--pos=x,y` (célula do
+  jogador) + `--map=<id>` pela mesma fórmula de clamp do Render.layout.
+
+Flags: `--map`/`--region` (sinônimos), `--legacy` (hub → hub_legacy),
+`--mode`, `--cellpx`, `--stamp`, `--pos`, `--cam`, `--out` (prefixo).
+Exit: 0 ok · 1 erro.
