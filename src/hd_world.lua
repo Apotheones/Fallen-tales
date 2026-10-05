@@ -158,6 +158,14 @@ local function quadsOf(s, sheet)
     return q
 end
 
+-- Fachada dedicada por id de casa (ficha do Pátio × defs do Traço):
+-- a def casa_<papel> cobre a face sul inteira da massa no passo dela.
+local CASA_FACHADA = {
+    camasCasa = 'casa_pensao', capelaCasa = 'casa_capela',
+    cozinhaCasa = 'casa_cozinha', escolaCasa = 'casa_escola',
+    forjaCasa = 'casa_forja',
+}
+
 -- Figurantes ambientes por mapa (apresentação só — sem colisão/sim;
 -- a Botica pediu "+figurante" nas cenas de vida). Âncora em célula.
 local FIGURANTES = {
@@ -430,6 +438,11 @@ end
 
 local floorKind -- forward: manchaOverlay classifica por piso.
 
+-- Superfície de zona (ficha do Pátio) → sheet de piso. Só kinds com
+-- sheet assada entram — superfície desconhecida cai no mix da região.
+local ZONE_SURFACE = {stone = 'laje', grass = 'grama', gravel = 'terra',
+    earth = 'terra'}
+
 -- Decals de textura por região (Traço, terra_mancha): posições seedadas
 -- — f1/f2 desgaste junto a exits/paths/polos (bancada, marco), f3 seixo
 -- na beira de muro, f4 tufos sob fachada, f5 umidade junto a água, f6
@@ -493,6 +506,14 @@ end
 floorKind = function(map, x, y)
     local id = map.id
     if onPath(map, x, y) then return 'caminho' end
+    -- Superfície autoral da zona (Pátio): stone/grass/gravel decidem o
+    -- piso onde a ficha as declara; fora de zona, o mix por hash segue.
+    for _, z in ipairs(map.zones or {}) do
+        if x >= z.x and x < z.x + z.w and y >= z.y and y < z.y + z.h then
+            local zk = ZONE_SURFACE[z.surface]
+            if zk then return zk end
+        end
+    end
     if id == 'hub' then
         return Kit.hash(math.floor(x / 3), math.floor(y / 3), 21) < .30
             and 'terra' or 'laje'
@@ -885,19 +906,27 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                     local px0 = (prop.x - 1) * CELL
                     local pyTop = (prop.y - 1) * CELL
                     local pyBot = (prop.y + h - 1) * CELL
-                    local fach = prop.id == 'camasCasa' and 'casa_pensao'
-                        or nil
-                    local step = fach and 192 or 128
+                    -- Fachada dedicada por id (ficha do Pátio × Traço):
+                    -- casa_<papel> quando a def existe; senão a faixa a/b
+                    -- genérica. O passo vem da largura assada da def.
+                    local fName = CASA_FACHADA[prop.id]
+                    local fach
+                    if fName then
+                        fach = s.propCache[fName]
+                        if fach == nil then
+                            fach = Kit.bakeViaDSL(fName) or false
+                            s.propCache[fName] = fach
+                        end
+                        if fach == false then fach = nil end
+                    end
+                    local step = fach and fach.w or 128
                     -- telhado: fileiras 64px da crista até a fresta da fachada
                     local fachH = 96
-                    for _, k in ipairs({'casa_telhado',
-                        fach or 'casa_fachada_a', 'casa_fachada_b'}) do
-                        local c = s.propCache[k]
-                        if c == nil then
-                            c = Kit.bakeViaDSL(k) or false
-                            s.propCache[k] = c
+                    for _, k in ipairs({'casa_telhado', 'casa_fachada_a',
+                        'casa_fachada_b'}) do
+                        if s.propCache[k] == nil then
+                            s.propCache[k] = Kit.bakeViaDSL(k) or false
                         end
-                        s['_casa_' .. k] = c or nil
                     end
                     local tel = s.propCache['casa_telhado']
                     if tel then
@@ -911,9 +940,11 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                         end
                     end
                     for cx = 0, math.ceil(w * CELL / step) - 1 do
-                        local name = fach or (cx % 2 == 0
-                            and 'casa_fachada_a' or 'casa_fachada_b')
-                        local c = s.propCache[name]
+                        local c = fach
+                        if not c then
+                            c = s.propCache[cx % 2 == 0
+                                and 'casa_fachada_a' or 'casa_fachada_b']
+                        end
                         if c then
                             G.draw(c[ch], quadsOf(s, c)[1],
                                 px0 + cx * step, pyBot - c.h)
