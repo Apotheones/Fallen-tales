@@ -505,7 +505,97 @@ floorKind = function(map, x, y)
     return map.outdoor and 'terra' or 'laje'
 end
 
+-- Memoização por mapa: floorKind/pathFrac/pathInfo são puras de dados
+-- estáticos (tiles/paths não mudam durante o draw). Sem isso cada célula
+-- reavaliava ~35 segmentos de rota por canal — ~30k varreduras por frame.
+-- Nil precisa de sentinela (false); pathInfo devolve tabela viva que os
+-- consumidores só leem. Mesmo padrão de cache fraco de beirada/mancha.
+local geoCache = setmetatable({}, {__mode = 'k'})
+local function geoMemo(map)
+    local c = geoCache[map]
+    if not c then
+        c = {frac = {}, info = {}, kind = {}}
+        geoCache[map] = c
+    end
+    return c
+end
+
+local pathFracRaw, pathInfoRaw, floorKindRaw = pathFrac, pathInfo, floorKind
+pathFrac = function(map, x, y)
+    local c = geoMemo(map).frac
+    local k = x .. ':' .. y
+    local v = c[k]
+    if v == nil then
+        v = pathFracRaw(map, x, y) or false
+        c[k] = v
+    end
+    return v or nil
+end
+pathInfo = function(map, x, y)
+    local c = geoMemo(map).info
+    local k = x .. ':' .. y
+    local v = c[k]
+    if v == nil then
+        v = pathInfoRaw(map, x, y) or false
+        c[k] = v
+    end
+    return v or nil
+end
+floorKind = function(map, x, y)
+    local c = geoMemo(map).kind
+    local k = x .. ':' .. y
+    local v = c[k]
+    if v == nil then
+        v = floorKindRaw(map, x, y)
+        c[k] = v
+    end
+    return v
+end
+
+-- Occluders derivados de tiles (muros em fileiras + pilares): geometria
+-- estática do mapa — assada uma vez por mapa, reutilizada por frame.
+local occCache = setmetatable({}, {__mode = 'k'})
+local function tileOccluders(map)
+    local o = occCache[map]
+    if o then return o end
+    o = {}
+    local wallRuns = {}
+    for _, tile in pairs(map.tiles or {}) do
+        if tile.piece == 'wall' or tile.piece == 'portal' then
+            wallRuns[#wallRuns + 1] = tile
+        end
+    end
+    table.sort(wallRuns, function(a, b)
+        return a.y < b.y or (a.y == b.y and a.x < b.x) end)
+    local run = nil
+    for _, tile in ipairs(wallRuns) do
+        local px, py = (tile.x - 1) * CELL, (tile.y - 1) * CELL
+        if run and py == run.y and px == run.x + run.w then
+            run.w = run.w + CELL
+        else
+            if run then
+                o[#o + 1] = {x = run.x, y = run.y - 20, w = run.w,
+                    h = 60, height = 192}
+            end
+            run = {x = px, y = py, w = CELL}
+        end
+    end
+    if run then
+        o[#o + 1] = {x = run.x, y = run.y - 20, w = run.w,
+            h = 60, height = 192}
+    end
+    for _, tile in pairs(map.tiles or {}) do
+        if tile.piece == 'pillar' then
+            o[#o + 1] = {x = (tile.x - 1) * CELL + 16,
+                y = (tile.y - 1) * CELL + 44, w = 32, h = 16, height = 150}
+        end
+    end
+    occCache[map] = o
+    return o
+end
+
 function HDWorld.draw(renderer, campaign, v, map, shake)
+    local tFrame = love.timer.getTime()
     shake = shake or {0, 0}
     ensureBuffers(renderer, v.w, v.h)
     local hd = renderer.hd
@@ -516,28 +606,64 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
 
     -- Camada por profundidade: tiles com peça (muro/pilar/portal), props e
     -- entidades, mesma ordem de pintor do render legado.
+    local tFill = love.timer.getTime()
+    -- Células da vista + margem: peças altas (~96px sobre o pé) e decals
+    -- encostam na borda sem piscar. A lista de células visíveis substitui
+    -- a varredura do hash inteiro do mapa em cada um dos 3 canais.
+    local PAD = 2
+    local vL, vT = v.left, v.top
+    local vR, vB = v.left + v.w, v.top + v.h
+    local cx0 = math.max(1, math.floor(vL / CELL) + 1 - PAD)
+    local cx1 = math.min(map.w or 1, math.ceil(vR / CELL) + PAD)
+    local cy0 = math.max(1, math.floor(vT / CELL) + 1 - PAD)
+    local cy1 = math.min(map.h or 1, math.ceil(vB / CELL) + PAD)
     local pieces = {}
-    for _, tile in pairs(map.tiles or {}) do
-        if tile.piece then
-            pieces[#pieces + 1] = {kind = 'tile', t2 = tile,
-                depth = tile.y * CELL, sx = tile.x * CELL}
+    local tilesInView = {}
+    if map.tiles then
+        for y = cy0, cy1 do
+            for x = cx0, cx1 do
+                local tile = map.tiles[x .. ':' .. y]
+                if tile then
+                    tilesInView[#tilesInView + 1] = tile
+                    if tile.piece then
+                        pieces[#pieces + 1] = {kind = 'tile', t2 = tile,
+                            depth = tile.y * CELL, sx = tile.x * CELL}
+                    end
+                end
+            end
         end
     end
     for _, prop in ipairs(map.props or {}) do
         if prop.state ~= 'taken' and not Props.bakesToGround(prop) then
-            pieces[#pieces + 1] = {kind = 'prop', p = prop,
-                depth = (prop.y + (prop.h or 1) - 1) * CELL,
-                sx = prop.x * CELL}
+            -- AABB do footprint + 2 cél p/ cima: sprites de 96px ancorados
+            -- no pé invadem a vista pela borda inferior.
+            local px0 = (prop.x - 1) * CELL
+            local px1 = (prop.x + (prop.w or 1) - 1) * CELL
+            local py0 = (prop.y - 1) * CELL - 2 * CELL
+            local py1 = (prop.y + (prop.h or 1) - 1) * CELL + CELL
+            if px1 > vL and px0 < vR and py1 > vT and py0 < vB then
+                pieces[#pieces + 1] = {kind = 'prop', p = prop,
+                    depth = (prop.y + (prop.h or 1) - 1) * CELL,
+                    sx = prop.x * CELL}
+            end
         end
     end
     for i, fig in ipairs(FIGURANTES[map.id] or {}) do
-        pieces[#pieces + 1] = {kind = 'fig', fig = fig,
-            depth = fig.y * CELL, sx = fig.x * CELL, i = i}
+        local fx, fy = fig.x * CELL, fig.y * CELL
+        if fx + CELL > vL and fx - CELL < vR
+            and fy + CELL > vT and fy - 2 * CELL < vB then
+            pieces[#pieces + 1] = {kind = 'fig', fig = fig,
+                depth = fig.y * CELL, sx = fig.x * CELL, i = i}
+        end
     end
     for _, ent in ipairs(campaign:entities()) do
         local fx, fy = visualPos(ent)
-        pieces[#pieces + 1] = {kind = 'ent', e = ent,
-            depth = fy * 2, sx = fx, fx = fx * 2, fy = fy * 2}
+        local px, py = fx * 2, fy * 2
+        if px + 96 > vL and px - 96 < vR
+            and py + CELL > vT and py - 2 * CELL < vB then
+            pieces[#pieces + 1] = {kind = 'ent', e = ent,
+                depth = py, sx = fx, fx = px, fy = py}
+        end
     end
     table.sort(pieces, function(a, b)
         return a.depth < b.depth or (a.depth == b.depth and a.sx < b.sx)
@@ -559,8 +685,10 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
         -- povoado (tinta) — sem as silhuetas a banda lê como listra (Mira).
         -- Só albedo: o sol a tinge, a dominante não projeta sombra.
         if ch == 'albedo' and map.outdoor then
-            local x0 = -4 * CELL
-            local x1 = (map.w + 4) * CELL
+            -- Céu/silhuetas cobrem só a faixa da vista — mesmo desenho,
+            -- sem rasterizar o mapa inteiro.
+            local x0 = math.floor((vL - CELL) / CELL) * CELL
+            local x1 = vR + CELL
             local horizon = 2.45 * CELL
             -- céu: lavanda alta → rosa → creme-areia no horizonte
             -- Gradiente mais alto (iteração Mira): 7 faixas, topo mais
@@ -616,7 +744,7 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
             G.rectangle('fill', x0, horizon, x1 - x0, 5)
             G.setColor(1, 1, 1, 1)
         end
-        for _, tile in pairs(map.tiles or {}) do
+        for _, tile in ipairs(tilesInView) do
             if tile.ground ~= 'hole' then
                 local kind = floorKind(map, tile.x, tile.y)
                 local sh = s[kind]
@@ -689,7 +817,10 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
         -- Decals de uso: acima do piso, abaixo de props/pieces.
         if s.mancha then
             for _, d in ipairs(manchaOverlay(map)) do
-                G.draw(s.mancha[ch], s.mancha_q[d.frame], d.x, d.y)
+                if d.x + 128 > vL and d.x < vR
+                    and d.y + 128 > vT and d.y < vB then
+                    G.draw(s.mancha[ch], s.mancha_q[d.frame], d.x, d.y)
+                end
             end
         end
         for _, p in ipairs(pieces) do
@@ -804,6 +935,7 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
     end
     channel('albedo'); channel('normal'); channel('emissive')
     G.setCanvas(prevCanvas)
+    local fillMs = (love.timer.getTime() - tFill) * 1000
 
     -- Luzes: ambiente da região + sol (outdoor) + âncoras de fogo dos props.
     local L = hd.lighting
@@ -892,40 +1024,11 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
         if l.shadow ~= false then wantsShadow = true break end
     end
     -- Occluders: muros (merge em fileiras), pilares, props com altura.
-    -- Só coleta quando alguma luz ainda projeta — com tudo shadow=false
-    -- (padrão-ouro) a coleta inteira sai do caminho quente.
+    -- Só coleta quando alguma luz ainda projeta. A parte de tiles é
+    -- estática do mapa — cacheada (o sort de ~200 muros saía por frame);
+    -- props seguem por frame porque prop.state pode mudar ('taken').
     if wantsShadow then
-    local wallRuns = {}
-    for _, tile in pairs(map.tiles or {}) do
-        if tile.piece == 'wall' or tile.piece == 'portal' then
-            wallRuns[#wallRuns + 1] = tile
-        end
-    end
-    table.sort(wallRuns, function(a, b)
-        return a.y < b.y or (a.y == b.y and a.x < b.x) end)
-    local run = nil
-    for _, tile in ipairs(wallRuns) do
-        local px, py = (tile.x - 1) * CELL, (tile.y - 1) * CELL
-        if run and py == run.y and px == run.x + run.w then
-            run.w = run.w + CELL
-        else
-            if run then
-                L:addOccluder({x = run.x, y = run.y - 20, w = run.w,
-                    h = 60, height = 192})
-            end
-            run = {x = px, y = py, w = CELL}
-        end
-    end
-    if run then
-        L:addOccluder({x = run.x, y = run.y - 20, w = run.w,
-            h = 60, height = 192})
-    end
-    for _, tile in pairs(map.tiles or {}) do
-        if tile.piece == 'pillar' then
-            L:addOccluder({x = (tile.x - 1) * CELL + 16,
-                y = (tile.y - 1) * CELL + 44, w = 32, h = 16, height = 150})
-        end
-    end
+    L:addOccluders(tileOccluders(map))
     for _, prop in ipairs(map.props or {}) do
         local cx, cy, w2, hgt = Props.shadowCaster(prop)
         if cx then
@@ -953,10 +1056,16 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
     P:present(0, 0, 1)
     G.pop()
     -- Mesma leitura de custo das cenas técnicas: passe de luz + bloom.
+    -- fill= cobre o preenchimento do G-buffer (pieces + 3 canais); frame=
+    -- é o draw inteiro — o log precisava ver o custo fora do compose.
+    hd.fillMs = (hd.fillMs or 0) * .9 + fillMs * .1
+    hd.frameMs = (hd.frameMs or 0) * .9
+        + (love.timer.getTime() - tFrame) * 100 -- (x*1000)*.1
     hd.statsClock = (hd.statsClock or 0) + 1
     if hd.statsClock >= 90 then
         hd.statsClock = 0
-        print(string.format('[hd_world] light=%.3fms bloom=%.3fms lights=%d occluders=%d shadowQuads=%d fmt=%s',
+        print(string.format('[hd_world] frame=%.1fms fill=%.1fms light=%.3fms bloom=%.3fms lights=%d occluders=%d shadowQuads=%d fmt=%s',
+            hd.frameMs, hd.fillMs,
             (L.stats and L.stats.lightPassMs) or 0,
             (P.stats and P.stats.bloomMs) or 0,
             (L.stats and L.stats.lights) or 0,

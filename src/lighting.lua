@@ -339,6 +339,13 @@ function Lighting:addOccluder(o)
     }
 end
 
+-- Caminho em massa para geometria estática cacheada pelo chamador:
+-- os itens vão por referência (compose só lê) — sem realocar por frame.
+function Lighting:addOccluders(list)
+    local occ = self.occluders
+    for i = 1, #list do occ[#occ + 1] = list[i] end
+end
+
 function Lighting:setAmbient(c)
     self.ambient = { c[1] or 0, c[2] or 0, c[3] or 0 }
 end
