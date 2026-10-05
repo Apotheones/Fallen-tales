@@ -427,9 +427,15 @@ local function pathFrac(map, x, y)
     local polys = map.paths
     if not polys then return nil end
     local px, py = (x - .5) * 32, (y - .5) * 32
+    -- Meia-largura REAL de cada trecho (Pátio): frac = distância ao eixo
+    -- dividida pela meia-largura da polyline — rua larga (w alto/main)
+    -- pinta faixa larga de verdade, não os ~43px fixos de antes. O 'best'
+    -- compara fração normalizada: um beco estreito perto não rouba a
+    -- célula de uma rua larga cuja faixa a cobre.
     local best
     for _, poly in ipairs(polys) do
         local half = (poly.w or 2.6) * 16 + (poly.main and 5 or 0)
+        local half2 = half * half
         for j = 2, #poly do
             local ax, ay = (poly[j-1][1] - .5) * 32, (poly[j-1][2] - .5) * 32
             local bx, by = (poly[j][1] - .5) * 32, (poly[j][2] - .5) * 32
@@ -439,13 +445,13 @@ local function pathFrac(map, x, y)
                 local f = math.max(0, math.min(1,
                     ((px - ax) * vx + (py - ay) * vy) / len2))
                 local dx, dy = px - ax - vx * f, py - ay - vy * f
-                local d2 = dx * dx + dy * dy
-                if not best or d2 < best then best = d2 end
+                local n = (dx * dx + dy * dy) / half2
+                if not best or n < best then best = n end
             end
         end
     end
     if not best then return nil end
-    return math.sqrt(best) / 43 -- meia-largura média (2.7*16 px-32)
+    return math.sqrt(best) -- 0 = eixo, 1 = borda da faixa daquele trecho
 end
 
 -- Roteamento do piso_caminho (9 frames do Traço): devolve o vetor do
