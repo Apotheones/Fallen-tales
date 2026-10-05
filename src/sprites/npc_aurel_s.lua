@@ -1,20 +1,15 @@
--- AUREL — Primeiro Zelador, idle SUL, 64x96, origem nos pés, 4f.
--- f1 repouso | f2 respiro | f3 GESTO: cabeça sobe 1px (olha o Marco
--- acima) + pano desdobra 1px | f4 respiro + piscar.
--- §8 do doc de personagens: 56-62a, 178cm, magro de tórax comprido.
--- Pele castanha dourada (skin.3), rosto longo, barba raspada; cabelo
--- GRISALHO puxado para trás com linha recuada (testa alta de pele) e
--- orelhas grandes à mostra. Retângulo vertical: sobrecasaca azul
--- carvão (sea.2) sobre túnica de linho cinza-pérola (plaster.4) que
--- desce abaixo dos joelhos ABERTA à frente (fenda 'kk' central);
--- gola alta estreita 'z' subindo pelo pescoço; faixa de trabalho
--- horizontal 'f' na cintura; punhos de couro 'r'. Na mão esquerda,
--- o pano 'p' quase sem cor com que limpa o marco.
--- Âncoras: gola alta estreita | túnica vertical fendida | cabelo
--- claro recuado.
-
+-- V11 NPC_AUREL_S — Aurel primeiro guardião (C08), idle SUL, 64x96
+-- feet, 4f. Upgrade C01-grade na MESMA geometria do def anterior
+-- (punhos cols 19-24/47-52 linhas 57-62 — npc_aurel_trabalho assenta).
+-- Âncoras: gola alta estreita 'z' | túnica dividida vertical 't' |
+-- cabelo claro grisalho varrido 'g'. Pele dourada 's', rosto longo,
+-- orelhas grandes 'ss', nariz levemente assimétrico, barba raspada.
+-- Sobrecasaco azul-carvão 'c' ombros estreitos, manga folgada, punho
+-- de couro 'r', faixa de trabalho horizontal 'f' na cintura, bota
+-- fina de sola reforçada 'o'. f3 = olha o Marco (cabeça +1 para
+-- cima), f4 = pisca.
 local function L(s)
-    assert(#s <= 64, 'linha de sprite > 64 colunas')
+    assert(#s <= 64, 'linha > 64')
     return s .. string.rep('.', 64 - #s)
 end
 local E = string.rep('.', 64)
@@ -34,21 +29,6 @@ local function shift(map, dy, rmin, rmax)
     end
     return t
 end
-local function overlay(ga, gb)
-    local A, B, out = {}, {}, {}
-    for l in ga:gmatch('[^\n]+') do A[#A + 1] = l end
-    for l in gb:gmatch('[^\n]+') do B[#B + 1] = l end
-    for i = 1, #A do
-        local a, b, row = A[i], B[i] or '', {}
-        for x = 1, 64 do
-            local cb = b:sub(x, x)
-            row[x] = (cb ~= '.' and cb ~= ' ' and cb ~= '') and cb
-                or a:sub(x, x)
-        end
-        out[i] = table.concat(row)
-    end
-    return table.concat(out, '\n')
-end
 local function patch(map, edits)
     local t = {}
     for r, s in pairs(map) do t[r] = s end
@@ -56,48 +36,43 @@ local function patch(map, edits)
     return t
 end
 
---------------------------------------------------------------------------------
--- BODY: cabeça alongada, gola alta, sobrecasaca+túnica fendida, botas
--- finas. Pano fica na camada 'trab' junto à faixa de cintura.
---------------------------------------------------------------------------------
 local body = {
-    -- cabelo grisalho puxado para trás; linha recuada = testa alta
-    [8]  = '............................kkkkkk',
-    [9]  = '...........................kggggggk',
-    [10] = '..........................kggggggggk',
+    -- cabelo grisalho varrido para trás: testa alta, filetes 'g/G'
+    [8]  = '............................kggggkk',
+    [9]  = '...........................kgggggggk',
+    [10] = '..........................kgggggggggk',
     [11] = '..........................kggGggggggk',
-    [12] = '..........................kggggggggk',
-    [13] = '..........................kgssssssgk',   -- têmporas grisalhas
-    [14] = '..........................kgssssssgk',
-    [15] = '..........................kssssssssk',
-    [16] = '..........................kssssssssk',
-    -- orelhas grandes à mostra ('kssk' saltando dos lados)
+    [12] = '..........................kgggggggggk',
+    [13] = '..........................kgsssssssgk',
+    [14] = '..........................kgsssssssgk',
+    [15] = '..........................ksssssssssk',
+    [16] = '..........................ksssssssssk',
+    -- orelhas grandes saltando dos lados
     [17] = '......................ksskksssssssskkssk',
-    [18] = '......................ksskkseessseekkssk',
+    [18] = '......................ksskkseeesseekkssk',
     [19] = '......................ksskksssssssskkssk',
     [20] = '.......................kk.kssssssssk.kk',
-    [21] = '..........................ksssdssssk',   -- nariz reto
-    [22] = '..........................ksssdssssk',
+    [21] = '..........................ksssnssssk',
+    [22] = '..........................ksssdnsssk',
     [23] = '..........................kssssssssk',
-    [24] = '..........................ksssddsssk',   -- boca, barba raspada
+    [24] = '..........................ksssddsssk',
     [25] = '..........................kssssssssk',
     [26] = '..........................kssssssssk',
     [27] = '...........................kssssssk',
     [28] = '...........................kssssssk',
     [29] = '............................kssssk',
-    -- gola alta estreita (âncora): sobe o pescoço como colarinho
+    -- gola alta estreita subindo o pescoço (âncora)
     [30] = '............................kzzzzk',
     [31] = '............................kzzzzk',
     [32] = '............................kzzzzk',
     [33] = '............................kzzzzk',
     [34] = '...........................kzzttzzk',
     [35] = '...........................kzzttzzk',
-    -- ombros estreitos de sobrecasaca azul carvão sobre túnica pérola
+    -- ombros estreitos: sobrecasaco 'c', túnica pérola 't' no peito
     [36] = '.........................kcccccccccccccccck',
     [37] = '........................kcccccccccccccccccck',
     [38] = '.........................kcccttttttttttccck',
     [39] = '.........................kcccttttttttttccck',
-    -- mangas finas soltas dos lados; tronco comprido
     [40] = '...................kcck..kcccttttttttttccck..kcck',
     [41] = '...................kcck..kcccttttttttttccck..kcck',
     [42] = '...................kcck..kcccttttttttttccck..kcck',
@@ -112,27 +87,27 @@ local body = {
     [51] = '...................kcck..kcccttttttttttccck..kcck',
     [52] = '...................kcck..kcccttttttttttccck..kcck',
     [53] = '...................kcck..kcccttttttttttccck..kcck',
-    -- punhos de couro castanho
+    -- punhos de couro 'r' enrolados na borda da manga
     [54] = '...................krrk..kcccttttttttttccck..krrk',
     [55] = '...................krrk..kcccttttttttttccck..krrk',
     [56] = '...................krrk..kcccttttttttttccck..krrk',
+    -- mãos finas com dedos compridos 's' soltos nas laterais
     [57] = '...................kssk..kcccttttttttttccck..kssk',
     [58] = '...................kssk..kcccttttttttttccck..kssk',
     [59] = '...................kssk..kcccttttttttttccck..kssk',
-    [60] = '...................kppk..kcccttttttttttccck..kssk',
-    [61] = '...................kppk..kcccttttttttttccck..kkkk',
-    [62] = '...................kppk..kcccttttttttttccck',
-    [63] = '...................kppk..kttttttttttttttttk',
-    [64] = '...................kppk..kttttttttttttttttk',
-    [65] = '...................kppk..kttttttttttttttttk',
-    [66] = '....................kk...kttttttttttttttttk',
+    [60] = '...................ksssk..kcccttttttttttccck..ksssk',
+    [61] = '...................ksssk..kcccttttttttttccck..kkkk',
+    [62] = '...................ksssk..kcccttttttttttccck',
+    [63] = '...................kkkk...kttttttttttttttttk',
+    [64] = '.........................kttttttttttttttttk',
+    [65] = '.........................kttttttttttttttttk',
+    [66] = '.........................kttttttttttttttttk',
     [67] = '.........................kttttttttttttttttk',
     [68] = '.........................kttttttttttttttttk',
     [69] = '.........................kttttttttttttttttk',
     [70] = '.........................kttttttttttttttttk',
     [71] = '.........................kttttttttttttttttk',
-    -- fenda frontal da túnica (âncora): fenda 'kk' até abaixo dos
-    -- joelhos, botas finas aparecem por baixo
+    -- fenda frontal da túnica (âncora): abre até abaixo do joelho
     [72] = '.........................ktttttttkktttttttk',
     [73] = '.........................ktttttttkktttttttk',
     [74] = '.........................ktttttttkktttttttk',
@@ -143,7 +118,7 @@ local body = {
     [79] = '.........................ktttttttkktttttttk',
     [80] = '.........................ktttttttkktttttttk',
     [81] = '.........................ktttttttkktttttttk',
-    -- canela e bota fina de sola reforçada
+    -- botas finas, sola reforçada 'o'
     [82] = '..........................kbbbk..kbbbk',
     [83] = '..........................kbbbk..kbbbk',
     [84] = '..........................kbbbk..kbbbk',
@@ -159,63 +134,48 @@ local body = {
     [94] = '..........................kkkkkk.kkkkkk',
 }
 
---------------------------------------------------------------------------------
--- TRAB: faixa de trabalho horizontal 'f' na cintura + pontas do pano
--- que escapam da mão (o corpo do pano já está no body p/ seguir o
--- punho; aqui só o reforço da faixa — âncora "faixa horizontal").
---------------------------------------------------------------------------------
+-- faixa horizontal de trabalho 'f' na cintura (âncora do ato de
+-- manutenção: o pano escapa da faixa no trabalho)
 local band = {
-    [54] = '............................kffffffffffk',
-    [55] = '............................kffffffffffk',
+    [54] = '............................kfffffffffffk',
+    [55] = '............................kfffffffffffk',
 }
-
 local garb = R(band)
 
--- f3: olha o Marco acima — cabeça sobe 1px (o queixo sai da gola; a
--- linha do pescoço é reposta no vão); pano desdobra 1px à direita.
-local gesto = patch(shift(body, -1, 8, 29), {
-    [29] = '............................kssssk',
-    [62] = '...................kpppk..kttttttttttttttttk',
-    [63] = '...................kpppk..kttttttttttttttttk',
-    [64] = '...................kpppk..kttttttttttttttttk',
-    [65] = '...................kpppk..kttttttttttttttttk',
-    [66] = '....................kkk...kttttttttttttttttk',
+-- f3: olha para cima — cabeça sobe 1px (queixo sai da gola)
+local gesto = patch(shift(body, -1, 8, 34), {
+    [33] = '............................kssssk',
+    [34] = '............................kzzzzk',
 })
--- f4: respiro com piscar — olhos 'ee' viram pálpebra 'dd'.
+-- f4: pisca
 local respiroPisca = shift(patch(body, {
-    [18] = '......................ksskksddsssddkkssk',
-}), 1, 36, 56)
+    [18] = '......................ksskksssddsskkssk',
+}), 1, 30, 62)
 
 return {
-    name = 'npc_aurel_s',
-    w = 64, h = 96,
-    origin = 'feet',
-
+    name = 'npc_aurel_s', w = 64, h = 96, origin = 'feet',
     legend = {
-        k = {spec = 'ink', h = 4},
-        s = {ramp = 'skin', step = 3, h = 11},  -- castanha dourada
-        S = {ramp = 'skin', step = 4, h = 12},
-        d = {ramp = 'skin', step = 2, h = 10},
-        e = {spec = 'ink', h = 12},
-        g = {ramp = 'iron', step = 5, h = 11},  -- cabelo grisalho
-        G = {ramp = 'iron', step = 6, h = 12},
-        z = {ramp = 'sea', step = 3, h = 9},    -- gola alta estreita
-        c = {ramp = 'sea', step = 2, h = 7},    -- sobrecasaca azul carvão
-        t = {ramp = 'plaster', step = 4, h = 6},-- túnica linho pérola
-        f = {ramp = 'earth', step = 3, h = 8},  -- faixa de trabalho
-        r = {ramp = 'earth', step = 2, h = 6},  -- punhos de couro
-        p = {ramp = 'bone', step = 5, h = 7},   -- pano quase sem cor
-        b = {ramp = 'earth', step = 2, h = 2},
-        o = {ramp = 'earth', step = 4, h = 3},
+        k = { spec = 'ink', h = 4 },
+        s = { ramp = 'skin', step = 3, h = 11 },   -- pele dourada
+        d = { ramp = 'skin', step = 1, h = 10 },
+        e = { spec = 'ink', h = 12 },
+        n = { ramp = 'skin', step = 2, h = 11 },
+        g = { ramp = 'hair', step = 4, h = 11 },   -- grisalho varrido
+        G = { ramp = 'hair', step = 3, h = 12 },
+        z = { ramp = 'plaster', step = 5, h = 7 }, -- gola alta pérola
+        t = { ramp = 'plaster', step = 3, h = 5 }, -- túnica pérola
+        c = { ramp = 'iron', step = 3, h = 6 },    -- sobrecasaco carvão
+        r = { ramp = 'earth', step = 3, h = 7 },   -- punho de couro
+        f = { ramp = 'earth', step = 4, h = 5 },   -- faixa de trabalho
+        p = { ramp = 'iron', step = 4, h = 4 },    -- calça
+        b = { ramp = 'earth', step = 2, h = 2 },   -- bota
+        o = { ramp = 'earth', step = 4, h = 2 },   -- sola reforçada
+        B = { ramp = 'earth', step = 4, h = 3 },
     },
-
     layers = {
-        {name = 'body', h = 4, albedo = {
-            R(body),
-            R(shift(body, 1, 36, 56)),
-            R(gesto),
-            R(respiroPisca),
-        }},
-        {name = 'trab', h = 8, albedo = {garb, garb, garb, garb}},
+        { name = 'body', h = 4, albedo = {
+            R(body), R(shift(body, 1, 30, 62)), R(gesto), R(respiroPisca),
+        } },
+        { name = 'band', h = 6, albedo = { garb, garb, garb, garb } },
     },
 }

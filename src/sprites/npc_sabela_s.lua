@@ -1,20 +1,14 @@
--- SABELA — registra/protege, idle SUL, 64x96, origem nos pés, 4f.
--- f1 repouso | f2 respiro | f3 GESTO: olha o caderno (cabeça inclina
--- 1px baixo+esq, caderno sobe 1px) | f4 respiro + piscar.
--- §6 do doc de personagens: 47-53a, 176cm, ALTA de ombros estreitos
--- e pernas longas — a silhueta mais vertical e fina do elenco. Pele
--- negra de tom profundo (skin.1; sombras em hair.1, olhos em osso
--- claro p/ contraste). Rosto angular, tranças curtas puxadas para
--- trás com FIOS BRANCOS na linha frontal 'w'; cicatriz pequena no
--- queixo 'd'. Casaco azul de petróleo (sea.3) ABERTO EM DOIS PAINÉIS
--- sobre camisa de lã cru 'l' (a faixa clara central é a abertura);
--- calças cinza 'p', faixa castanha 'r', botas de cano médio.
--- Mão esquerda: caderno 'P'; sob o braço direito: pasta plana 'Q'.
--- Âncoras: altura e pernas longas | painéis separados do casaco |
--- pasta plana lateral.
-
+-- V10 NPC_SABELA_S — Sabela protetora/organizadora (C06), idle SUL,
+-- 64x96 feet, 4f. Upgrade C01-grade mantendo a geometria do def
+-- anterior (tronco cols 18-50, punhos cols 17-20/48-52 linhas 57-62)
+-- para npc_sabela_trabalho continuar assentando.
+-- Âncoras: alta/pernas longas (76% do corpo) | casaco petróleo em
+-- painéis abertos 'c' | pasta plana lateral 'Q'. Pele escura profunda
+-- 's'/'d', tranças puxadas para trás com fios brancos na linha frontal
+-- 'w', lábio cheio, cicatriz no queixo. Reforços de punho 'c' mais
+-- escuros, joelhos remendados 'P', sash marrom 'B' na cintura.
 local function L(s)
-    assert(#s <= 64, 'linha de sprite > 64 colunas')
+    assert(#s <= 64, 'linha > 64')
     return s .. string.rep('.', 64 - #s)
 end
 local E = string.rep('.', 64)
@@ -40,49 +34,49 @@ local function patch(map, edits)
     for r, s in pairs(edits) do t[r] = s end
     return t
 end
--- Desloca o conteúdo das linhas [rmin..rmax] em dx colunas (linhas de
--- só-cabeça: o miolo todo anda junto).
-local function hshift(map, dx, rmin, rmax)
-    local t = {}
-    for r, s in pairs(map) do
-        if rmin and r >= rmin and r <= rmax then
-            if dx > 0 then t[r] = ('.'):rep(dx) .. s:sub(1, #s - dx)
-            else t[r] = s:sub(1 - dx) .. ('.'):rep(-dx) end
-        else t[r] = s end
+local function overlay(ga, gb)
+    local A, B, out = {}, {}, {}
+    for l in ga:gmatch('[^\n]+') do A[#A + 1] = l end
+    for l in gb:gmatch('[^\n]+') do B[#B + 1] = l end
+    for i = 1, #A do
+        local a, b, row = A[i], B[i] or '', {}
+        for x = 1, 64 do
+            local cb = b:sub(x, x)
+            row[x] = (cb ~= '.' and cb ~= ' ' and cb ~= '') and cb
+                or a:sub(x, x)
+        end
+        out[i] = table.concat(row)
     end
-    return t
+    return table.concat(out, '\n')
 end
 
---------------------------------------------------------------------------------
--- BODY: tranças, rosto angular, casaco em dois painéis, calças
--- longas. Caderno/pasta/faixa ficam na camada 'gear'.
---------------------------------------------------------------------------------
 local body = {
-    -- tranças curtas puxadas para trás: massa 'h' com textura 'H'
-    [8]  = '............................kkkkkk',
+    -- tranças puxadas para trás: massa 'h' com filetes 'H', fileira
+    -- frontal com fios brancos 'w' no topo da fronte
+    [8]  = '............................khkhk',
     [9]  = '...........................khhhhhhk',
     [10] = '..........................khhhhhhhhk',
     [11] = '..........................khhHhHhhhk',
-    [12] = '..........................khwwwwwhhk',   -- fios brancos, linha frontal
+    [12] = '..........................khwwwwwhhk',
     [13] = '..........................kssssssssk',
     [14] = '..........................kssssssssk',
     [15] = '..........................kssssssssk',
     [16] = '..........................kssssssssk',
-    [17] = '..........................kseesssseek',  -- olhos claros (contraste)
-    [18] = '..........................kssssssssk',
-    [19] = '..........................ksssdssssk',   -- nariz estreito
-    [20] = '..........................ksssdssssk',
-    [21] = '..........................kssssssssk',
-    [22] = '..........................ksssddsssk',   -- lábio inferior cheio
-    [23] = '..........................kssssssssk',
-    [24] = '..........................kssssssdsk',   -- cicatriz no queixo
+    [17] = '..........................ksseesseesk',
+    [18] = '..........................ksssssssssk',
+    [19] = '..........................ksssdsssssk',
+    [20] = '..........................ksssnssssk',
+    [21] = '..........................ksssssssssk',
+    [22] = '..........................ksssdddsssk',
+    [23] = '..........................ksssssssssk',
+    [24] = '..........................kssssdsssk',
     [25] = '..........................kssssssssk',
     [26] = '...........................kssssssk',
     [27] = '...........................kssssssk',
     [28] = '............................kssssk',
     [29] = '............................kssssk',
-    [30] = '...........................kllllllk',    -- gola da camisa cru
-    -- casaco petróleo aberto: painéis 'c' dos lados, camisa 'l' no meio
+    -- camisa cru 'l' com gola; casaco petróleo 'c' abre em dois painéis
+    [30] = '...........................kllllllk',
     [31] = '........................kcccccllllllccccck',
     [32] = '........................kcccccllllllccccck',
     [33] = '........................kcccccllllllccccck',
@@ -105,20 +99,21 @@ local body = {
     [50] = '..................kcck..kcccccllllllccccck..kcck',
     [51] = '..................kcck..kcccccllllllccccck..kcck',
     [52] = '..................kcck..kcccccllllllccccck..kcck',
-    [53] = '..................kcck..kcccccllllllccccck..kcck',
-    [54] = '..................kcck..kcccccllllllccccck..kcck',
-    [55] = '..................kcck..kcccccllllllccccck..kcck',
-    [56] = '..................kcck..kcccccllllllccccck..kcck',
-    -- punho esq. engordado 1px p/ fora (pele extra na linha do gesto:
-    -- segura o caderno, não uma faixa solta)
+    -- punhos reforçados 'C' (faixa mais escura no punho do casaco)
+    [53] = '..................kCCk..kcccccllllllccccck..kCCk',
+    [54] = '..................kCCk..kcccccllllllccccck..kCCk',
+    [55] = '..................kCCk..kcccccllllllccccck..kCCk',
+    [56] = '..................kCCk..kcccccllllllccccck..kCCk',
+    -- punhos soltos: esq. engordado na linha do gesto, dir. na lateral
     [57] = '.................ksssk..kcccccllllllccccck..kssk',
-    [58] = '.................ksssk..kcccccllllllccccck..kssk',
+    [58] = '.................ksdsk..kcccccllllllccccck..ksdk',
     [59] = '........................kcccccllllllccccck..kssk',
     [60] = '........................kcccccllllllccccck..kssk',
     [61] = '........................kcccccllllllccccck..kssk',
     [62] = '........................kcccccllllllccccck..kkkk',
-    [63] = '........................kcccccccccccccccck',
-    -- pernas longas e secas em cinza
+    -- sash marrom 'B' na cintura, por baixo do casaco aberto
+    [63] = '........................kcccBBBBBBBBBBcck',
+    -- pernas longas e secas: cinza 'p' com remendo 'P' no joelho dir.
     [64] = '..........................kppppk.kppppk',
     [65] = '..........................kppppk.kppppk',
     [66] = '..........................kppppk.kppppk',
@@ -128,10 +123,10 @@ local body = {
     [70] = '..........................kppppk.kppppk',
     [71] = '..........................kppppk.kppppk',
     [72] = '..........................kppppk.kppppk',
-    [73] = '..........................kppppk.kppppk',
-    [74] = '..........................kppppk.kppppk',
-    [75] = '..........................kppppk.kppppk',
-    [76] = '..........................kppppk.kppppk',
+    [73] = '..........................kppppk.kppPPk',
+    [74] = '..........................kppppk.kpPPpk',
+    [75] = '..........................kppppk.kpPPpk',
+    [76] = '..........................kppppk.kppPPk',
     [77] = '..........................kppppk.kppppk',
     [78] = '..........................kppppk.kppppk',
     [79] = '..........................kppppk.kppppk',
@@ -141,100 +136,91 @@ local body = {
     [83] = '..........................kppppk.kppppk',
     [84] = '..........................kppppk.kppppk',
     [85] = '..........................kppppk.kppppk',
-    [86] = '..........................kppppk.kppppk',
-    -- botas leves de cano médio
-    [87] = '..........................kbbbk.kbbbk',
-    [88] = '..........................kbbbk.kbbbk',
-    [89] = '..........................kbbbk.kbbbk',
-    [90] = '..........................kbbbk.kbbbk',
-    [91] = '..........................kbbbk.kbbbk',
-    [92] = '..........................kbbbk.kbbbk',
-    [93] = '..........................kooook.kooook',
-    [94] = '..........................kkkkk.kkkkk',
+    -- botas de meia-altura leves 'o', sola 'D'
+    [86] = '..........................kooook.kooook',
+    [87] = '..........................koooook.koooook',
+    [88] = '..........................koooook.koooook',
+    [89] = '..........................kooooook.kooooook',
+    [90] = '..........................kooooookkooooook',
+    [91] = '..........................koooooookkoooooook',
+    [92] = '..........................kDDDDDDkkDDDDDDk',
+    [93] = '..........................kDDDDDDkkDDDDDDk',
+    [94] = '..........................kkkkkkkkkkkkkkkkk',
 }
 
---------------------------------------------------------------------------------
--- GEAR: faixa castanha 'r' na cintura; caderno 'P' na mão esquerda;
--- pasta plana 'Q' sob o braço direito, despontando na lateral.
---------------------------------------------------------------------------------
+-- pasta plana lateral + faixa de segurar 'B' na camada gear
 local gear = {
-    [54] = '........................krrrrrrrrrrrrrrrrk',
-    [55] = '........................krrrrrrrrrrrrrrrrk',
-    [57] = '.................................................kQQk',
-    [58] = '.................................................kQQk',
-    [59] = '.................kPssPk.........................kQqk',
-    [60] = '.................kPppPk.........................kQqk',
-    [61] = '.................kPPPPk.........................kQqk',
-    [62] = '.................kPPPPk.........................kQqk',
-    [63] = '.................kPPPPk.........................kQqk',
-    [64] = '.................kPPPPk.........................kQqk',
-    [65] = '..................kkkk..........................kQqk',
-    [66] = '.................................................kQqk',
-    [67] = '.................................................kQqk',
-    [68] = '.................................................kQqk',
-    [69] = '.................................................kQqk',
-    [70] = '.................................................kQqk',
-    [71] = '.................................................kQqk',
-    [72] = '.................................................kQqk',
-    [73] = '.................................................kQqk',
-    [74] = '..................................................kQk',
+    -- cinta da pasta cruzando o ombro esquerdo
+    [38] = '............................kBBk',
+    [39] = '............................kBBk',
+    [40] = '.............................kBBk',
+    [41] = '.............................kBBk',
+    [42] = '..............................kBBk',
+    [43] = '..............................kBBk',
+    [44] = '...............................kBBk',
+    [45] = '...............................kBBk',
+    [46] = '................................kBBk',
+    [47] = '................................kBBk',
+    [48] = '.................................kBBk',
+    [49] = '.................................kBBk',
+    [50] = '..................................kBBk',
+    [51] = '..................................kBBk',
+    [52] = '...................................kBBk',
+    [53] = '....................................kBBk',
+    [54] = '....................................kBBk',
+    [55] = '.....................................kBBk',
+    [56] = '......................................kBBk',
+    [57] = '........................................kBBk',
+    -- pasta plana pendurada no quadril direito (face 'Q', canto 'q')
+    [57] = '.........................................kQQQk',
+    [58] = '.........................................kQQQQk',
+    [59] = '.........................................kQQQQk',
+    [60] = '.........................................kQQQQk',
+    [61] = '.........................................kQQQqk',
+    [62] = '.........................................kQQQqk',
+    [63] = '.........................................kQqqqk',
+    [64] = '.........................................kQQQQk',
+    [65] = '.........................................kQQQQk',
+    [66] = '.........................................kQkkQk',
+    [67] = '.........................................kQkkQk',
+    [68] = '.........................................kkkkkk',
 }
 
--- f3: olha o caderno — cabeça desce 1px e inclina 1px p/ a esquerda
--- (lado do caderno); o caderno sobe 1px ao encontro do olhar.
-local gesto = hshift(shift(body, 1, 8, 29), -1, 8, 30)
-local gearGesto = patch(gear, {
-    [58] = '.................kPssPk.........................kQQk',
-    [59] = '.................kPppPk.........................kQqk',
-    [60] = '.................kPPPPk.........................kQqk',
-    [61] = '.................kPPPPk.........................kQqk',
-    [62] = '.................kPPPPk.........................kQqk',
-    [63] = '.................kPPPPk.........................kQqk',
-    [64] = '..................kkkk..........................kQqk',
-    [65] = '.................................................kQqk',
+local gesto = patch(shift(body, 1, 8, 29), {
+    -- f3: a mão da pasta aperta na lateral — dedos 'd' marcam
+    [58] = '.................ksdsk..kcccccllllllccccck..ksddk',
+    [59] = '........................kcccccllllllccccck..kddk',
 })
--- f4: respiro com piscar — olhos claros 'ee' viram pálpebra 'dd'.
 local respiroPisca = shift(patch(body, {
-    [17] = '..........................ksddsssddsk',
-}), 1, 31, 56)
+    [17] = '..........................kssddsddssk',
+}), 1, 30, 62)
 
 return {
-    name = 'npc_sabela_s',
-    w = 64, h = 96,
-    origin = 'feet',
-
+    name = 'npc_sabela_s', w = 64, h = 96, origin = 'feet',
     legend = {
-        k = {spec = 'ink', h = 4},
-        s = {ramp = 'skin', step = 1, h = 11},  -- pele negra profunda
-        S = {ramp = 'skin', step = 2, h = 12},
-        d = {ramp = 'hair', step = 1, h = 10},  -- sombra do rosto
-        e = {ramp = 'bone', step = 5, h = 12},  -- olhos claros p/ ler
-        h = {ramp = 'hair', step = 1, h = 11},
-        H = {ramp = 'hair', step = 3, h = 12},
-        w = {ramp = 'plaster', step = 6, h = 12}, -- fios brancos
-        l = {ramp = 'bone', step = 4, h = 6},   -- camisa de lã cru
-        c = {ramp = 'sea', step = 3, h = 7},    -- casaco azul petróleo
-        r = {ramp = 'earth', step = 3, h = 8},  -- faixa castanha
-        p = {ramp = 'iron', step = 4, h = 4},   -- calças cinza
-        b = {ramp = 'earth', step = 2, h = 2},
-        o = {ramp = 'earth', step = 4, h = 3},
-        P = {ramp = 'bone', step = 6, h = 8},   -- caderno claro
-        Q = {ramp = 'earth', step = 2, h = 7},  -- pasta plana
-        q = {ramp = 'earth', step = 4, h = 7},
+        k = { spec = 'ink', h = 4 },
+        s = { ramp = 'skin', step = 2, h = 11 },   -- pele escura profunda
+        d = { ramp = 'skin', step = 1, h = 10 },   -- sombra/cicatriz/lábio
+        e = { spec = 'ink', h = 12 },
+        n = { ramp = 'skin', step = 2, h = 11 },   -- nariz
+        h = { ramp = 'hair', step = 1, h = 11 },   -- tranças escuras
+        H = { ramp = 'hair', step = 2, h = 11 },
+        w = { ramp = 'plaster', step = 6, h = 11 },-- fios brancos na fronte
+        l = { ramp = 'plaster', step = 4, h = 6 }, -- camisa cru
+        c = { ramp = 'sea', step = 2, h = 6 },     -- casaco petróleo
+        C = { ramp = 'sea', step = 1, h = 5 },     -- reforço de punho
+        p = { ramp = 'iron', step = 4, h = 4 },    -- calça cinza
+        P = { ramp = 'iron', step = 2, h = 3 },    -- remendo de joelho
+        B = { ramp = 'earth', step = 2, h = 5 },   -- sash + cinta da pasta
+        Q = { ramp = 'earth', step = 4, h = 6 },   -- pasta plana
+        q = { ramp = 'earth', step = 1, h = 5 },
+        o = { ramp = 'earth', step = 4, h = 2 },   -- bota clara
+        D = { ramp = 'earth', step = 1, h = 2 },
     },
-
     layers = {
-        {name = 'body', h = 4, albedo = {
-            R(body),
-            R(shift(body, 1, 31, 56)),
-            R(gesto),
-            R(respiroPisca),
-        }},
-        {name = 'gear', h = 7, albedo = {
-            R(gear),
-            R(gear),
-            R(gearGesto),
-            R(gear),
-        }},
+        { name = 'body', h = 4, albedo = {
+            R(body), R(shift(body, 1, 30, 62)), R(gesto), R(respiroPisca),
+        } },
+        { name = 'gear', h = 7, albedo = { R(gear), R(gear), R(gear), R(gear) } },
     },
 }

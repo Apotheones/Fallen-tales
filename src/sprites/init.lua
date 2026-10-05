@@ -225,6 +225,10 @@ return {
     portrait_bento = require('src.sprites.portrait_bento'),
     portrait_runa = require('src.sprites.portrait_runa'),
     -- Atores — chefe
+    npc_runa_s = require('src.sprites.npc_runa_s'),
+    npc_runa_e = require('src.sprites.npc_runa_e'),
+    npc_runa_n = require('src.sprites.npc_runa_n'),
+    npc_runa_w = require('src.sprites.npc_runa_w'),
     boss_runa_s = require('src.sprites.boss_runa_s'),
     boss_runa_n = require('src.sprites.boss_runa_n'),
     boss_runa_e = require('src.sprites.boss_runa_e'),

@@ -1,18 +1,11 @@
--- DORO — coveiro e marceneiro, idle SUL, 64x96, origem nos pés, 4f.
--- f1 repouso | f2 respiro (tórax desce 1) | f3 GESTO: cabeça desce 1px
--- (olha a peça) + nós 'd' nos punhos (flexiona) | f4 respiro + piscar.
--- §3 do doc de personagens: 58-64a, 181cm, tronco largo — retângulo
--- baixo nos ombros (~30px vs ~21 do Viajante). Pele parda escura
--- (skin.2); cabeça raspada com stubble 'd' e BARBA CURTA PRATA/PRETO
--- ('g' plaster claro com flecks 'h') — a "cabeça clara de barba" é
--- âncora: o terço inferior do rosto lê claro contra a pele escura.
--- Camisa linho cinza (plaster), colete castanho (earth), calças azul
--- carvão (iron.3), avental de lona encerada (clothWarm) com FAIXA
--- DIAGONAL reforçada (bone.4) — âncora nº3. Sem props nas mãos.
--- Âncoras: ombros largos | cabeça clara de barba | faixa diagonal.
-
+-- V09 NPC_DORO_S — upgrade C01-grade do idle SUL. Mesma geometria do
+-- def anterior (punhos em cols 14-19/48-53, tronco 14-52) para o
+-- trabalho de bancada (npc_doro_trabalho) continuar assentando.
+-- Upgrade: sombra interna 'r' no lado longe do colete, manga com
+-- pregas 'd', barba com núcleo G + flecks h + pontas, calça com
+-- costura 'P' e afunilamento, bota com biqueira 'B' e sola 'o'.
 local function L(s)
-    assert(#s <= 64, 'linha de sprite > 64 colunas')
+    assert(#s <= 64, 'linha > 64')
     return s .. string.rep('.', 64 - #s)
 end
 local E = string.rep('.', 64)
@@ -32,6 +25,12 @@ local function shift(map, dy, rmin, rmax)
     end
     return t
 end
+local function patch(map, edits)
+    local t = {}
+    for r, s in pairs(map) do t[r] = s end
+    for r, s in pairs(edits) do t[r] = s end
+    return t
+end
 local function overlay(ga, gb)
     local A, B, out = {}, {}, {}
     for l in ga:gmatch('[^\n]+') do A[#A + 1] = l end
@@ -47,44 +46,34 @@ local function overlay(ga, gb)
     end
     return table.concat(out, '\n')
 end
-local function patch(map, edits)
-    local t = {}
-    for r, s in pairs(map) do t[r] = s end
-    for r, s in pairs(edits) do t[r] = s end
-    return t
-end
 
---------------------------------------------------------------------------------
--- BODY: cabeça raspada + barba prata, pescoço, camisa+colete, calças,
--- botas largas, punhos grandes soltos.
---------------------------------------------------------------------------------
 local body = {
-    -- crânio raspado: pele com stubble 'd', sem franja
-    [9]  = '................................kkkkkkk',
-    [10] = '...............................kssssssssk',
-    [11] = '..............................kssssssssssk',
-    [12] = '.............................kssssdsssssdsssk',
-    [13] = '.............................kssssssssssssssk',
-    [14] = '.............................kssssssssssssssk',
-    [15] = '.............................kssssssssssssssk',
-    [16] = '.............................kssssssssssssssk',
-    -- sobrancelhas grisalhas 'g' sobre olhos pequenos 'ee'
-    [17] = '.............................ksssgssssssgsssk',
-    [18] = '.............................ksseesssssseessk',
-    [19] = '.............................kssssssssssssssk',
-    -- nariz largo achatado 'ddd'
-    [20] = '.............................ksssssdddssssssk',
-    [21] = '.............................ksssssdddssssssk',
-    [22] = '.............................kssssssssssssssk',
-    -- barba curta prata 'g' com núcleo 'G' e flecks pretos 'h'
-    [23] = '.............................ksggggggggggggsk',
-    [24] = '.............................kgggggGGGGGGgggk',
-    [25] = '.............................kggggggggggggggk',
-    [26] = '.............................kgggghhggghhgggk',
-    [27] = '.............................kgggghhggghhgggk',
-    [28] = '..............................kggghggghgggk',
-    [29] = '..............................kggggggggggk',
-    [30] = '...............................kgggggggk',
+    -- crânio raspado, restolho 'h' nas laterais e ninho no topo
+    [9]  = '................................khhkhkkk',
+    [10] = '...............................khshshsssssk',
+    [11] = '..............................ksshssssshssssk',
+    [12] = '..............................ksssssssssssssk',
+    [13] = '..............................ksssssssssssssk',
+    [14] = '..............................ksssssssssssssk',
+    [15] = '..............................ksssssssssssssk',
+    [16] = '..............................ksssssssssssssk',
+    -- sobrancelha grisalha 'g' grossa sobre olhos miúdos 'ee'
+    [17] = '..............................ksssggssssggsssk',
+    [18] = '..............................kssseegssggeessk',
+    [19] = '..............................kssssssssssssssk',
+    -- nariz largo achatado com sombra nas asas
+    [20] = '..............................ksssssnnnssssssk',
+    [21] = '..............................ksssdndnndsssssk',
+    [22] = '..............................kssssddddssssssk',
+    -- barba prata curta desgrenhada: núcleo G, flecks h, pontas g
+    [23] = '..............................ksggggggggggggsk',
+    [24] = '..............................kgggGGGGGGGGgggk',
+    [25] = '..............................kggGGgGGgGGgGGgk',
+    [26] = '..............................kgggghggghgggggk',
+    [27] = '..............................kggGGgghghgGgggk',
+    [28] = '..............................kgggghggghggggk',
+    [29] = '..............................kgggggggggggk',
+    [30] = '...............................kgggghgggk',
     [31] = '................................ksssssk',
     [32] = '................................ksssssk',
     [33] = '................................ksssssk',
@@ -92,180 +81,159 @@ local body = {
     [35] = '.................................kssssk',
     [36] = '.................................kssssk',
     [37] = '.................................kssssk',
-    -- OMBROS LARGOS (âncora): retângulo baixo, camisa linho + colete
+    -- ombros largos: linho 'l' nas bordas c/ prega 'd' na dobra do
+    -- braço; colete 'v' com faixa de sombra 'r' no lado direito
     [38] = '.........................kllllllllllllllllllllk',
-    [39] = '.......................kllllllllllllllllllllllk',
+    [39] = '.......................klllllllllllllllllllllllk',
     [40] = '......................kllllllllllllllllllllllllk',
     [41] = '....................kllllllllllllllllllllllllllk',
-    [42] = '..................klllllvvvvvvvvvvvvvvvvvvvvllllk',
-    [43] = '..................klllvvvvvvvvvvvvvvvvvvvvvlllk',
-    [44] = '..................klllvvvvvvvvvvvvvvvvvvvvvlllk',
-    [45] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    [46] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    [47] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    [48] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    [49] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    [50] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    [51] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    [52] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    [53] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    [54] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    [55] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    [56] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    [57] = '...................kllvvvvvvvvvvvvvvvvvvvvvllk',
-    -- punhos grandes soltos nas laterais
-    [58] = '..............ksssskkllvvvvvvvvvvvvvvvvvvvvvllkkssssk',
-    [59] = '..............ksssskkllvvvvvvvvvvvvvvvvvvvvvllkkssssk',
-    [60] = '..............ksssskkpppppppppppppppppppppppkkssssk',
-    [61] = '..............ksssskkpppppppppppppppppppppppkkssssk',
-    [62] = '..............kkkkk.kpppppppppppppppppppppppk.kkkkk',
-    -- calças azul carvão
+    [42] = '..................klllllvvvvvvvvvvvvvvvvvvvrvllllk',
+    [43] = '..................klllvvvvvvvvvvvvvvvvvvvvrrvlllk',
+    [44] = '..................klllvvvvvvvvvvvvvvvvvvvvrrvlllk',
+    [45] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    [46] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    [47] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    [48] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    [49] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    [50] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    [51] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    [52] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    [53] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    [54] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    [55] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    [56] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    [57] = '...................kllvvvvvvvvvvvvvvvvvvvrvvvllk',
+    -- punhos grandes nas mesmas colunas do def anterior (trabalho!)
+    [58] = '..............ksssskkllvvvvvvvvvvvvvvvvvvvrvvvllkkssssk',
+    [59] = '..............ksdsskkllvvvvvvvvvvvvvvvvvvvrvvvllkkssdsk',
+    [60] = '..............ksssskkpppppppppppppppppppppppppkksssssk',
+    [61] = '..............ksssskkpppppppppppppppppppppppppkksssssk',
+    [62] = '..............kkkkk.kpppppppppppppppppppppppppk.kkkkk',
+    -- calça azul-carvão: costura 'P' na face interna das canelas
     [63] = '.......................kppppppppk...kppppppppk',
     [64] = '.......................kppppppppk...kppppppppk',
     [65] = '.......................kppppppppk...kppppppppk',
-    [66] = '.......................kppppppppk...kppppppppk',
-    [67] = '.......................kppppppppk...kppppppppk',
-    [68] = '.......................kppppppppk...kppppppppk',
-    [69] = '.......................kppppppppk...kppppppppk',
-    [70] = '.......................kppppppppk...kppppppppk',
-    [71] = '.......................kppppppppk...kppppppppk',
-    [72] = '.......................kppppppppk...kppppppppk',
-    [73] = '.......................kppppppppk...kppppppppk',
-    [74] = '.......................kppppppppk...kppppppppk',
-    [75] = '.......................kppppppppk...kppppppppk',
-    [76] = '.......................kppppppppk...kppppppppk',
-    [77] = '........................kpppppppk...kppppppk',
-    [78] = '........................kpppppppk...kppppppk',
-    [79] = '........................kpppppppk...kppppppk',
-    [80] = '........................kpppppppk...kppppppk',
-    [81] = '........................kpppppppk...kppppppk',
-    [82] = '........................kpppppppk...kppppppk',
-    [83] = '........................kpppppppk...kppppppk',
-    [84] = '........................kpppppppk...kppppppk',
-    -- botas largas de sola grossa
-    [85] = '........................kbbbbbbbbk...kbbbbbbbbk',
-    [86] = '........................kbbbbbbbbk...kbbbbbbbbk',
-    [87] = '........................kbbbbbbbbk...kbbbbbbbbk',
-    [88] = '........................kbbbbbbbbk...kbbbbbbbbk',
-    [89] = '........................kbbbbbbbbk...kbbbbbbbbk',
-    [90] = '.......................kbbbbbbbbbbk.kbbbbbbbbbbk',
-    [91] = '.......................kbbbbbbbbbbk.kbbbbbbbbbbk',
-    [92] = '.......................kbbbbbbbbbbk.kbbbbbbbbbbk',
-    [93] = '.......................kooooooooook.kooooooooook',
-    [94] = '.......................kkkkkkkkkkk.kkkkkkkkkkk',
+    [66] = '.......................kppppppPpk...kppppppppk',
+    [67] = '.......................kppppppPpk...kppppppppk',
+    [68] = '.......................kppppppPpk...kppppppppk',
+    [69] = '.......................kppppppPpk...kppppppppk',
+    [70] = '.......................kppppppPpk...kppppppppk',
+    [71] = '.......................kppppppPpk...kppppppppk',
+    [72] = '.......................kppppppPpk...kppppppppk',
+    [73] = '.......................kppppppPpk...kppppppppk',
+    [74] = '.......................kpppppPppk...kppppppPpk',
+    [75] = '.......................kpppppPppk...kppppppPpk',
+    [76] = '.......................kpppppPppk...kppppppPpk',
+    [77] = '........................kpppppPpk...kpppppPpk',
+    [78] = '........................kpppppPpk...kpppppPpk',
+    [79] = '........................kpppppPpk...kpppppPpk',
+    [80] = '........................kpppppPpk...kpppppPpk',
+    [81] = '........................kpppppPpk...kpppppPpk',
+    [82] = '........................kpppppPpk...kpppppPpk',
+    [83] = '........................kpppppPk...kpppppPk',
+    -- botas largas: cano 'D', corpo 'b', biqueira 'B', sola 'o'
+    [84] = '........................kDDDDDkk...kDDDDDkk',
+    [85] = '........................kDDDDbk....kDDDDbk',
+    [86] = '........................kbbbbbbk...kbbbbbbk',
+    [87] = '........................kbbbbbbk...kbbbbbbk',
+    [88] = '........................kbbbbbbk...kbbbbbbk',
+    [89] = '........................kbbbbbbbk..kbbbbbbbk',
+    [90] = '........................kbbbbbbbk..kbbbbbbbk',
+    [91] = '........................kbbbbbBbk..kbbbbBbbk',
+    [92] = '........................kbbbbbBbk..kbbbbBbbk',
+    [93] = '........................kooooobk...koooooobk',
+    [94] = '........................kkkkkkkk...kkkkkkkkk',
 }
 
---------------------------------------------------------------------------------
--- GARB: avental de lona encerada 'a' com bordas 'A' + FAIXA DIAGONAL
--- 'F' (bone.4) do ombro esquerdo ao quadril direito — âncora.
---------------------------------------------------------------------------------
-local apron = {
-    [46] = '.........................kAAAAAAAAAAAAAAAAk',
-    [47] = '.........................kaaaaaaaaaaaaaaaak',
-    [48] = '.........................kaaaaaaaaaaaaaaaak',
-    [49] = '.........................kaaaaaaaaaaaaaaaak',
-    [50] = '.........................kaaaaaaaaaaaaaaaak',
-    [51] = '.........................kaaaaaaaaaaaaaaaak',
-    [52] = '.........................kaaaaaaaaaaaaaaaak',
-    [53] = '.........................kaaaaaaaaaaaaaaaak',
-    [54] = '.........................kaaaaaaaaaaaaaaaak',
-    [55] = '.........................kaaaaaaaaaaaaaaaak',
-    [56] = '.........................kaaaaaaaaaaaaaaaak',
-    [57] = '.........................kaaaaaaaaaaaaaaaak',
-    [58] = '.........................kaaaaaaaaaaaaaaaak',
-    [59] = '.........................kaaaaaaaaaaaaaaaak',
-    [60] = '.........................kaaaaaaaaaaaaaaaak',
-    [61] = '.........................kaaaaaaaaaaaaaaaak',
-    [62] = '.........................kaaaaaaaaaaaaaaaak',
-    [63] = '.........................kaaaaaaaaaaaaaaaak',
-    [64] = '.........................kaaaaaaaaaaaaaaaak',
-    [65] = '.........................kaaaaaaaaaaaaaaaak',
-    [66] = '.........................kaaaaaaaaaaaaaaaak',
-    [67] = '.........................kaaaaaaaaaaaaaaaak',
-    [68] = '.........................kaaaaaaaaaaaaaaaak',
-    [69] = '.........................kaaaaaaaaaaaaaaaak',
-    [70] = '.........................kaaaaaaaaaaaaaaaak',
-    [71] = '.........................kAAAAAAAAAAAAAAAAk',
+-- avental encerado curto na frente: borda viva 'A', meio 'a',
+-- bainha com nós 'c' alternados, faixa diagonal 'F' por cima
+local garb = {
+    [43] = '..........................kAAAAAAAAAAAk',
+    [44] = '..........................kAaaaaaaaaaaAk',
+    [45] = '..........................kAaaaaaaaaaaaAk',
+    [46] = '..........................kAaaaaaaaaaaaAk',
+    [47] = '..........................kAaaaaaaaaaaaaAk',
+    [48] = '..........................kAaaaaaaaaaaaaAk',
+    [49] = '..........................kAaaaaaaaaaaaaaAk',
+    [50] = '..........................kAaaaaaaaaaaaaaAk',
+    [51] = '..........................kAaaaaaaaaaaaaaAk',
+    [52] = '..........................kAaaaaaaaaaaaaaAk',
+    [53] = '..........................kAaaaaaaaaaaaaaAk',
+    [54] = '..........................kAaaaaaaaaaaaaaAk',
+    [55] = '..........................kAaaaaaaaaaaaaaAk',
+    [56] = '..........................kAaaaaaaaaaaaaaAk',
+    [57] = '..........................kAaaaaaaaaaaaaaAk',
+    [58] = '..........................kAaaaaaaaaaaaaaAk',
+    [59] = '..........................kAaaaaaaaaaaaaaAk',
+    [60] = '..........................kcacacacacacacack',
+    [61] = '..........................kcacacacacacacack',
+    [62] = '..........................kcccccccccccccck',
 }
 
 local strap = {
-    [41] = '.......................FFF',
-    [42] = '........................FFF',
-    [44] = '.........................FFF',
-    [45] = '..........................FFF',
-    [46] = '...........................FFF',
-    [47] = '............................FFF',
-    [48] = '.............................FFF',
-    [50] = '..............................FFF',
-    [51] = '...............................FFF',
-    [52] = '................................FFF',
-    [53] = '.................................FFF',
-    [54] = '..................................FFF',
-    [56] = '...................................FFF',
-    [57] = '....................................FFF',
-    [58] = '.....................................FFF',
-    [59] = '......................................FFF',
-    [60] = '.......................................FFF',
-    [62] = '........................................FFF',
-    [63] = '.........................................FFF',
-    [64] = '..........................................FFF',
-    [65] = '...........................................FFF',
-    [66] = '............................................FFF',
+    [42] = '..............................kFFFk',
+    [43] = '..............................kFFFk',
+    [44] = '...............................kFFFk',
+    [45] = '...............................kFFFk',
+    [46] = '................................kFFFk',
+    [47] = '................................kFFFk',
+    [48] = '.................................kFFFk',
+    [49] = '.................................kFFFk',
+    [50] = '..................................kFFFk',
+    [51] = '..................................kFFFk',
+    [52] = '...................................kFFFk',
+    [53] = '...................................kFFFk',
+    [54] = '....................................kFFFk',
+    [55] = '....................................kFFFk',
+    [56] = '.....................................kFFFk',
+    [57] = '.....................................kFFFk',
+    [58] = '......................................kFFFk',
+    [59] = '......................................kFFFk',
+    [60] = '.......................................kFFFk',
+    [61] = '........................................kFFk',
 }
 
-local garb = overlay(R(apron), R(strap))
+local garbAll = overlay(R(strap), R(garb))
 
--- f3: olha a peça (cabeça toda desce 1px) + punhos flexionam — nós 'd'
--- em bloco 2x2 por punho (1px sumia a 1x).
-local gesto = patch(shift(body, 1, 9, 36), {
-    [59] = '..............kssddkkllvvvvvvvvvvvvvvvvvvvvvllkkssddk',
-    [60] = '..............kssddkkpppppppppppppppppppppppkkssddk',
+local gesto = patch(shift(body, 1, 8, 37), {
+    [59] = '..............kddsskkllvvvvvvvvvvvvvvvvvvvrvvvllkkssddk',
+    [60] = '..............kddsskkpppppppppppppppppppppppppkkssddsk',
 })
--- f4: respiro com piscar — olhos 'ee' viram pálpebra 'dd'.
 local respiroPisca = shift(patch(body, {
-    [18] = '.............................kssddssssssddssk',
-}), 1, 38, 56)
+    [18] = '..............................ksssddgssgddsssk',
+    [19] = '..............................ksssddgssgddsssk',
+}), 1, 38, 60)
 
 return {
-    name = 'npc_doro_s',
-    w = 64, h = 96,
-    origin = 'feet',
-
+    name = 'npc_doro_s', w = 64, h = 96, origin = 'feet',
     legend = {
-        k = {spec = 'ink', h = 4},
-        s = {ramp = 'skin', step = 2, h = 11},  -- pele parda escura
-        S = {ramp = 'skin', step = 3, h = 12},
-        d = {ramp = 'skin', step = 1, h = 10},  -- stubble/sombra
-        e = {spec = 'ink', h = 12},
-        g = {ramp = 'plaster', step = 5, h = 11}, -- barba prata (âncora clara)
-        G = {ramp = 'plaster', step = 6, h = 12},
-        h = {ramp = 'hair', step = 2, h = 11},  -- flecks pretos da barba
-        l = {ramp = 'plaster', step = 3, h = 6}, -- camisa linho cinza
-        v = {ramp = 'earth', step = 3, h = 6},  -- colete castanho
-        p = {ramp = 'iron', step = 3, h = 4},   -- calças azul carvão
-        P = {ramp = 'iron', step = 2, h = 3},
-        b = {ramp = 'earth', step = 2, h = 2},
-        B = {ramp = 'earth', step = 4, h = 3},
-        o = {ramp = 'earth', step = 5, h = 2},
-        a = {ramp = 'clothWarm', step = 3, h = 6}, -- lona encerada
-        A = {ramp = 'clothWarm', step = 2, h = 6},
-        F = {ramp = 'bone', step = 4, h = 8},   -- faixa diagonal (âncora)
-        r = {ramp = 'earth', step = 2, h = 5},
-        n = {ramp = 'gold', step = 5, h = 7},
+        k = { spec = 'ink', h = 4 },
+        s = { ramp = 'skin', step = 2, h = 11 },
+        d = { ramp = 'skin', step = 1, h = 10 },
+        e = { spec = 'ink', h = 12 },
+        g = { ramp = 'plaster', step = 5, h = 11 },
+        G = { ramp = 'plaster', step = 6, h = 12 },
+        h = { ramp = 'hair', step = 2, h = 11 },
+        n = { ramp = 'skin', step = 3, h = 11 },
+        l = { ramp = 'plaster', step = 3, h = 6 },
+        v = { ramp = 'earth', step = 4, h = 6 },
+        r = { ramp = 'earth', step = 2, h = 5 },
+        p = { ramp = 'iron', step = 3, h = 4 },
+        P = { ramp = 'iron', step = 2, h = 3 },
+        D = { ramp = 'earth', step = 1, h = 2 },
+        b = { ramp = 'earth', step = 2, h = 2 },
+        o = { ramp = 'earth', step = 5, h = 2 },
+        B = { ramp = 'earth', step = 4, h = 3 },
+        a = { ramp = 'clothWarm', step = 3, h = 6 },
+        A = { ramp = 'clothWarm', step = 2, h = 6 },
+        c = { ramp = 'clothWarm', step = 1, h = 5 },
+        F = { ramp = 'bone', step = 4, h = 8 },
+        w = { ramp = 'gold', step = 4, h = 7 },
     },
-
     layers = {
-        {name = 'body', h = 4, albedo = {
-            R(body),
-            R(shift(body, 1, 38, 56)),
-            R(gesto),
-            R(respiroPisca),
-        }},
-        {name = 'garb', h = 6, albedo = {
-            garb,
-            garb,
-            garb,
-            garb,
-        }},
+        { name = 'body', h = 4, albedo = {
+            R(body), R(shift(body, 1, 38, 60)), R(gesto), R(respiroPisca),
+        } },
+        { name = 'garb', h = 7, albedo = { garbAll, garbAll, garbAll, garbAll } },
     },
 }
