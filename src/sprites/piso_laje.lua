@@ -111,6 +111,17 @@ local LASCA_D = {
 -- Fio de desgaste: topo da laje lavado pela luz (h=2, bem raro).
 local FIO = { 'sss' }
 local FIO2 = { '.ss' }
+-- Tufo orgânico nascendo na junta (v4 ouro): g = base escura, t = lâminas.
+local TUFO = {
+    't.t',
+    'tgt',
+    'ggg',
+}
+local TUFO2 = {
+    '.t',
+    'gt',
+    'gg',
+}
 
 local function laje(spec)
     local g = nova('a')
@@ -142,6 +153,7 @@ local V1 = {
         { 18, 22, LASCA_A }, { 44, 54, LASCA_B }, { 33, 38, LASCA_C },
         { 56, 20, LASCA_D },
         { 27, 6, FIO }, { 51, 27, FIO2 }, { 6, 44, FIO2 },
+        { 22, 13, TUFO },   -- na junta horizontal y~14, cruzando a vertical x~23
     },
 }
 
@@ -167,6 +179,7 @@ local V2 = {
         { 36, 18, LASCA_B }, { 16, 50, LASCA_C }, { 54, 52, LASCA_A },
         { 6, 34, LASCA_D },
         { 7, 24, FIO }, { 48, 37, FIO }, { 30, 61, FIO2 },
+        { 43, 27, TUFO2 },  -- junta horizontal y~29, encosta na vertical x~43
     },
 }
 
@@ -190,6 +203,7 @@ local V3 = {
         { 24, 24, LASCA_C }, { 58, 42, LASCA_A }, { 12, 58, LASCA_B },
         { 44, 30, LASCA_D },
         { 46, 8, FIO }, { 33, 45, FIO2 }, { 59, 26, FIO2 },
+        { 8, 15, TUFO },    -- junta horizontal y~16, junto à vertical x~8
     },
 }
 
@@ -215,6 +229,7 @@ local V4 = {
         { 47, 18, LASCA_A }, { 22, 32, LASCA_B }, { 6, 48, LASCA_C },
         { 38, 44, LASCA_D },
         { 14, 60, FIO }, { 38, 33, FIO2 }, { 59, 5, FIO },
+        { 34, 9, TUFO2 },   -- junta horizontal y~10
     },
 }
 
@@ -225,12 +240,16 @@ return {
     frameUse = 'variant', -- 4 frames = variantes por seed, nunca animação
 
     legend = {
-        j = { ramp = 'stone', step = 1, h = 0 }, -- junta rebaixada
-        a = { ramp = 'stone', step = 3, h = 1 }, -- laje base
-        l = { ramp = 'stone', step = 4, h = 1 }, -- laje clara
-        d = { ramp = 'stone', step = 2, h = 1 }, -- laje sombreada / lasca
-        s = { ramp = 'stone', step = 5, h = 2 }, -- fio de desgaste
-        S = { ramp = 'stone', step = 6, h = 2 }, -- filete claro da lasca
+        -- v3: faixa da rampa subiu ~2 degraus — a calçada lia quase-preta
+        -- contra a terra em luz plena do pátio (missão padrão-ouro, hub).
+        j = { ramp = 'stone', step = 2, h = 0 }, -- junta rebaixada
+        a = { ramp = 'stone', step = 5, h = 1 }, -- laje base
+        l = { ramp = 'stone', step = 6, h = 1 }, -- laje clara
+        d = { ramp = 'stone', step = 4, h = 1 }, -- laje sombreada / lasca
+        s = { ramp = 'stone', step = 7, h = 2 }, -- fio de desgaste
+        S = { ramp = 'stone', step = 8, h = 2 }, -- filete claro da lasca
+        g = { ramp = 'moss',  step = 2, h = 1 }, -- tufinho na junta
+        t = { ramp = 'moss',  step = 4, h = 2 }, -- lâmina do tufo
     },
 
     layers = {

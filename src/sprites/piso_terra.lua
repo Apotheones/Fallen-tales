@@ -6,6 +6,10 @@
 -- v2: as manchas eram todas elipses médias — agora variam em tamanho e
 -- elongação (manchão raro, veios alongados horizontais/verticais, manchas
 -- pequenas), quebrando a repetitividade do tile lado a lado.
+-- v3: contraste de DENSIDADE — cada variante concentra as marcas num
+-- rastro de uso (desgaste + farelo + pedrinhas se amontoando por uma
+-- trilha desenhada) e deixa zonas grandes quase limpas. Em luz plena
+-- o speckle uniforme lia como chão liso; a trilha devolve textura.
 
 local W, H = 64, 64
 
@@ -187,6 +191,41 @@ local VALE2 = { 'r', 'r' }
 -- Brilho raro no desgaste: grão claro do barro seco.
 local GRAO = { 'c' }
 local GRAO2 = { 'c.c' }
+-- v3 — Farelo de rastro: pontos miúdos de desgaste ('b') ou de barro
+-- pisado ('d') marcando a borda da trilha — textura entre o desgaste
+-- cheio e a massa limpa.
+local FARELO_B1 = {
+    '.bb.',
+    'bb..',
+    '.b..',
+}
+local FARELO_B2 = {
+    'bb..',
+    '.bbb',
+    '..b.',
+}
+local FARELO_D1 = {
+    '.d.',
+    'dd.',
+    '.d.',
+}
+local FARELO_D2 = {
+    'd..',
+    'ddd',
+    '..d',
+}
+-- Tufo de grama: pequena massa escura com lâminas subindo — nasce em
+-- beirada de muro/sombra, nunca no meio do caminho.
+local TUFO_A = {
+    't.t.',
+    'tgtg',
+    'gggg',
+}
+local TUFO_B = {
+    '.t.t',
+    'gtgt',
+    'ggg.',
+}
 
 local function terra(spec)
     local g = nova('a')
@@ -195,58 +234,40 @@ local function terra(spec)
 end
 
 local V1 = {
+    -- v7 (regra da Mira): tile = BASE quase limpa; a textura mora no
+    -- overlay terra_mancha que atravessa 2+ celulas. Celula sem contorno.
     carimbos = {
-        { 36, 10, MASSA_G1 },   -- manchão raro
-        { 4, 40, MASSA_L1 },    -- veio horizontal
-        { 52, 44, MASSA_V1 },   -- veio vertical
-        { 8, 6, MASSA_P1 }, { 28, 30, MASSA_P2 },
-        { 14, 20, DESG_A },
-        { 48, 8, PEDRA_B }, { 52, 12, PEDRA_E }, { 8, 32, PEDRA_C },
-        { 36, 56, PEDRA_D }, { 40, 59, PEDRA_E },
-        { 12, 12, VALE }, { 46, 32, VALE }, { 48, 36, VALE2 },
-        { 30, 22, GRAO }, { 34, 26, GRAO2 },
+        { 18, 30, MASSA_P1 }, { 46, 14, MASSA_P2 },
+        { 34, 44, PEDRA_E },
+        { 26, 12, GRAO },
     },
 }
 
 local V2 = {
+    -- Quieta, outra poeira.
     carimbos = {
-        { 34, 30, MASSA_G2 },   -- manchão raro
-        { 40, 4, MASSA_L2 },    -- veio horizontal no topo
-        { 8, 22, MASSA_V2 },    -- veio vertical na esquerda
-        { 20, 54, MASSA_D2 }, { 54, 50, MASSA_P1 },
-        { 10, 8, DESG_B }, { 44, 26, DESG_B },
-        { 20, 18, PEDRA_A }, { 23, 21, PEDRA_E }, { 56, 14, PEDRA_C },
-        { 30, 52, PEDRA_B }, { 34, 55, PEDRA_E }, { 8, 58, PEDRA_D },
-        { 40, 12, VALE2 }, { 14, 40, VALE }, { 52, 46, VALE },
-        { 14, 12, GRAO }, { 48, 30, GRAO2 },
+        { 40, 26, MASSA_P1 },
+        { 10, 48, PEDRA_E }, { 52, 50, MASSA_P2 },
+        { 22, 34, VALE },
     },
 }
 
 local V3 = {
+    -- Quieta — mancha solta e uma pedrinha, miolo amplo limpo.
     carimbos = {
-        { 6, 34, MASSA_G2 },    -- manchão raro embaixo-esq
-        { 30, 6, MASSA_L1 },    -- veio horizontal no topo
-        { 54, 12, MASSA_V1 },   -- veio vertical na direita
-        { 14, 10, MASSA_D3 }, { 40, 54, MASSA_P2 },
-        { 20, 26, DESG_A },
-        { 6, 24, PEDRA_D }, { 50, 22, PEDRA_A }, { 54, 25, PEDRA_E },
-        { 56, 44, PEDRA_B }, { 14, 58, PEDRA_C },
-        { 12, 14, VALE }, { 46, 8, VALE2 }, { 34, 48, VALE },
-        { 26, 32, GRAO2 }, { 32, 36, GRAO },
+        { 24, 24, MASSA_D1 },
+        { 48, 40, PEDRA_A },
+        { 36, 52, GRAO },
     },
 }
 
 local V4 = {
+    -- Meia-uso suave (uso contextual ainda pode chamar este frame).
     carimbos = {
-        { 32, 34, MASSA_G1 },   -- manchão raro embaixo-dir
-        { 24, 4, MASSA_L2 },    -- veio horizontal no topo
-        { 6, 30, MASSA_V2 },    -- veio vertical na esquerda
-        { 44, 14, MASSA_D2 }, { 54, 52, MASSA_P1 },
-        { 36, 20, DESG_B }, { 6, 52, DESG_B },
-        { 50, 12, PEDRA_B }, { 54, 15, PEDRA_E }, { 14, 34, PEDRA_A },
-        { 28, 54, PEDRA_D }, { 32, 57, PEDRA_E }, { 58, 50, PEDRA_C },
-        { 32, 8, VALE }, { 10, 26, VALE2 }, { 46, 44, VALE },
-        { 40, 24, GRAO }, { 12, 54, GRAO2 },
+        { 26, 26, MASSA_G2 }, { 24, 30, DESG_B },
+        { 30, 34, PEDRA_B }, { 24, 2, MASSA_L1 },
+        { 28, 30, VALE },
+        { 26, 28, GRAO },
     },
 }
 
@@ -257,14 +278,18 @@ return {
     frameUse = 'variant', -- 4 frames = variantes por seed, nunca animação
 
     legend = {
+        -- v4 (padrão-ouro): contraste aberto — manchas 1 passo mais
+        -- fundas e desgaste/grão mais claros; o campo lia plano em luz.
         a = { ramp = 'earth', step = 4, h = 1 }, -- massa de barro
-        d = { ramp = 'earth', step = 3, h = 1 }, -- mancha pisada
-        r = { ramp = 'earth', step = 2, h = 0 }, -- depressão funda
-        b = { ramp = 'earth', step = 5, h = 1 }, -- desgaste claro
-        c = { ramp = 'earth', step = 6, h = 1 }, -- grão claro raro
+        d = { ramp = 'earth', step = 2, h = 1 }, -- mancha pisada funda
+        r = { ramp = 'earth', step = 1, h = 0 }, -- depressão funda
+        b = { ramp = 'earth', step = 6, h = 1 }, -- desgaste claro
+        c = { ramp = 'earth', step = 7, h = 1 }, -- grão claro raro
         p = { ramp = 'stone', step = 5, h = 2 }, -- pedrinha, luz
         q = { ramp = 'stone', step = 3, h = 2 }, -- pedrinha, lado de sombra
         u = { ramp = 'earth', step = 2, h = 1 }, -- sombra sob a pedrinha
+        g = { ramp = 'moss',  step = 2, h = 1 }, -- tufo de grama, base
+        t = { ramp = 'moss',  step = 4, h = 2 }, -- lâmina do tufo
     },
 
     layers = {

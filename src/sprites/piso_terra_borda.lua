@@ -1,14 +1,27 @@
 -- PISO_TERRA_BORDA — overlay de transição de terreno (W5), 64x64,
 -- origem topleft. 8 frames = DIREÇÕES, não variantes nem animação:
--- frameUse='direction'. Ordem: 1=n, 2=e, 3=s, 4=w, 5=ne, 6=nw, 7=se,
--- 8=sw — o frame diz de ONDE vem a terra (vizinho n → banda no topo
--- da célula sobreposta). Alpha 0 fora da banda: desenha por cima do
--- tile-base (laje) — a terra orgânica invade a pedra trabalhada.
+-- frameUse='direction'.
 --
--- Linguagem igual ao piso_terra: massa 'a', mancha 'd', depressão 'r',
--- pedrinha 'p'/'q' com apoio 'u'. A fronteira é lobada por blocos de
--- 4 px (aglomerado autorado, não ruído) com 1-2 torrões soltos além
--- dela — erosão, não salpico.
+-- CONTRATO DE CONSUMO (src/hd_world.lua, canal de chão):
+--   dirs por offset {0,-1},{1,0},{0,1},{-1,0} => d1..d4 = n,e,s,w.
+--   O overlay `trans_terra` desenha SOBRE a célula receptora (laje):
+--   o vizinho terra invade a aresta dela, nunca o contrário.
+--     f1 = vizinho N  -> banda de terra entrando pelo TOPO da célula
+--     f2 = vizinho E  -> banda entrando pela DIREITA
+--     f3 = vizinho S  -> banda entrando pela BASE
+--     f4 = vizinho W  -> banda entrando pela ESQUERDA
+--   Cantos internos (tabela {{1,2,5},{4,1,6},{2,3,7},{3,4,8}}):
+--     f5 = n+e (canto NE), f6 = w+n (NW), f7 = e+s (SE), f8 = s+w (SW)
+--   Quando o par combina, SÓ o frame de canto desenha — ele precisa
+--   cobrir as duas arestas e o canto sem buraco.
+--
+-- Linguagem igual ao piso_terra: massa 'a', mancha 'd', desgaste 'b'.
+-- A fronteira é lobada por blocos de 4 px + dente de 1 px (penínsulas
+-- de 2-6 px), com farelo de torrões esparsando sobre a laje, musgo
+-- seco 'm' na emenda e falha de pedra 's' pontual. h 0-1: decalque,
+-- a terra recua — o fio 'u' e o musgo sentam em h=0 na beirada.
+-- A aresta externa do tile fica massa cheia: a terra continua sem
+-- emenda dentro do vizinho terra (fio 'u' só na face invasora).
 
 local W, H = 64, 64
 
@@ -36,13 +49,17 @@ local function str(g)
     return table.concat(t, '\n')
 end
 
--- Profundidade da banda por coluna: lobas de 4 px (bloco) + dente de
--- 1 px coluna a coluna — determinístico, sem consumir RNG de jogo.
+local function hash2(x, y, seed)
+    return ((x * 41 + y * 67 + seed * 11) % 100) / 100
+end
+
+-- Profundidade da banda por posição na aresta: base 6 + lobo de 4 px
+-- (0-5) + dente coluna a coluna (0-1) => 6..12 px, penínsulas de 2-6.
 local function prof(x, seed)
     local b = math.floor((x - 1) / 4)
     local lobe = ((b * 57 + seed * 31 + 13) % 100) / 100
     local dente = ((x * 29 + seed * 17 + 7) % 97) / 97
-    return 8 + math.floor(lobe * 9 + dente * 2.4)
+    return 6 + math.floor(lobe * 6 + dente * 1.9)
 end
 
 -- Banda ao longo da aresta `dir`: 'n' enche de cima p/ baixo até prof.
@@ -60,8 +77,8 @@ local function banda(dir, seed)
     return g
 end
 
--- Canto interno: união das duas bandas ortogonais (a terra vem das
--- duas direções e fecha o canto da célula).
+-- Canto interno: união das duas bandas ortogonais — o canto fica
+-- coberto pelas duas, sem buraco (só o frame de canto desenha).
 local function canto(d1, d2, seed)
     local g = nova('.')
     for x = 1, W do
@@ -74,14 +91,6 @@ local function canto(d1, d2, seed)
     return g
 end
 
--- Acabamento da banda: manchas 'd' dentro da massa, fio 'u' de sombra
--- na linha da fronteira, torrões soltos 1-2 px além dela e pedrinhas
--- esparsas (clusters desenhados, luz de cima-esquerda).
-local PEDRA = {
-    { '.pp.', 'pqp.', '.u..' },
-    { '.p.pp', 'ppqpp', 'u.uu.' },
-    { 'ppp..', 'pqpp.', '.u.u.' },
-}
 local function carimbo(g, x, y, forma, mask)
     for j = 1, #forma do
         for i = 1, #forma[j] do
@@ -93,54 +102,113 @@ local function carimbo(g, x, y, forma, mask)
     end
 end
 
+-- Acabamento da banda, por passes determinísticos:
+-- 1) fio 'u' só na fronteira invasora (vizinho vazio DENTRO do tile;
+--    a aresta externa continua 'a' — emenda invisível com o vizinho).
+-- 2) musgo seco 'm': raro, sobre o fio e na laje encostada na beira.
+-- 3) farelo: torrões 'a'/'d' de 1 px além da beira (anéis 18% + 6%).
+-- 4) manchas 'd'/'b' e falha 's' escolhidas SOBRE pixels de terra —
+--    carimbo com máscara nunca erra a banda.
+local MASKA = {
+    '..ddd..',
+    '.ddddd.',
+    'ddddddd',
+    '.dddd..',
+}
+local MASKB = {
+    '.bbbbbb.',
+    'bbbbbbbb',
+    '.bbbbb..',
+}
+local FALHA = {
+    { 'ss.', '.s.' },
+    { '.ss', 'ss.' },
+    { 's' },
+}
+
 local function acaba(g, seed)
-    -- fio de sombra na fronteira + torrão além dela, por coluna/fila
+    -- Passo 1: fronteira invasora.
+    local rim, fora = {}, {}
     for y = 1, H do for x = 1, W do
-        if get(g, x, y) == 'a' then
-            local fora = get(g, x - 1, y) == '.' or get(g, x + 1, y) == '.'
-                or get(g, x, y - 1) == '.' or get(g, x, y + 1) == '.'
-            if fora then
-                g[y][x] = 'u' -- beira da terra em sombra sobre a pedra
-                -- torrão solto 1-2 px além da linha, esparso por hash
-                for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
-                    local tx, ty = x + d[1], y + d[2]
-                    if tx >= 1 and tx <= W and ty >= 1 and ty <= H
-                        and get(g, tx, ty) == '.'
-                        and ((tx * 41 + ty * 67 + seed * 11) % 100) < 22 then
-                        g[ty][tx] = 'a'
-                    end
+        if g[y][x] == 'a' then
+            local borda = false
+            for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+                local tx, ty = x + d[1], y + d[2]
+                -- Fora do tile NÃO conta: a aresta externa é continuação
+                -- da terra do vizinho, não fronteira invasora.
+                if tx >= 1 and tx <= W and ty >= 1 and ty <= H
+                    and g[ty][tx] == '.' then
+                    borda = true
+                    fora[#fora + 1] = { tx, ty }
                 end
             end
+            if borda then rim[#rim + 1] = { x, y } end
         end
     end end
-    -- manchas 'd' e desgaste 'b' dentro da massa (só onde já há terra)
-    local MASKA = {
-        '..ddd..',
-        '.ddddd.',
-        'ddddddd',
-        '.dddd..',
-    }
-    local MASKB = {
-        '.dddddd.',
-        'dddddddd',
-        '.ddddd..',
-    }
-    local spots = {}
-    for i = 0, 3 do
-        spots[#spots + 1] = { ((seed * 37 + i * 23) % 48) + 4,
-            ((seed * 53 + i * 31) % 56) + 2 }
+
+    -- Passo 2: beirada em tons de sujeira — o fio 'u' domina mas não
+    -- vira linha uniforme: 'd' amassa partes, 'm' esverdeia raro e a
+    -- ponta de uma península às vezes fica massa cheia. Antes do
+    -- farelo para os torrões não cobrirem o musgo.
+    for _, p in ipairs(rim) do
+        local h = hash2(p[1], p[2], seed + 3)
+        if h < 0.07 then g[p[2]][p[1]] = 'm'
+        elseif h < 0.32 then g[p[2]][p[1]] = 'd'
+        elseif h < 0.38 then g[p[2]][p[1]] = 'a'
+        else g[p[2]][p[1]] = 'u' end
     end
-    carimbo(g, spots[1][1], spots[1][2], MASKA, true)
-    carimbo(g, spots[2][1], spots[2][2], MASKB, true)
-    carimbo(g, spots[3][1], spots[3][2], PEDRA[1 + seed % 3], true)
-    if seed % 2 == 0 then
-        carimbo(g, spots[4][1], spots[4][2], PEDRA[1 + (seed + 1) % 3], true)
+    for _, c in ipairs(fora) do
+        local x, y = c[1], c[2]
+        if get(g, x, y) == '.' and hash2(x, y, seed + 5) < 0.08 then
+            g[y][x] = 'm'
+        end
     end
-    -- grão claro raro no desgaste
-    for i = 1, 3 do
-        local x = (seed * 71 + i * 19) % 60 + 2
-        local y = (seed * 43 + i * 29) % 60 + 2
-        if get(g, x, y) == 'd' then g[y][x] = 'c' end
+
+    -- Passo 3: farelo — anel 1 de torrões colado na beira, anel 2
+    -- esparsando mais um passo na laje (erosão, não salpico).
+    local anel2 = {}
+    for _, c in ipairs(fora) do
+        local x, y = c[1], c[2]
+        if get(g, x, y) == '.' then
+            local h = hash2(x, y, seed)
+            if h < 0.18 then
+                g[y][x] = h < 0.05 and 'd' or 'a'
+                anel2[#anel2 + 1] = { x, y }
+            end
+        end
+    end
+    for _, c in ipairs(anel2) do
+        for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+            local tx, ty = c[1] + d[1], c[2] + d[2]
+            if get(g, tx, ty) == '.' and hash2(tx, ty, seed + 7) < 0.10 then
+                g[ty][tx] = 'a'
+            end
+        end
+    end
+
+    -- Passo 4: manchas e falhas dentro da massa — alvos escolhidos
+    -- sobre pixels de terra reais, nunca às cegas.
+    local terra_px = {}
+    for y = 1, H do for x = 1, W do
+        if g[y][x] ~= '.' then terra_px[#terra_px + 1] = { x, y } end
+    end end
+    local n = #terra_px
+    if n > 0 then
+        local function alvo(i)
+            local p = terra_px[1 + ((seed * 37 + i * 53) % n)]
+            return p[1], p[2]
+        end
+        local x, y = alvo(1)
+        carimbo(g, math.max(1, x - 3), math.max(1, y - 2), MASKA, true)
+        x, y = alvo(2)
+        carimbo(g, math.max(1, x - 3), math.max(1, y - 1), MASKB, true)
+        -- falhas de pedra aflorando no barro (1-3 px, stone.3)
+        for i = 3, 5 do
+            x, y = alvo(i)
+            if hash2(x, y, seed + i) < 0.55 then
+                carimbo(g, x, y, FALHA[1 + (seed + i) % #FALHA], true)
+            end
+        end
     end
     return str(g)
 end
@@ -164,12 +232,11 @@ return {
 
     legend = {
         a = { ramp = 'earth', step = 4, h = 1 }, -- massa de barro
-        d = { ramp = 'earth', step = 3, h = 1 }, -- mancha pisada
+        d = { ramp = 'earth', step = 3, h = 1 }, -- mancha pisada / torrão
         b = { ramp = 'earth', step = 5, h = 1 }, -- desgaste claro
-        c = { ramp = 'earth', step = 6, h = 1 }, -- grão claro raro
-        p = { ramp = 'stone', step = 5, h = 2 }, -- pedrinha, luz
-        q = { ramp = 'stone', step = 3, h = 2 }, -- pedrinha, sombra
-        u = { ramp = 'earth', step = 2, h = 1 }, -- fio da fronteira
+        u = { ramp = 'earth', step = 2, h = 0 }, -- fio da beirada (recua)
+        m = { ramp = 'moss',  step = 2, h = 0 }, -- musgo seco na emenda
+        s = { ramp = 'stone', step = 3, h = 1 }, -- falha de pedra pontual
     },
 
     layers = {
