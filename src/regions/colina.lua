@@ -30,6 +30,10 @@ return {
         -- bloquear a saída da câmara (ficha 01, direção visual).
         {id = 'lapideProt', kind = 'lapide', x = 4, y = 3, solid = true},
         {id = 'tampa', kind = 'tampa', x = 8, y = 3},
+        -- Marca partida na parede norte da câmara, ao lado da tampa
+        -- (ABERTURA_HD Ato 1: a vedação). Repintura HD — emissivo violeta
+        -- ei~0.3 — fica com Traço/Prisma (doc §6); hoje herda a placa.
+        {id = 'marcaPartida', kind = 'placa', x = 7, y = 2},
         -- Lápides em mancha irregular (doc mapa-lugares: 2 agrupamentos,
         -- distâncias variadas) + marcas improvisadas das sepulturas recentes.
         {id = 'lapide1', kind = 'lapide', x = 5, y = 10, solid = true},
@@ -63,7 +67,10 @@ return {
     hotspots = {
         {id = 'sepultura', x = 5, y = 3, label = 'EXAMINAR'},
         {id = 'lapideProt', x = 4, y = 3, label = 'EXAMINAR'},
-        {id = 'tampa', x = 8, y = 3, label = 'EXAMINAR'},
+        -- O prop da tampa divide (8,3) com Doro e a fala dele vencia o
+        -- placar do interact — o spot desce uma célula pra inspeção abrir.
+        {id = 'tampa', x = 8, y = 4, label = 'EXAMINAR'},
+        {id = 'marcaPartida', x = 7, y = 2, label = 'EXAMINAR'},
         {id = 'pano', x = 13, y = 12, label = 'EXAMINAR'},
         {id = 'lapide', x = 5, y = 10, label = 'EXAMINAR'},
         {id = 'lapide', x = 7, y = 12, label = 'EXAMINAR'},
@@ -77,7 +84,9 @@ return {
         {id = 'bancoVelorio', x = 8, y = 12, label = 'EXAMINAR'},
         {id = 'placaDescida', x = 7, y = 15, label = 'DESCIDA',
             use = function(c)
-                if c:flag('gradeHow') then
+                -- gradeHow é string ('won'/'negotiated'/...) e c:flag só
+                -- casa `== true` — o passo P01-E03 é o fato da grade aberta.
+                if c:stepDone('P01-E03') then
                     c:notify('O refúgio fica pela descida.')
                 else
                     c:notify('A grade de Runa segura a descida — fale com ela.')

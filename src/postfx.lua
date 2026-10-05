@@ -309,8 +309,9 @@ function PostFX:resize(w, h)
     self.scene:setFilter('nearest', 'nearest') -- pixel art não se suaviza
     self.stats.format = fmt
     self.stats.hdr = fmt == 'rgba16f'
-    -- ping-pong de bloom a METADE da resolução: blur largo e barato.
-    local bw, bh = math.max(1, math.floor(w / 2)), math.max(1, math.floor(h / 2))
+    -- ping-pong de bloom a UM QUARTO da resolução (padrão-ouro): o halo
+    -- é gaussiano largo — 1/4 lê igual e custa ~4× menos fill.
+    local bw, bh = math.max(1, math.floor(w / 4)), math.max(1, math.floor(h / 4))
     local a = newCanvas(bw, bh, fmt) or newCanvas(bw, bh, 'rgba8')
     local b = newCanvas(bw, bh, fmt) or newCanvas(bw, bh, 'rgba8')
     self.bloomA, self.bloomB = a, b

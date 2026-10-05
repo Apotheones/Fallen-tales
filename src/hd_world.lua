@@ -59,6 +59,7 @@ local PROP_SPRITE = {
     varal = 'varal_vento', vela = 'vela_votiva_anim',
     tocha = 'tocha', chamine = 'fumaca_chamine',
     madeiraParede = 'madeira_encostada', cargas = 'fardos',
+    cabra = 'cabra',
     ervasSecas = 'rack_ervas',
 }
 
@@ -122,6 +123,10 @@ local function sheetsFor(self)
     -- só existe se o def do Traço estiver assado (senão, sem overlay).
     local tb = Kit.bakeViaDSL('piso_terra_borda')
     if tb then s.trans_terra = tb; s.trans_terra_q = Kit.quads(tb) end
+    -- Decal de uso do Traço (terra_mancha 128x128): textura por BLOCO,
+    -- não por célula — posições seedadas por contexto do mapa.
+    s.mancha = Kit.bakeViaDSL('terra_mancha')
+    if s.mancha then s.mancha_q = Kit.quads(s.mancha) end
     put('propStub', Kit.stubSheet(64, 96, propStub))
     put('actorStub', Kit.stubSheet(64, 96, actorStub))
     for _, dir in ipairs({'s', 'n', 'e', 'w'}) do
@@ -129,7 +134,13 @@ local function sheetsFor(self)
             dir == 's' and 'viajante' or 'viajante_' .. dir, 64, 96, nil))
         put('walk_' .. dir, Kit.sheet('viajante_walk_' .. dir, 64, 96, nil))
         put('npc_' .. dir, Kit.sheet('npc_doro_' .. dir, 64, 96, actorStub))
+        -- Pilotos de ação do Cinzel (W4): tiro direcional com âncoras.
+        put('tiro_' .. dir, Kit.sheet('viajante_tiro_' .. dir, 64, 96, nil))
     end
+    s.interacao = Kit.sheet('viajante_interacao', 64, 96, actorStub)
+    s['interacao_q'] = Kit.quads(s.interacao)
+    -- fx_* da Tinta: spawns via feedback.lua → Fx.draw por canal (já
+    -- integrado abaixo no channel) — não bakear aqui também.
     s.propCache = {}
     s.qcache = setmetatable({}, {__mode = 'v'})
     self._sheets = s
@@ -146,6 +157,18 @@ local function quadsOf(s, sheet)
     end
     return q
 end
+
+-- Figurantes ambientes por mapa (apresentação só — sem colisão/sim;
+-- a Botica pediu "+figurante" nas cenas de vida). Âncora em célula.
+local FIGURANTES = {
+    hub = {
+        {sprite = 'npc_jardineiro_s', x = 8, y = 19, fps = 4},
+        {sprite = 'npc_jardineiro_trabalho', x = 5, y = 23, fps = 4},
+        {sprite = 'sit_contemplacao', x = 26, y = 34.8, fps = 3},
+        {sprite = 'varanda_ocupada', x = 32, y = 18, fps = 3,
+            topleft = true},
+    },
+}
 
 -- Props com animação ambiental (loop, não variante por seed).
 local ANIM_PROPS = {
@@ -203,6 +226,19 @@ local function entityQuad(self, s, ent, t)
     local dir = dirSuffix(ent.facing)
     if ent.player then
         local moving = ent.motion and (ent.motion.remaining or 0) > 0
+        -- Piloto de tiro do Cinzel: arco em 'charging'/'ready' troca para
+        -- viajante_tiro_<dir> — fase prep(1)→saque(2)→contato(3).
+        local wpn = ent.weapon
+        if wpn and (wpn.state == 'charging' or wpn.state == 'ready')
+            and not moving then
+            local sh = s['tiro_' .. dir]
+            if not sh.stub then
+                local qs = s['tiro_' .. dir .. '_q']
+                local fr = wpn.state == 'ready' and 3
+                    or math.min(2, 1 + math.floor((wpn.charge or 0) * 2))
+                return sh, qs[math.min(fr, #qs)]
+            end
+        end
         local key = moving and s['walk_' .. dir] and 'walk_' .. dir
             or 'viajante_' .. dir
         local sh, qs = s[key], s[key .. '_q']
@@ -282,8 +318,181 @@ end
 -- células) — hash por célula lia como xadrez; hash por bloco agrupa.
 -- Chão por região: praça de laje com terra no Refúgio, grama com terra
 -- na Colina, laje em interiores, terra como default de mundo aberto.
-local function floorKind(map, x, y)
+-- Caminho pintado: map.paths = polilinhas em célula (Traço/Pátio) — a
+-- rua pintada segue a rua carveada. Mesma regra do legado (pixel_scene):
+-- distância ao segmento < w*16 px-32, principal +5.
+-- Distância normalizada à rota mais próxima: 0 = eixo, ~1 = borda da
+-- faixa pintada; nil fora de toda rota. Serve ao floorKind ('caminho')
+-- e ao contexto de variante do Traço (trilha só na zona de uso).
+local function pathFrac(map, x, y)
+    local polys = map.paths
+    if not polys then return nil end
+    local px, py = (x - .5) * 32, (y - .5) * 32
+    local best
+    for _, poly in ipairs(polys) do
+        local half = (poly.w or 2.6) * 16 + (poly.main and 5 or 0)
+        for j = 2, #poly do
+            local ax, ay = (poly[j-1][1] - .5) * 32, (poly[j-1][2] - .5) * 32
+            local bx, by = (poly[j][1] - .5) * 32, (poly[j][2] - .5) * 32
+            local vx, vy = bx - ax, by - ay
+            local len2 = vx * vx + vy * vy
+            if len2 > 0 then
+                local f = math.max(0, math.min(1,
+                    ((px - ax) * vx + (py - ay) * vy) / len2))
+                local dx, dy = px - ax - vx * f, py - ay - vy * f
+                local d2 = dx * dx + dy * dy
+                if not best or d2 < best then best = d2 end
+            end
+        end
+    end
+    if not best then return nil end
+    return math.sqrt(best) / 43 -- meia-largura média (2.7*16 px-32)
+end
+
+-- Roteamento do piso_caminho (9 frames do Traço): devolve o vetor do
+-- segmento sob a célula + flags de forma — 'cap' perto de ponta da
+-- polilinha, 'junction' onde duas rotas se cruzam, curva perto de vértice
+-- interno (com quadrante NE/SE/SW/NW pelo balanço in+out).
+local function pathInfo(map, x, y)
+    local polys = map.paths
+    if not polys then return nil end
+    local px, py = (x - .5) * 32, (y - .5) * 32
+    local best, seg
+    local hits = 0
+    for _, poly in ipairs(polys) do
+        local half = (poly.w or 2.6) * 16 + (poly.main and 5 or 0)
+        for j = 2, #poly do
+            local ax, ay = (poly[j-1][1] - .5) * 32, (poly[j-1][2] - .5) * 32
+            local bx, by = (poly[j][1] - .5) * 32, (poly[j][2] - .5) * 32
+            local vx, vy = bx - ax, by - ay
+            local len2 = vx * vx + vy * vy
+            if len2 > 0 then
+                local f = math.max(0, math.min(1,
+                    ((px - ax) * vx + (py - ay) * vy) / len2))
+                local dx, dy = px - ax - vx * f, py - ay - vy * f
+                local d2 = dx * dx + dy * dy
+                if d2 < half * half then
+                    hits = hits + 1
+                    if not best or d2 < best.d2 then
+                        best = {d2 = d2, f = f, vx = vx, vy = vy,
+                            j = j, n = #poly, jn = j}
+                    end
+                end
+            end
+        end
+    end
+    if not best then return nil end
+    local info = {vx = best.vx, vy = best.vy, junction = hits > 1}
+    -- ponta: extremo dos segmentos 1..2 ou n-1..n colados na célula
+    if (best.j == 2 and best.f < .25) or (best.j == best.n and best.f > .75)
+        then info.cap = true end
+    -- vértice interno: junção entre segmentos j-1/j dentro de ~0.8 cél
+    if best.f > .8 and best.j < best.n then info.turn = true
+        info.qx, info.qy = best.vx, best.vy
+    elseif best.f < .2 and best.j > 2 then info.turn = true
+        info.qx, info.qy = best.vx, best.vy end
+    return info
+end
+
+local function onPath(map, x, y)
+    local f = pathFrac(map, x, y)
+    return f ~= nil and f < 1
+end
+
+-- beirada (Traço f3): tufos junto a parede/sombra de fachada. Pré-
+-- computado uma vez por mapa — tiles/props não mudam no draw.
+local beiradaCache = setmetatable({}, {__mode = 'k'})
+local function beiradaSet(map)
+    local set = beiradaCache[map]
+    if set then return set end
+    set = {}
+    for key, tile in pairs(map.tiles or {}) do
+        if tile.piece then
+            local x, y = key:match('(%-?%d+):(%-?%d+)')
+            x, y = tonumber(x), tonumber(y)
+            for _, o in ipairs({{0,-1},{1,0},{0,1},{-1,0}}) do
+                set[(x + o[1]) .. ':' .. (y + o[2])] = true
+            end
+        end
+    end
+    for _, prop in ipairs(map.props or {}) do
+        if (prop.w or 1) > 1 or prop.kind == 'casa' then
+            local south = prop.y + (prop.h or 1) - 1
+            for cx = prop.x - 1, prop.x + (prop.w or 1) do
+                set[cx .. ':' .. south] = true
+                set[cx .. ':' .. (south + 1)] = true
+            end
+        end
+    end
+    beiradaCache[map] = set
+    return set
+end
+
+local floorKind -- forward: manchaOverlay classifica por piso.
+
+-- Decals de textura por região (Traço, terra_mancha): posições seedadas
+-- — f1/f2 desgaste junto a exits/paths/polos (bancada, marco), f3 seixo
+-- na beira de muro, f4 tufos sob fachada, f5 umidade junto a água, f6
+-- faixa longa. Miolo quieto fica limpo. Topleft, px-64.
+local POLOS = {bancada = 1, banco = 1, bancoMadeira = 1, bancoPedra = 1,
+    bancoSerra = 1, mesa = 1, marco = 1, bigorna = 1}
+local AGUA = {poco = 1, cisterna = 1, canaleta = 1}
+local manchaCache = setmetatable({}, {__mode = 'k'})
+local function manchaOverlay(map)
+    local L = manchaCache[map]
+    if L then return L end
+    L = {}
+    local set = beiradaSet(map)
+    local exits = map.exits or {}
+    -- polos de uso e pontos de água
+    local polos, aguas = {}, {}
+    for _, pr in ipairs(map.props or {}) do
+        if POLOS[pr.kind] or POLOS[pr.id] then
+            polos[#polos + 1] = {x = pr.x + (pr.w or 1) / 2,
+                y = pr.y + (pr.h or 1)}
+        elseif AGUA[pr.kind] then
+            aguas[#aguas + 1] = {x = pr.x + (pr.w or 1) / 2,
+                y = pr.y + (pr.h or 1)}
+        end
+    end
+    local function near(list, x, y, d2)
+        for _, p in ipairs(list) do
+            local dx, dy = p.x - x, p.y - y
+            if dx * dx + dy * dy < d2 then return true end
+        end
+    end
+    -- candidatos: células de terra a cada 2 (o decal cobre 2×2)
+    for key, tile in pairs(map.tiles or {}) do
+        local x, y = key:match('(%-?%d+):(%-?%d+)')
+        x, y = tonumber(x), tonumber(y)
+        if tile.ground ~= 'hole' and not tile.piece
+            and floorKind(map, x, y) == 'terra' and (x + y) % 2 == 0 then
+            local pf = pathFrac(map, x, y)
+            local h = Kit.hash(x, y, 61)
+            local fr
+            if near(exits, x, y, 6) or near(polos, x, y, 6)
+                or (pf and pf < 1.4) then
+                fr = h < .55 and 1 or 2              -- desgaste de uso
+            elseif pf and pf < 2.1 then
+                fr = h < .5 and 2 or 6               -- margem/faixa longa
+            elseif set[x .. ':' .. y] then
+                fr = h < .55 and 3 or 4              -- seixo/tufos no muro
+            elseif near(aguas, x, y, 8) then
+                fr = 5                               -- umidade
+            end
+            if fr and h > .18 then -- ~18% dos pontos ficam sem mancha
+                L[#L + 1] = {frame = fr,
+                    x = (x - 1) * CELL - 12, y = (y - 1) * CELL - 20}
+            end
+        end
+    end
+    manchaCache[map] = L
+    return L
+end
+
+floorKind = function(map, x, y)
     local id = map.id
+    if onPath(map, x, y) then return 'caminho' end
     if id == 'hub' then
         return Kit.hash(math.floor(x / 3), math.floor(y / 3), 21) < .30
             and 'terra' or 'laje'
@@ -321,6 +530,10 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                 sx = prop.x * CELL}
         end
     end
+    for i, fig in ipairs(FIGURANTES[map.id] or {}) do
+        pieces[#pieces + 1] = {kind = 'fig', fig = fig,
+            depth = fig.y * CELL, sx = fig.x * CELL, i = i}
+    end
     for _, ent in ipairs(campaign:entities()) do
         local fx, fy = visualPos(ent)
         pieces[#pieces + 1] = {kind = 'ent', e = ent,
@@ -339,23 +552,68 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
         local buf = ch == 'albedo' and hd.bufA or ch == 'normal' and hd.bufN
             or hd.bufE
         G.setCanvas(buf); G.clear(unpack(CLEAR[ch])); G.setColor(1, 1, 1, 1)
-        -- Mirante (Calina): faixa lavanda→creme além do parapeito — céu e
-        -- vale à distância dão identidade à cota +2. Só albedo: a dominante
-        -- não projeta sombra, então a faixa recebe só luz e gradeamento.
-        if ch == 'albedo' and map.id == 'hub' then
-            local x0, x1 = 4 * CELL, 38 * CELL
+        -- Céu dusk do Refúgio (Calina, padrão-ouro): faixa lavanda→creme
+        -- cobrindo o void norte do mapa inteiro — pano de fundo, nunca
+        -- disputa com info de gameplay. Duas camadas de skyline dentro:
+        -- cordilheira distante (lavanda escura) e telhados/chaminés do
+        -- povoado (tinta) — sem as silhuetas a banda lê como listra (Mira).
+        -- Só albedo: o sol a tinge, a dominante não projeta sombra.
+        if ch == 'albedo' and map.outdoor then
+            local x0 = -4 * CELL
+            local x1 = (map.w + 4) * CELL
+            local horizon = 2.45 * CELL
+            -- céu: lavanda alta → rosa → creme-areia no horizonte
+            -- Gradiente mais alto (iteração Mira): 7 faixas, topo mais
+            -- frio — o void norte inteiro é céu, não faixa fina.
             local bands = {
-                {.62, .54, .72}, {.76, .66, .78},
-                {.88, .80, .74}, {.93, .85, .72},
+                {.44, .38, .58}, {.52, .45, .65}, {.60, .52, .71},
+                {.70, .60, .75}, {.79, .68, .76}, {.86, .76, .74},
+                {.93, .85, .72},
             }
+            local top = -8 * CELL
             for i, c in ipairs(bands) do
                 G.setColor(c[1], c[2], c[3], 1)
-                G.rectangle('fill', x0, (i - 1) * CELL * 0.9 - CELL * 0.6,
-                    x1 - x0, CELL * 0.9 + 1)
+                local y = top + (i - 1) * (horizon - top) / #bands
+                G.rectangle('fill', x0, y, x1 - x0,
+                    (horizon - top) / #bands + 1)
             end
-            -- Mar distante: linha fina de brilho logo acima do parapeito.
+            -- Cordilheiras em duas profundidades: a mais longe, pálida e
+            -- alta (nevoeiro do vale); a próxima, escura e baixa, colada
+            -- no horizonte. Dá escala ao vale sem roubar a cena.
+            G.setColor(.55, .50, .66, .9)
+            for x = x0, x1, CELL do
+                local h = (0.6 + Kit.hash(math.floor(x / CELL), 3, 17)
+                    * 1.5) * CELL
+                G.rectangle('fill', x, horizon - h, CELL + 1, h)
+            end
+            G.setColor(.42, .36, .55, 1)
+            for x = x0, x1, CELL / 2 do
+                local h = (0.10 + Kit.hash(math.floor(x / CELL), 3, 17)
+                    * .45) * CELL
+                G.rectangle('fill', x, horizon - h, CELL / 2 + 1, h)
+            end
+            -- Telhados/chaminés do povoado: silhueta em tinta SENTADA na
+            -- linha do horizonte — casa = corpo baixo + cumeeira de duas
+            -- águas; ritmo irregular, mais denso junto ao eixo do povoado.
+            local ink = {.13, .11, .18}
+            local x = x0 + CELL
+            while x < x1 - CELL do
+                local hh = (0.22 + Kit.hash(x, 7, 29) * .5) * CELL
+                local bw = CELL * (0.7 + Kit.hash(x, 11, 31) * .8)
+                G.setColor(ink[1], ink[2], ink[3], 1)
+                G.rectangle('fill', x, horizon - hh, bw, hh)
+                -- cumeeira em dois degraus (duas águas)
+                G.rectangle('fill', x + bw * .25, horizon - hh - 6,
+                    bw * .5, 6)
+                if Kit.hash(x, 5, 41) < .3 then
+                    G.rectangle('fill', x + bw * .2, horizon - hh - 16,
+                        6, 16)
+                end
+                x = x + bw + CELL * (.4 + Kit.hash(x, 13, 37) * 1.1)
+            end
+            -- Fio de mar/vale: brilho fino logo acima do parapeito.
             G.setColor(.80, .88, .92, .8)
-            G.rectangle('fill', x0, 2.45 * CELL, x1 - x0, 5)
+            G.rectangle('fill', x0, horizon, x1 - x0, 5)
             G.setColor(1, 1, 1, 1)
         end
         for _, tile in pairs(map.tiles or {}) do
@@ -363,8 +621,43 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                 local kind = floorKind(map, tile.x, tile.y)
                 local sh = s[kind]
                 local px, py = (tile.x - 1) * CELL, (tile.y - 1) * CELL
-                G.draw(sh[ch], s[kind .. '_q'][Kit.variant(sh, tile.x, tile.y)],
-                    px, py)
+                local qi = Kit.variant(sh, tile.x, tile.y)
+                -- Contexto do Traço (piso_terra v5):
+                --   f4 trilha — zona de uso (perto de rota pintada/exit)
+                --   f3 beirada — encosta de parede ou sombra de fachada
+                --   f1/f2    — campo quieto
+                if kind == 'terra' and sh.frames >= 4 then
+                    local pf = pathFrac(map, tile.x, tile.y)
+                    local used = pf ~= nil and pf < 1.9
+                    if not used then
+                        for _, ex in ipairs(map.exits or {}) do
+                            local dx, dy = ex.x - tile.x, ex.y - tile.y
+                            if dx * dx + dy * dy < 2.5 then
+                                used = true break
+                            end
+                        end
+                    end
+                    if used then qi = 4
+                    elseif beiradaSet(map)[tile.x .. ':' .. tile.y] then qi = 3
+                    else qi = 1 + Kit.variant(sh, tile.x, tile.y) % 2 end
+                elseif kind == 'caminho' and sh.frames >= 9 then
+                    -- 9 frames direcionais (Traço): f1 h, f2 v,
+                    -- f3-6 curvas NE/SE/SW/NW, f7 T, f8 cruzamento, f9 cap.
+                    local info = pathInfo(map, tile.x, tile.y)
+                    if info then
+                        if info.junction then qi = 8
+                        elseif info.cap then qi = 9
+                        elseif info.turn then
+                            local q = (info.qx > 0 and 'E' or 'W')
+                                .. (info.qy > 0 and 'S' or 'N')
+                            qi = ({ES = 4, EN = 3, WS = 5, WN = 6})[q] or 1
+                        else
+                            qi = math.abs(info.vx) > math.abs(info.vy)
+                                and 1 or 2
+                        end
+                    end
+                end
+                G.draw(sh[ch], s[kind .. '_q'][qi], px, py)
                 -- Transição de terreno (W5): vizinho com overlay invade a
                 -- aresta — terra sobre laje, nunca o contrário. Cantos
                 -- internos (2 vizinhos ortogonais iguais) usam frame de
@@ -393,18 +686,67 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                 end
             end
         end
+        -- Decals de uso: acima do piso, abaixo de props/pieces.
+        if s.mancha then
+            for _, d in ipairs(manchaOverlay(map)) do
+                G.draw(s.mancha[ch], s.mancha_q[d.frame], d.x, d.y)
+            end
+        end
         for _, p in ipairs(pieces) do
             if p.kind == 'tile' then
                 local tile = p.t2
                 local key = tile.piece == 'pillar' and 'pilar'
                     or tile.piece == 'portal' and 'porta' or 'parede'
                 local sh = s[key]
-                G.draw(sh[ch], s[key .. '_q'][1], (tile.x - 1) * CELL,
-                    (tile.y - 1) * CELL - (sh.h - CELL))
+                G.draw(sh[ch],
+                    s[key .. '_q'][Kit.variant(sh, tile.x, tile.y)],
+                    (tile.x - 1) * CELL, (tile.y - 1) * CELL - (sh.h - CELL))
             elseif p.kind == 'prop' then
                 local sh, q = propQuad(renderer, s, p.p)
                 local prop = p.p
-                if sh.stub and ((prop.w or 1) > 1 or (prop.h or 1) > 1) then
+                if prop.kind == 'casa' then
+                    -- Casa multi-tile (Traço): telhado cobre o miolo da
+                    -- massa em faixas de 2 cél; fachada fecha a face sul —
+                    -- nunca o stub por célula (grade de caixas, Mira r3).
+                    local w, h = prop.w or 1, prop.h or 1
+                    local px0 = (prop.x - 1) * CELL
+                    local pyTop = (prop.y - 1) * CELL
+                    local pyBot = (prop.y + h - 1) * CELL
+                    local fach = prop.id == 'camasCasa' and 'casa_pensao'
+                        or nil
+                    local step = fach and 192 or 128
+                    -- telhado: fileiras 64px da crista até a fresta da fachada
+                    local fachH = 96
+                    for _, k in ipairs({'casa_telhado',
+                        fach or 'casa_fachada_a', 'casa_fachada_b'}) do
+                        local c = s.propCache[k]
+                        if c == nil then
+                            c = Kit.bakeViaDSL(k) or false
+                            s.propCache[k] = c
+                        end
+                        s['_casa_' .. k] = c or nil
+                    end
+                    local tel = s.propCache['casa_telhado']
+                    if tel then
+                        local tq = quadsOf(s, tel)[1]
+                        for r = 0, h * CELL / 64 - 1 do
+                            local ry = pyTop + r * 64
+                            if ry + 64 > pyBot - fachH + 32 then break end
+                            for cx = 0, math.ceil(w / 2) - 1 do
+                                G.draw(tel[ch], tq, px0 + cx * 128, ry)
+                            end
+                        end
+                    end
+                    for cx = 0, math.ceil(w * CELL / step) - 1 do
+                        local name = fach or (cx % 2 == 0
+                            and 'casa_fachada_a' or 'casa_fachada_b')
+                        local c = s.propCache[name]
+                        if c then
+                            G.draw(c[ch], quadsOf(s, c)[1],
+                                px0 + cx * step, pyBot - c.h)
+                        end
+                    end
+                elseif sh.stub and ((prop.w or 1) > 1 or (prop.h or 1) > 1) then
                     -- Massa real do placeholder: prop multi-célula sem def
                     -- repete por célula COM jitter por hash — a grade de
                     -- caixas 4×4 do quintal lia como tabuleiro (Mira r3);
@@ -424,6 +766,28 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                     Kit.drawFeet(sh, q, ch,
                         (prop.x - 1) * CELL + (prop.w or 1) * CELL / 2,
                         (prop.y + (prop.h or 1) - 1) * CELL)
+                end
+            elseif p.kind == 'fig' then
+                -- Figurante ambiente (apresentação só — Botica pediu
+                -- "+figurante" nas cenas de vida): DSL por nome, gesto
+                -- em loop na âncora da planta.
+                local fig = p.fig
+                local c = s.propCache[fig.sprite]
+                if c == nil then
+                    c = Kit.bakeViaDSL(fig.sprite) or false
+                    s.propCache[fig.sprite] = c
+                end
+                if c then
+                    local qs = quadsOf(s, c)
+                    local fr = 1 + math.floor(t * (fig.fps or 4)
+                        + fig.x * .7) % #qs
+                    if fig.topleft then
+                        G.draw(c[ch], qs[fr],
+                            (fig.x - 1) * CELL, (fig.y - 1) * CELL)
+                    else
+                        Kit.drawFeet(c, qs[fr], ch,
+                            fig.x * CELL - CELL / 2, fig.y * CELL)
+                    end
                 end
             else
                 local sh, q = entityQuad(renderer, s, p.e, t)
@@ -475,11 +839,23 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
         {x = 50, y = 25, c = {1.0, .50, .20}, i = 1.2, r = 192, z = 92,
             flicker = {amp = .05, speed = 5, phase = 2.4}},       -- brasa forja
     } or nil
+    -- Cull de luz: fora da vista (margem de 1 raio) nem entra na lista.
+    local vL, vT = v.left, v.top
+    local vR, vB = v.left + v.w, v.top + v.h
+    local function lightVisible(x, y, r)
+        return x + r > vL and x - r < vR and y + r > vT and y - r < vB
+    end
     if HUB_LIGHTS then
         for _, ls in ipairs(HUB_LIGHTS) do
-            L:addLight({x = ls.x * CELL - 32, y = ls.y * CELL - 32, z = ls.z,
-                color = ls.c, intensity = ls.i, radius = ls.r,
-                flicker = ls.flicker})
+            local lx, ly = ls.x * CELL - 32, ls.y * CELL - 32
+            if lightVisible(lx, ly, ls.r) then
+                -- Só as 2 vivas projetam (Mira perdeu o drama junto ao
+                -- braseiro): drama curto perto do fogo, quietas ficam fora.
+                L:addLight({x = lx, y = ly, z = ls.z,
+                    color = ls.c, intensity = ls.i, radius = ls.r,
+                    flicker = ls.flicker,
+                    shadow = ls.flicker ~= nil})
+            end
         end
     end
     for _, prop in ipairs(map.props or {}) do
@@ -495,18 +871,30 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                     if dx * dx + dy * dy < 96 * 96 then dup = true break end
                 end
             end
-            if not dup then
+            if not dup and lightVisible(ax * 2, ay * 2,
+                    math.max((r or 14) * 2, 140)) then
                 -- Flicker suave: brasas respiram ~5% — ±12% a 6-7Hz lia
                 -- como estroboscopia na praça (bug reportado).
                 L:addLight({x = ax * 2, y = ay * 2, z = 92,
                     color = tint and {tint[1], tint[2], tint[3]}
                         or {1.0, .58, .24},
                     intensity = 1.6, radius = math.max((r or 14) * 2, 140),
-                    flicker = {amp = .05, speed = 4, phase = prop.x * 1.7}})
+                    flicker = {amp = .05, speed = 4, phase = prop.x * 1.7},
+                    shadow = false})
             end
         end
     end
-    -- Occluders: muros (merge em fileiras), pilares, props com altura, gente.
+    -- Cull de luz fora da vista (margem ~2 cél) — nem entra no compose.
+    -- Occluder só se colhe quando alguma luz projeta (padrão-ouro: tudo
+    -- shadow=false no hub → coleta zerada, custo do passe só batch).
+    local wantsShadow = false
+    for _, l in ipairs(L.lights) do
+        if l.shadow ~= false then wantsShadow = true break end
+    end
+    -- Occluders: muros (merge em fileiras), pilares, props com altura.
+    -- Só coleta quando alguma luz ainda projeta — com tudo shadow=false
+    -- (padrão-ouro) a coleta inteira sai do caminho quente.
+    if wantsShadow then
     local wallRuns = {}
     for _, tile in pairs(map.tiles or {}) do
         if tile.piece == 'wall' or tile.piece == 'portal' then
@@ -544,6 +932,7 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
             L:addOccluder({x = (prop.x - 1) * CELL, y = cy * 2 - 8,
                 w = (prop.w or 1) * CELL, h = 16, height = hgt * 2})
         end
+    end
     end
     -- Atores NÃO lançam sombra projetada (política Vespa): a sombra do
     -- jogador re-projetava a cada frame de movimento e cintilava junto à

@@ -249,7 +249,8 @@ function Lighting.new(viewW, viewH)
     -- custo 4× do 2× — o debanding pesado fica na LUT linear + dither.
     -- Adapta por área da vista em resize(): >~1.4Mpx cai pra 1.25× (1920
     -- é onde o passe de sol dominava o frame).
-    self.lightScale = tonumber(os.getenv('ARROWFALLEN_LIGHTSCALE')) or 1.5
+    -- Padrão-ouro: pin em 1.25 — 1.5 mordia no light pass (Vespa/Mira).
+    self.lightScale = tonumber(os.getenv('ARROWFALLEN_LIGHTSCALE')) or 1.25
     self._lsFixed = os.getenv('ARROWFALLEN_LIGHTSCALE') ~= nil
     self.w, self.h = 0, 0
     self.lights = {}
@@ -325,7 +326,7 @@ function Lighting:addLight(l)
     self.lights[#self.lights + 1] = {
         x = l.x or 0, y = l.y or 0, z = l.z or 30,
         color = c, radius = l.radius or 220, intensity = inten,
-        flicker = l.flicker,
+        flicker = l.flicker, shadow = l.shadow,
         -- valores resolvidos em update(); defaults aqui caso update não rode.
         _f = 1, _r = c[1] * inten, _g = c[2] * inten, _b = c[3] * inten,
     }

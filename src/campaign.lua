@@ -89,10 +89,11 @@ function Campaign.new(opts)
     self.player = makePlayer()
     self:enter(self.data.region, self.data.arrival)
     self:checkpoint()
+    -- ABERTURA_HD: sem narração modal no despertar — controle imediato.
+    -- A flag e o step "Despertar" ficam para compat de save.
     if not self.data.flags.intro then
         self.data.flags.intro = true
         self:completeStep('P01-E01')
-        Dialogue.open(self, LoreC.intro)
     end
     return self
 end
@@ -248,14 +249,13 @@ function Campaign:enter(id, arrival, exact, opts)
     self.roomTime = 3
     self:effect('room', self.player.grid.x, self.player.grid.y)
     if id == 'hub' and not self:stepDone('P01-E04') then
-        if self:flag('refugioNovo') then self.panoramaTime = 5 end
         self:completeStep('P01-E04')
-        Dialogue.open(self, self:flag('refugioNovo') and {
-            title = ' ', voice = 'inscription', lines = {
-                'A escadaria deixa a cripta para trás. Do mirante, você vê casas separadas e duas ruas que descem até a praça.',
-                'No centro, uma pedra alta guarda nomes. O Refúgio respira em volta dela.',
-            },
-        } or LoreC.hubArrival)
+        -- Refúgio novo: sem inscrição de chegada — o mirante revela por
+        -- gatilhos de chão no update e segura o panorama enquanto ela anda
+        -- a cota (ABERTURA_HD, Ato 4). O mapa legado mantém a narração fixa.
+        if not self:flag('refugioNovo') then
+            Dialogue.open(self, LoreC.hubArrival)
+        end
     end
     if id == 'colina' and self:stepDone('P01-E04') and not self:flag('colinaRevisit') then
         Dialogue.open(self, LoreC.colinaRevisit)
@@ -837,6 +837,46 @@ function Campaign:update(dt, input)
     -- resolves peacefully by writing encounters[id] directly (Pena's nodes)
     -- or sets the <talk>Confronto flag, which makes contact fire the arena.
     if self.scene == 'explore' then
+        -- Revelação do mirante (ABERTURA_HD, Ato 4 — contrato do Pena): na
+        -- primeira descida do refúgio novo, as três inscrições disparam por
+        -- distância no parapeito — gatilho de chão, não de tempo. Dois
+        -- fatos separados: `miranteVisto` esgota os beats e `miranteDesceu`
+        -- encerra o pin do panorama — a vista fica enquanto ela estiver na
+        -- cota na primeira visita (y<=8 cobre o mirante e a boca da
+        -- escadaria), mesmo depois do último beat. Descer com a revelação
+        -- começada (miranteBeat) fecha os dois: os beats que faltarem se
+        -- perdem e o pin não volta. Save restaurado já na vila sem
+        -- miranteBeat mantém a cena pendente — subir ao parapeito reata
+        -- beats e vista. O checkpoint na virada de miranteDesceu grava o
+        -- índice: sair entre beats não re-toca inscrição lida (doc §1). O
+        -- early-return de self.dialogue impede beat sobre diálogo aberto.
+        if self.map.id == 'hub' and self:flag('refugioNovo') then
+            if self.player.grid.y <= 8 then
+                if not self:flag('miranteDesceu') then
+                    self.panoramaTime = math.max(self.panoramaTime or 0, 1)
+                end
+                if not self:flag('miranteVisto') then
+                    local idx = self.data.flags.miranteBeat or 1
+                    local beat = LoreC.miranteReveal[idx]
+                    if beat and self.player.grid.x >= beat.x then
+                        Dialogue.open(self, {title = ' ', voice = 'inscription',
+                            mood = 'soft', lines = beat.lines})
+                        self.data.flags.miranteBeat = idx + 1
+                        if not LoreC.miranteReveal[idx + 1] then
+                            self.data.flags.miranteVisto = true
+                        end
+                    end
+                end
+            elseif self.data.flags.miranteBeat then
+                -- Desceu depois de ver: os beats que faltarem se perdem e o
+                -- pin do panorama não volta — a primeira visita acabou.
+                self.data.flags.miranteVisto = true
+                if not self.data.flags.miranteDesceu then
+                    self.data.flags.miranteDesceu = true
+                    self:checkpoint()
+                end
+            end
+        end
         -- trigger='flag': a arena é armada pela fala, não por contato — a
         -- flag do confronto sobe na opção de diálogo e o próximo update
         -- dispara (C01-Q1: a demonstração na grade acontece atrás das
