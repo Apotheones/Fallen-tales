@@ -407,8 +407,11 @@ function Lighting:bakeShadowMask(light, occluders, x, y, w, h, scale, cap)
     G.push('all')
     G.origin()
     G.setCanvas(canvas)
-    G.clear(1, 1, 1, 1) -- 1 = sem sombra; o multiply escurece onde projeta
-    G.setBlendMode('multiply', 'premultiplied')
+    G.clear(1, 1, 1, 1) -- 1 = sem sombra; o min escurece onde projeta
+    -- 'darken' (min) em vez de multiply: sombra é visibilidade, não
+    -- absorção — duas projeções cruzadas ficam na mais escura das duas,
+    -- nunca somam até o preto (faixas de 0.17*0.17=0.03 no pátio).
+    G.setBlendMode('darken', 'premultiplied')
     local sh = self.shaderShadow
     G.setShader(sh)
     local sv, dv = {}, {}

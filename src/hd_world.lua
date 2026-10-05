@@ -187,6 +187,24 @@ local INTERIOR_AMBIENT = {
     colina = {.27, .25, .35},
 }
 
+-- Orçamento de exposição por cena (padrão-ouro, §3.3.4): o albedo
+-- autoral é escuro em linear (barro/pedra ~0.10-0.30) e o ACES esmaga
+-- tudo abaixo de ~0.1. Régua medida no dump do G-buffer: chão sob sol
+-- ≈0.20 linear → saída ~0.55-0.65; sombra assada do sol ≈0.10 → ~0.30;
+-- pools de fogo sobem a ~0.8 sem clipar. ARROWFALLEN_EXPOSURE sobrepõe.
+local EXPOSURE = {
+    outdoor = 2.6,  -- pátio/mirante: sol de fim de tarde ainda banha
+    interior = 2.1, -- casas: neutro legível, a brasa carrega a cena
+    colina = 2.4,   -- cripta: escuro autoral, nunca preto de verdade
+    battle = 2.0,   -- arena de tocha: pools altos, tabuleiro fechado
+}
+local ENV_EXPOSURE = tonumber(os.getenv('ARROWFALLEN_EXPOSURE'))
+local function exposureFor(map)
+    if ENV_EXPOSURE then return ENV_EXPOSURE end
+    return EXPOSURE[map.id]
+        or (map.outdoor and EXPOSURE.outdoor or EXPOSURE.interior)
+end
+
 -- Mapa de luzes autorado por mapa (layout-refugio-hd §6 + DIRECAO §2).
 -- Coordenadas em célula, z/raio em px-64. Hub: vivas = fogo real com
 -- flicker suave; quietas = janela/lampião/jade, estáveis. Cripta da
@@ -205,6 +223,10 @@ local MAP_LIGHTS = {
         {x = 15, y = 25.5, c = {1.0, .72, .38}, i = .7, r = 160, z = 120}, -- varanda
         {x = 50, y = 25, c = {1.0, .50, .20}, i = 1.2, r = 192, z = 92,
             flicker = {amp = .05, speed = 5, phase = 2.4}},       -- brasa forja
+        -- Mirante (vista do spawn): lamparina do posto de vigia — a
+        -- chegada ficava só com o sol, fora do alcance das demais.
+        {x = 12.4, y = 6.6, c = {1.0, .60, .28}, i = .95, r = 200, z = 96,
+            flicker = {amp = .05, speed = 4.2, phase = .8}},
     },
     colina = {
         {x = 4.6, y = 4.4, c = {1.0, .68, .30}, i = .85, r = 140, z = 70,
@@ -718,9 +740,12 @@ local function sunMaskFor(L, map)
         if po then occ[#occ + 1] = po end
     end
     local sunRef = {x = -640, y = map.h * CELL + 560, z = 460}
+    -- cap/pênumbra do sol rasante: sombra longa mas CONTIDA — 224px ≈
+    -- 3.5 cél, fundo .34 (lê como sombra, não apagão); penumbra .78.
+    -- O bake acumula por 'darken': sobreposições não compõem até o preto.
     local baked = L:bakeShadowMask(sunRef, occ,
         -2 * CELL, -2 * CELL, (map.w + 4) * CELL, (map.h + 4) * CELL, 0.5,
-        {abs = 320, rel = 3.5, pen = .62, core = .17}) -- sol baixo: longas
+        {abs = 224, rel = 2.2, pen = .78, core = .34})
     if not baked then
         sunMaskCache[map] = false
         return nil
@@ -892,6 +917,12 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
             G.rectangle('fill', x0, horizon, x1 - x0, 5)
             G.setColor(1, 1, 1, 1)
         end
+        -- Pisos/transições/manchas NÃO escrevem no canal normal: o relevo
+        -- por-pixel das defs (altura derivada do char de albedo) vira
+        -- loteria de N·L sob o sol rasante (z=460) — salpico de normal
+        -- em vez de chão. O buffer já nasce plano (.5,.5,1); parede/prop/
+        -- ator seguem modelando. Piso é chão: normal reto por contrato.
+        if ch ~= 'normal' then
         for _, tile in ipairs(tilesInView) do
             if tile.ground ~= 'hole' then
                 local kind = floorKind(map, tile.x, tile.y)
@@ -971,6 +1002,7 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                     G.draw(s.mancha[ch], s.mancha_q[d.frame], d.x, d.y)
                 end
             end
+        end
         end
         for _, p in ipairs(pieces) do
             if p.kind == 'tile' then
@@ -1096,6 +1128,25 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
     G.setCanvas(prevCanvas)
     local fillMs = (love.timer.getTime() - tFill) * 1000
 
+    if os.getenv('ARROWFALLEN_DUMP_HD') and not hd._dumped then
+        hd._dumped = true
+        for name, buf in pairs({albedo = hd.bufA, normal = hd.bufN,
+            emissive = hd.bufE}) do
+            local fd = buf:newImageData():encode('png')
+            local f = assert(io.open('screenshots/dbg-gbuf-'
+                .. name .. '.png', 'wb'))
+            f:write(fd:getString()); f:close()
+        end
+        local idA = hd.bufA:newImageData()
+        local aw, ah = idA:getWidth(), idA:getHeight()
+        for _, p in ipairs({{.2,.3},{.5,.45},{.6,.55},{.5,.75},{.8,.8}}) do
+            local x, y = math.floor(p[1]*aw), math.floor(p[2]*ah)
+            local r, g, b = idA:getPixel(x, y)
+            print(string.format('[dbg] albedo(%.2f,%.2f)=%.3f %.3f %.3f',
+                p[1], p[2], r, g, b))
+        end
+    end
+
     -- Luzes: ambiente da região + sol (outdoor) + âncoras de fogo dos props.
     local L = hd.lighting
     L:beginFrame()
@@ -1204,10 +1255,25 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
     local P = hd.postfx
     P:setRegion(region)
     P:setVignette(.16)
+    P.exposure = exposureFor(map)
     P:beginScene()
     L:compose(hd.bufA, hd.bufN, hd.bufE, v.left - (shake[1] or 0),
         v.top - (shake[2] or 0))
     P:endScene()
+    if os.getenv('ARROWFALLEN_DUMP_HD') and not hd._dumpedLM then
+        hd._dumpedLM = true
+        local idL = L.lightmap:newImageData()
+        local idS = P.scene:newImageData()
+        for _, p in ipairs({{.2,.3},{.5,.45},{.6,.55},{.5,.75},{.8,.8}}) do
+            local r, g, b = idL:getPixel(math.floor(p[1]*L.lw),
+                math.floor(p[2]*L.lh))
+            local sr, sg, sb = idS:getPixel(math.floor(p[1]*idS:getWidth()),
+                math.floor(p[2]*idS:getHeight()))
+            print(string.format(
+                '[dbg] uv(%.2f,%.2f) lightmap=%.3f %.3f %.3f  scene=%.3f %.3f %.3f',
+                p[1], p[2], r, g, b, sr, sg, sb))
+        end
+    end
     P:setEmissive(hd.bufE)
     -- O translate da câmera segue ativo: present desenha em px de canvas.
     G.push('all'); G.origin()
@@ -1655,6 +1721,9 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
         local buf = ch == 'albedo' and hd.bufA or ch == 'normal' and hd.bufN
             or hd.bufE
         G.setCanvas(buf); G.clear(unpack(CLEAR[ch])); G.setColor(1, 1, 1, 1)
+        -- Piso plano no normal (mesmo contrato do mundo): o relevo
+        -- por-pixel das defs virava ruído de N·L sob luz rasante.
+        if ch ~= 'normal' then
         for _, tile in pairs(map.tiles or {}) do
             if tile.ground == 'floor' then
                 local kind = battleFloor(region, tile.x, tile.y)
@@ -1662,6 +1731,7 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
                 G.draw(sh[ch], s[kind .. '_q'][Kit.variant(sh, tile.x, tile.y)],
                     (tile.x - 1) * CELL, (tile.y - 1) * CELL)
             end
+        end
         end
         -- Meio-fio do tabuleiro: pedra simples lit, braseiros DSL nas bordas
         -- (a chama vem do emissivo do sprite — o bloom cuida do resto).
@@ -1802,6 +1872,7 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
     local P = hd.postfx
     P:setRegion(region)
     P:setVignette(.16)
+    P.exposure = ENV_EXPOSURE or EXPOSURE.battle
     P:beginScene()
     L:compose(hd.bufA, hd.bufN, hd.bufE, v.left - (shake[1] or 0),
         v.top - (shake[2] or 0))
