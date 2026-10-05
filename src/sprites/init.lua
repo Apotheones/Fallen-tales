@@ -15,6 +15,7 @@ return {
     piso_caminho = require('src.sprites.piso_caminho'),
     piso_horta = require('src.sprites.piso_horta'),
     piso_tabua = require('src.sprites.piso_tabua'),
+    terra_mancha = require('src.sprites.terra_mancha'),
     -- Tiles Colina
     piso_colina = require('src.sprites.piso_colina'),
     -- Arquitetura
@@ -122,6 +123,15 @@ return {
     fx_hit_jade = require('src.sprites.fx_hit_jade'),
     fx_bloco = require('src.sprites.fx_bloco'),
     fx_morte = require('src.sprites.fx_morte'),
+    -- Vida de lugar (F4/F5)
+    cabra = require('src.sprites.cabra'),
+    npc_jardineiro_s = require('src.sprites.npc_jardineiro_s'),
+    npc_jardineiro_n = require('src.sprites.npc_jardineiro_n'),
+    npc_jardineiro_e = require('src.sprites.npc_jardineiro_e'),
+    npc_jardineiro_w = require('src.sprites.npc_jardineiro_w'),
+    npc_jardineiro_trabalho = require('src.sprites.npc_jardineiro_trabalho'),
+    varanda_ocupada = require('src.sprites.varanda_ocupada'),
+    sit_contemplacao = require('src.sprites.sit_contemplacao'),
     -- Atores — viajante
     viajante_n = require('src.sprites.viajante_n'),
     viajante_e = require('src.sprites.viajante_e'),
@@ -130,6 +140,15 @@ return {
     viajante_walk_n = require('src.sprites.viajante_walk_n'),
     viajante_walk_e = require('src.sprites.viajante_walk_e'),
     viajante_walk_w = require('src.sprites.viajante_walk_w'),
+    -- Vida de lugar (F4/F5)
+    cabra = require('src.sprites.cabra'),
+    npc_jardineiro_s = require('src.sprites.npc_jardineiro_s'),
+    npc_jardineiro_n = require('src.sprites.npc_jardineiro_n'),
+    npc_jardineiro_e = require('src.sprites.npc_jardineiro_e'),
+    npc_jardineiro_w = require('src.sprites.npc_jardineiro_w'),
+    npc_jardineiro_trabalho = require('src.sprites.npc_jardineiro_trabalho'),
+    varanda_ocupada = require('src.sprites.varanda_ocupada'),
+    sit_contemplacao = require('src.sprites.sit_contemplacao'),
     -- Atores — viajante acoes (W4: anchors/markers/sequences/frameDuration)
     viajante_tiro_s = require('src.sprites.viajante_tiro_s'),
     viajante_tiro_e = require('src.sprites.viajante_tiro_e'),

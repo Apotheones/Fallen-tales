@@ -127,14 +127,10 @@ local function swap(campaign, node)
     return false
 end
 
-LoreC.intro = {
-    title = LoreC.titles.narration, voice = 'inscription',
-    lines = {
-        'A tampa da sua sepultura cedeu por dentro. Sete anos de poeira — e um encaixe recém-trocado.',
-        'Você saiu. A Colina dos Sepultados acordou junto.',
-    },
-}
-
+-- ABERTURA_HD: LoreC.intro saiu — o despertar entrega controle imediato;
+-- o Ato 0 cobre a mesma informação em dois quadros (introCutscene abaixo).
+-- Narração de chegada do mapa legado (hub_legacy). No refúgio novo a
+-- revelação mora nos gatilhos do mirante (LoreC.miranteReveal).
 LoreC.hubArrival = {
     title = LoreC.titles.narration, voice = 'inscription',
     lines = {
@@ -185,6 +181,13 @@ function LoreC.hotspot(campaign, spot)
         return {title = 'TAMPA DA COVA', voice = 'inscription', lines = {
             'A tampa recém-trocada, virada ao lado da cova.',
             'A marca partida fica do lado de dentro — como se algo tivesse empurrado.',
+        }}
+    elseif id == 'marcaPartida' then
+        -- ABERTURA_HD Ato 1: a vedação plantada na câmara — payoff visual
+        -- no mapa 10, sem explicar pacto nem mecânica da proteção.
+        return {title = 'MARCA PARTIDA', voice = 'inscription', lines = {
+            'A marca na pedra está partida ao meio.',
+            'O traço ainda parece recente.',
         }}
     elseif id == 'flores' then
         return {title = 'FLORES DO VELÓRIO', voice = 'inscription', lines = {
@@ -606,18 +609,25 @@ LoreC.fundacaoLimite = {
     },
 }
 
--- INTRO EM QUADROS (PROPOSTA para o Traço): cutscene de abertura, seis
--- quadros até o objetivo acionável. `art` é chave de cena sugerida para o
--- renderer/pixel_scene; `lines` roda na voz 'inscription'. O node LoreC.intro
--- existente continua como fallback textual se a cutscene não entrar.
+-- ATO 0 DA ABERTURA HD (doc ABERTURA_HD): dois quadros, pulável com ESC,
+-- antes do controle imediato — enterrada, e alguém abriu por fora.
+-- `art` é chave de cena do renderer/pixel_scene; `lines` roda na voz
+-- 'inscription'; `mood` dispara o emote do quadro (frameCue em main.lua).
+-- Os demais painéis saíram da abertura — reuso em título/códice é decisão
+-- do Traço (o mundo jogável os substitui).
 LoreC.introCutscene = {
-    {art = 'caixao', lines = {'Escuro. Terra. A tampa por cima de você.'}},
-    {art = 'marca', lines = {'Na parede, a marca que a casa prega nos que guarda.'}},
-    {art = 'cova', lines = {'A tampa cedeu por dentro. Você saiu — sete anos depois.'}},
-    {art = 'viajante', lines = {'De pé sobre a própria sepultura. O mesmo arco, o mesmo corpo — sete anos mais tarde.'}},
-    {art = 'colina', lines = {'A Colina dos Sepultados: fileiras de lápides sobre a cidade que te enterrou.'}},
-    {art = 'grade', lines = {'A grade ao sul desce para o Refúgio — a casa dos que ficaram.'}},
-    {art = 'refugio', lines = {'Desça. Diga seu nome. Decida o que fazer com os sete anos.'}},
+    {art = 'caixao', mood = 'dark', lines = {'Escuro. Terra por cima.'}},
+    {art = 'tampa', mood = 'warm', lines = {'A tampa cedeu. Do lado de fora, um encaixe recém-trocado.'}},
+}
+
+-- ATO 4 — revelação do mirante: três inscrições disparadas por distância
+-- no parapeito (gatilhos de chão, não de tempo). O índice persistido mora
+-- em flags.miranteBeat e o watcher roda em Campaign:update — a última
+-- linha entrega Lia e a ausência dela sem flashback.
+LoreC.miranteReveal = {
+    {x = 11, lines = {'O cheiro de lenha chegou antes das casas.'}},
+    {x = 15, lines = {'Os caminhos desciam entre telhados e terminavam na praça.'}},
+    {x = 19, lines = {'Você procurou Lia entre aqueles sons — antes de lembrar que ela nunca morara ali.'}},
 }
 
 -- CUTSCENES CURTAS por evento (PROPOSTA): beats que merecem pausa sem
@@ -916,6 +926,12 @@ talks.doro = function(campaign)
                 'Colina dos Sepultados. Em cima ficam os que a cidade guardou.',
                 'Embaixo ficam os que ficaram. O refúgio é pela grade ao sul — Runa vigia.',
             }},
+            -- ABERTURA_HD Ato 2: planta o desejo de casa como motivo do
+            -- jogador — Doro responde caminho, não Lia (ele não a conhecia).
+            {label = 'EU PRECISO VOLTAR PRA CASA.', lines = {
+                'Entendo. Casa fica pra fora daqui — e a saída da Colina passa pela grade da Runa primeiro.',
+                'Pega suas coisas no depósito antes de descer. É a porta do leste, depois do pátio.',
+            }},
             {label = 'SAIR'},
         }}
     end
@@ -954,6 +970,14 @@ talks.doro = function(campaign)
     }, options = {{label = 'SAIR'}}}
 end
 
+-- Resposta à opção que contesta a versão oficial (ABERTURA_HD Ato 3).
+-- No nível do módulo: node dentro de option.action/swap escapa do
+-- coletor `strings` da suíte — aqui a cobertura de glifos o alcança.
+LoreC.runaConfrontoResposta = {title = 'RUNA', voice = 'runa', lines = {
+    'Eu não estava lá. Repito o que me contaram.',
+    'Se a sua verdade furou a minha, a grade já perdeu o motivo. Passa.',
+}, options = {{label = 'SAIR'}}}
+
 talks.runa = function(campaign)
     mark(campaign, 'runa')
     if done(campaign, 'P01-E03') then
@@ -964,6 +988,7 @@ talks.runa = function(campaign)
     return {title = 'RUNA', voice = 'runa', mood = 'tense', lines = {
         'Alto. Minha grade, minhas regras.',
         'A vedação dessa cova era serviço meu — e alguém a rompeu essa noite.',
+        'Todo mundo diz que você se ofereceu. Foi o que eu ouvi a vida inteira.',
         'Me diz quem rompeu, e aí eu decido se um morto acordado passa.',
     }, options = {
         {label = 'FUI EU. SAÍ DA MINHA COVA.', action = function(c)
@@ -973,7 +998,7 @@ talks.runa = function(campaign)
                 'Tá. A casa deixou você sair — a casa responde por você. Passa.',
             }, options = {{label = 'SAIR'}}})
         end},
-        {label = 'DORO ROMPEU, NUM REPARO', action = function(c)
+        {label = 'DORO ROMPEU, NUM REPARO.', action = function(c)
             c:openGrade('doro')
             return swap(c, {title = 'RUNA', voice = 'runa', lines = {
                 'O pedreiro. Sempre remendando pedra que não devia.',
@@ -983,6 +1008,13 @@ talks.runa = function(campaign)
         {label = 'AINDA NÃO', lines = {
             'Então fica aí do outro lado até lembrar. A grade não tem pressa.',
         }},
+        -- ABERTURA_HD Ato 3: contesta a versão oficial sem nomear
+        -- participantes — a primeira fissura, não a explicação. Abre por
+        -- acordo como as outras respostas honestas (gradeHow='confrontou').
+        {label = 'EU NÃO ME OFERECI. EU CORRI.', action = function(c)
+            c:openGrade('confrontou')
+            return swap(c, LoreC.runaConfrontoResposta)
+        end},
         {label = 'DEMONSTRAR CAPACIDADE.', action = function(c)
             c.data.flags.runaConfronto = true
             return swap(c, {title = 'RUNA', voice = 'runa', lines = {
