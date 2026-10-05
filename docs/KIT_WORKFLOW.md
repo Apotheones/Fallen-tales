@@ -112,6 +112,7 @@ Forma da def (campos de animação = contrato W4 congelado):
   markers = { contact={1,3}, prep={..} },
   sequences = { nome = {first,last[,loop=false]} },
   frameDuration = s | {s1,s2,..},
+  valueBand = {min,max} | {vs='piso_ref',delta=.08},  -- faixas: PIXEL_KIT.md
 }
 ```
 

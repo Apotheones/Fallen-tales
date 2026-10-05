@@ -281,6 +281,8 @@ return {
     frameMap = { 'ew', 'ns', 'ne', 'se', 'sw', 'nw',
         't_nwe', 'cross', 'cap_w' },
     legend = legend,
+    -- papel caminho: contraste mínimo +0.08 vs piso ao redor
+    valueBand = { vs = 'piso_terra', delta = .08 },
     layers = { {
         name = 'caminho',
         albedo = { f[1](), f[2](), f[3](), f[4](), f[5](),

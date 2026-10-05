@@ -76,6 +76,7 @@ return {
     name = 'piso_colina_grama', w = W, h = H, origin = 'topleft',
     frameUse = 'variant',
     legend = legend,
+    valueBand = { .35, .55 }, -- papel piso-iluminado (docs/PIXEL_KIT.md)
     layers = { {
         name = 'chao',
         albedo = { tile(701), tile(709), tile(713), tile(719) },

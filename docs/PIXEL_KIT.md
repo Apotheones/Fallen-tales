@@ -90,6 +90,40 @@ rastros de `def.anchors` por frame com marcas de `def.markers`
 loop. `def.frameDuration` (s, escalar ou array) alimenta `seq` e
 `--play`.
 
+### Faixas de valor (`def.valueBand`)
+
+Contrato de legibilidade: quem autora escolhe `legend{ramp,step}` às
+cegas — a cor só existe depois do bake, então piso/muro/caminho tendem a
+cair no mesmo meio-tom e a cena fica ilegível. A def declara a faixa de
+luminância do seu papel e a bancada mede o albedo baked:
+
+```lua
+valueBand = { .35, .55 }                       -- faixa absoluta {min,max}
+valueBand = { vs = 'piso_terra', delta = .08 } -- relativa: >= dominante(vs)+delta
+```
+
+O relatório ganha a seção `## values`: uma linha `VALUES` por char
+usado da legend com `lum=` (luma Rec.601 sobre o byte do ImageData — a
+mesma conta da view `luminance`), `px=`/`share=` (presença no bake) e a
+faixa. Char fora da faixa vira WARN — a faixa vale para TODO char usado,
+então acentos de outro papel (trinca≈ink, seixo≈luz) dentro da def
+acusam `FORA`: é prompt de revisão da paleta, não veredito de arte. Char
+sem pixel de albedo (encoberto na composição ou só em grade emissiva)
+sai `sem-px`. `vs` resolve pela luma da cor dominante do bake do piso de
+referência (cache por job).
+
+Bandas de referência por papel (luma medida no albedo baked, 0..1):
+
+| papel | faixa |
+|---|---|
+| piso iluminado | 0.35–0.55 |
+| muro / massa vertical | 0.12–0.25 |
+| caminho | dominante do piso ao redor + 0.08 (`{vs=,delta=}`) |
+| ink / contorno | ≤ 0.08 |
+
+A faixa mede o **albedo**, antes da luz e do grading regional — um mapa
+crepuscular mantém a faixa de piso e escurece na LUT.
+
 ## Contrato de desenho
 
 - Coordenadas inteiras **1-based**; `.` significa transparente.

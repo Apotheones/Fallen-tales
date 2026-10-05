@@ -236,6 +236,10 @@ return {
         G = { ramp = 'moss', step = 1, h = 0 },   -- musgo fundo na junta
     },
 
+    -- papel piso-iluminado (docs/PIXEL_KIT.md); a colina escurece pelo
+    -- grading regional, a faixa mede o albedo antes dela
+    valueBand = { .35, .55 },
+
     layers = {
         {
             name = 'piso',

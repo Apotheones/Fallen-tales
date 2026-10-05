@@ -262,6 +262,7 @@ return {
     name = 'piso_terra', w = W, h = H, origin = 'topleft',
     frameUse = 'variant',
     legend = legend,
+    valueBand = { .35, .55 }, -- papel piso-iluminado (docs/PIXEL_KIT.md)
     layers = { {
         name = 'piso',
         albedo = { K.string(quieto(11)), K.string(quieto(23)),

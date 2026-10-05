@@ -134,6 +134,7 @@ return {
     name = 'piso_grama', w = W, h = H, origin = 'topleft',
     frameUse = 'variant',
     legend = legend,
+    valueBand = { .35, .55 }, -- papel piso-iluminado (docs/PIXEL_KIT.md)
     layers = { {
         name = 'piso',
         albedo = { K.string(grama(101)), K.string(grama(103)),

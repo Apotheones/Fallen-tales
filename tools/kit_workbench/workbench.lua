@@ -38,6 +38,7 @@
 --   def.anchors = {nome={x,y}} ou {{name=,x=,y=}}      -- cruzes no grid
 --   def.regions = {nome={x=,y=,w=,h=}}                 -- caixas no grid / --region
 --   def.masks   = {nome='<grade>'}                     -- overlay violeta / --mask
+--   def.valueBand = {min,max} | {vs='piso',delta=.08}  -- seção 'values'
 
 local M = {}
 
@@ -1418,7 +1419,7 @@ local function swatchTable(asset, job, note)
             else note('ERROR', { reason = fmt("legend['%s']: %s", ch, tostring(c)) }) end
         end
         local row = { char = ch, spec = spec or '?', rgb = rgb or { .5, 0, .5 },
-            count = uso[ch] or 0 }
+            count = uso[ch] or 0, unresolved = not rgb }
         if rgb then
             local ck = fmt('%.4f,%.4f,%.4f', rgb[1], rgb[2], rgb[3])
             -- "redundante" de verdade = mesma cor E mesmos canais (h/e/ei);
@@ -1468,6 +1469,134 @@ local function swatchTable(asset, job, note)
         return a.char < b.char
     end)
     return sw
+end
+
+--------------------------------------------------------------------------------
+-- Faixas de valor (contrato de legibilidade — docs/PIXEL_KIT.md)
+--------------------------------------------------------------------------------
+--
+-- O agente escolhe legend{ramp,step} às cegas: a cor só existe depois do
+-- bake. def.valueBand declara a faixa-alvo de luminância do PAPEL do
+-- asset e o relatório mede cada char usado no albedo baked:
+--   {min=,max=} ou {lo,hi}                  -- faixa absoluta de luma
+--   {vs='piso_terra', delta=.08 [, max=1]}  -- relativa: >= dominante(vs)+delta
+-- A luma é Rec.601 sobre o byte do ImageData (mesma conta da view
+-- 'luminance'). Char fora da faixa vira WARN — a faixa vale para TODO
+-- char usado, então acentos de outro papel (trinca=ink, seixo=luz)
+-- acusam FORA: é prompt de revisão da paleta, não veredito. Char sem
+-- pixel de albedo no bake (encoberto na composição ou só em grade
+-- emissiva) sai marcado 'sem-px', sem julgamento.
+
+local function luma(r, g, b) return .299 * r + .587 * g + .114 * b end
+
+-- Histograma de cores opacas de um ImageData de albedo (sheet inteiro —
+-- frames enfileirados contam juntos, como a composição os enxerga).
+local function albedoHist(id)
+    local w, h = dims(id)
+    local hist, opacos = {}, 0
+    for y = 0, h - 1 do for x = 0, w - 1 do
+        local r, g, b, a = id:getPixel(x, y)
+        if a > 0 then
+            opacos = opacos + 1
+            local k = fmt('%.4f,%.4f,%.4f', r, g, b)
+            local e = hist[k]
+            if e then e.n = e.n + 1
+            else hist[k] = { r = r, g = g, b = b, n = 1 } end
+        end
+    end end
+    return hist, opacos
+end
+
+-- Entrada do histograma que corresponde à cor resolvida do char
+-- (tolerância ~2/255 para a quantização do ImageData rgba8).
+local function matchBaked(hist, rgb)
+    if not rgb then return nil end
+    local best, bd
+    for _, e in pairs(hist) do
+        local d = max(abs(e.r - rgb[1]), abs(e.g - rgb[2]), abs(e.b - rgb[3]))
+        if d < .008 and (not bd or d < bd) then best, bd = e, d end
+    end
+    return best
+end
+
+-- Luma dominante (cor com mais pixels baked) de um asset de referência,
+-- p/ faixas relativas valueBand={vs=...}. Cache por job.
+local function dominantLum(ref, job, note)
+    job._vsLum = job._vsLum or {}
+    local c = job._vsLum[ref]
+    if c ~= nil then return c or nil end
+    local ok, B = pcall(M.loadAsset, ref)
+    if not ok then
+        note('WARN', { reason = fmt("valueBand.vs: '%s' não carrega (%s)",
+            ref, tostring(B)) })
+        job._vsLum[ref] = false
+        return nil
+    end
+    local hist = albedoHist(B.sheet.imageData.albedo)
+    local dom
+    for _, e in pairs(hist) do if not dom or e.n > dom.n then dom = e end end
+    local v = dom and luma(dom.r, dom.g, dom.b) or false
+    job._vsLum[ref] = v
+    if v then
+        note('INFO', { reason = fmt(
+            "valueBand.vs: dominante de '%s' luma=%.3f", ref, v) })
+    end
+    return v or nil
+end
+
+local function valueBandOf(def, job, note)
+    local b = def.valueBand
+    if b == nil then return nil end
+    if type(b) ~= 'table' then
+        note('WARN', { reason =
+            'def.valueBand inválida (use {min,max} ou {vs=,delta=})' })
+        return nil
+    end
+    if b.vs then
+        local ref = dominantLum(b.vs, job, note)
+        if not ref then return nil end
+        local d = b.delta or .08
+        return { min = ref + d, max = b.max or 1,
+            range = fmt('%.3f..%.2f', ref + d, b.max or 1),
+            via = fmt('vs:%s+%.2f', b.vs, d) }
+    end
+    local lo, hi = b.min or b[1], b.max or b[2]
+    if type(lo) ~= 'number' or type(hi) ~= 'number' then
+        note('WARN', { reason =
+            'def.valueBand sem min/max (use {min,max} ou {vs=,delta=})' })
+        return nil
+    end
+    return { min = lo, max = hi, range = fmt('%.2f..%.2f', lo, hi) }
+end
+
+-- Mede a luma de cada char usado da legend no albedo baked e cruza com
+-- def.valueBand; preenche job._values p/ a seção 'values' do relatório.
+local function valueSection(asset, job, note)
+    local hist, opacos = albedoHist(asset.sheet.imageData.albedo)
+    local band = valueBandOf(asset.def, job, note)
+    local rows = {}
+    for _, s in ipairs(job._swatches or {}) do
+        if s.count > 0 and not s.unresolved then
+            local e = matchBaked(hist, s.rgb)
+            local row = { char = s.char, spec = s.spec, px = e and e.n or 0 }
+            if e then
+                row.lum = luma(e.r, e.g, e.b)
+                row.share = e.n / max(opacos, 1)
+            else
+                row.lum = luma(s.rgb[1], s.rgb[2], s.rgb[3])
+                row.semPx = true
+            end
+            if band and e and (row.lum < band.min - .002
+                or row.lum > band.max + .002) then
+                row.fora = true
+                note('WARN', { reason = fmt(
+                    "faixa de valor: char '%s' luma %.3f fora de %s",
+                    s.char, row.lum, band.range) })
+            end
+            rows[#rows + 1] = row
+        end
+    end
+    job._values = { rows = rows, band = band, opacos = opacos }
 end
 
 --------------------------------------------------------------------------------
@@ -1665,6 +1794,7 @@ function M.run(job)
 
     -- diagnósticos de arte (avisos) antes das views
     job._swatches = swatchTable(A, job, note)
+    valueSection(A, job, note)
     inspectFrames(A, job, note)
     motionDiagnostics(A, job, note)
 
@@ -1758,6 +1888,21 @@ function M.formatReport(job, findings, paths, reportPath)
         if t.layer then parts[#parts + 1] = 'layer=' .. t.layer end
         parts[#parts + 1] = 'reason="' .. (t.reason or '?') .. '"'
         L[#L + 1] = table.concat(parts, ' ')
+    end
+    -- seção 'values': uma linha por char usado da legend, greppável
+    if job._values and #job._values.rows > 0 then
+        L[#L + 1] = '## values'
+        local bd = job._values.band
+        local btxt = bd and bd.range or '-'
+        if bd and bd.via then btxt = btxt .. '(' .. bd.via .. ')' end
+        for _, r in ipairs(job._values.rows) do
+            local st = r.fora and 'FORA' or (r.semPx and 'sem-px' or 'ok')
+            L[#L + 1] = fmt(
+                "VALUES char='%s' spec=%s lum=%s px=%d share=%.0f%% band=%s %s",
+                r.char == ' ' and '_' or r.char, r.spec,
+                r.lum and fmt('%.3f', r.lum) or '-', r.px,
+                (r.share or 0) * 100, btxt, st)
+        end
     end
     local w, e = 0, 0
     for _, t in ipairs(findings) do
@@ -1855,6 +2000,7 @@ function M.selfCheck()
             layers = { K.layer('l', g) } }
     end
     local defA = mkdef('wbself_a')
+    defA.valueBand = { .10, .30 } -- 'a'=stone.3 dentro, 'b'=stone.6 FORA
     local defB = mkdef('wbself_b', function(g)
         K.pixel(g, 4, 4, 'b')  -- mudado
         K.pixel(g, 15, 15, 'b') -- adicionado (era '.')
@@ -1891,8 +2037,17 @@ function M.selfCheck()
         f:close()
     end
     local rep = assert(io.open(r.report, 'r'))
-    assert(rep:read('*a'):match('SUMMARY'), 'selfcheck: relatório sem SUMMARY')
+    local rpt = rep:read('*a')
     rep:close()
+    assert(rpt:match('SUMMARY'), 'selfcheck: relatório sem SUMMARY')
+    -- faixas de valor: WARN por char fora + seção '## values' no relatório
+    local temValorWarn = false
+    for _, t in ipairs(r.findings) do
+        if t.reason and t.reason:match('faixa de valor') then temValorWarn = true end
+    end
+    assert(temValorWarn, 'selfcheck: faixa de valor não avisou char fora')
+    assert(rpt:match('## values') and rpt:match("VALUES char='b'.-FORA"),
+        'selfcheck: seção values ausente ou sem FORA')
 
     -- views animadas na def de 3 frames + par blink existente
     local r2 = M.run{
