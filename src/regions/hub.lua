@@ -36,50 +36,59 @@ return {
         -- COTA 0 · TERRAÇO — massa contemplativa sobre o vale.
         {x = 16, y = 30, w = 33, h = 7},
     },
+    -- Superfície por distrito, nunca por hash: zones decididas na ordem
+    -- (a primeira que contém a célula vence) e 'caminho' pinta por cima.
+    -- Laje = mundo construído (mirante, praça, ruas); terra = quintais,
+    -- serviço e contemplação; grama = o adro guardado. A última zona cobre
+    -- o mapa inteiro — nenhuma célula cai no mix laje/terra do renderer.
     zones = {
+        -- Esqueleto de laje: praça fechada + faixas de rua, todas contíguas.
+        {name = 'PRAÇA DOS NOMES', x = 13, y = 17, w = 19, h = 9, surface = 'stone'},
+        {name = 'RUA DA DESCIDA', x = 19, y = 8, w = 4, h = 10, surface = 'stone'},
+        {name = 'RUA DO ADRO', x = 10, y = 17, w = 4, h = 3, surface = 'stone'},
+        {name = 'RUA DO POÇO', x = 4, y = 24, w = 15, h = 2, surface = 'stone'},
+        {name = 'RUA LESTE', x = 31, y = 19, w = 9, h = 3, surface = 'stone'},
+        {name = 'BECO', x = 39, y = 21, w = 4, h = 8, surface = 'stone'},
+        {name = 'APRON DA FORJA', x = 42, y = 27, w = 7, h = 2, surface = 'stone'},
+        {name = 'ESCADA BAIXA', x = 24, y = 26, w = 5, h = 3, surface = 'stone'},
+        {name = 'PASSEIO DO TERRAÇO', x = 24, y = 29, w = 25, h = 3, surface = 'stone'},
         {name = 'MIRANTE', x = 4, y = 3, w = 34, h = 5, surface = 'stone'},
-        {name = 'PRAÇA DOS NOMES', x = 18, y = 17, w = 14, h = 8, surface = 'stone'},
+        -- Massas de terra/grama — os bolsos escuros entre as ruas claras.
         {name = 'JARDIM DA CAPELA', x = 4, y = 12, w = 7, h = 9, surface = 'grass'},
-        {name = 'QUINTAL DA FORJA', x = 49, y = 24, w = 4, h = 5, surface = 'gravel'},
-        {name = 'BECO DA FORJA', x = 40, y = 20, w = 3, h = 8, surface = 'gravel'},
-        {name = 'TERRAÇO BAIXO', x = 16, y = 30, w = 33, h = 7, surface = 'stone'},
+        {name = 'HORTA', x = 4, y = 21, w = 9, h = 3, surface = 'earth'},
+        {name = 'BECO DA FORJA', x = 38, y = 19, w = 15, h = 10, surface = 'gravel'},
+        {name = 'TERRAÇO BAIXO', x = 16, y = 30, w = 33, h = 7, surface = 'earth'},
+        {name = 'VILA', x = 0, y = 0, w = 54, h = 40, surface = 'earth'},
     },
-    -- Ruas pintadas: uma polilinha por rua, abraçando as massas. Distância ao
-    -- segmento < w*16 px (renderer); default 2.6. Nada converge num ponto.
-    -- TRAÇO provisional: vértices fracionários para a rua serpear dentro do
-    -- corredor do carve em vez de correr a régua — o Pátio revê na ficha.
+    -- Ruas: a faixa de laje da zona é a rua carveada e a polilinha corre
+    -- centrada nela — rua pintada = rua carveada, sem divergência. A tinta
+    -- 'caminho' é desgaste sobre a banda, não a rua em si. main=true marca
+    -- a espinha chegada→Marco (meia-largura +5px no renderer).
     paths = {
-        -- chegada → escadaria: beirando o parapeito do mirante, descendo
-        -- solta até a boca da escada.
-        {w = 3.1, {5.2, 5.4}, {9, 5.2}, {13, 5.3}, {16.5, 5.6}, {19.3, 6.2},
-            {20.4, 7.6}, {20.5, 8.8}},
-        -- rua da descida: serpenteia dentro do corredor — a praça não se vê
-        -- inteira de cima, revela-se dobrando a curva.
-        {w = 3.0, {20.6, 10}, {21.2, 12.5}, {20.8, 14.8}, {20.3, 17},
-            {20.2, 19.5}, {20.4, 21.4}},
-        -- praça → adro: pelo portão leste da mureta e reta à porta sul da
-        -- capela (7,17).
-        {w = 2.7, {20.3, 19.3}, {17, 19.2}, {13.5, 19.1}, {11.2, 18.7},
-            {10.4, 18.6}, {9.5, 18}, {7.9, 17.4}, {7.2, 17}},
-        -- rua do poço → cozinha/horta: desce rente à cisterna e cerca a
-        -- cozinha pela parede norte (a porta fica na rua).
-        {w = 2.9, {19.8, 22.3}, {19, 23.8}, {17.5, 25}, {15, 25.2},
-            {12, 25.2}, {9, 25.3}, {6.5, 25.4}, {5, 25.2}},
-        -- praça → escada baixa: o segundo vão desce à beirada do terraço.
-        {w = 2.8, {23, 22.2}, {24.8, 24.5}, {25.8, 26.8}, {26.2, 29},
+        -- chegada → escadaria: a volta do mirante até a boca da escada.
+        {w = 3.1, main = true, {5.2, 5.3}, {9, 5.1}, {13, 5.2}, {16.5, 5.5},
+            {19.5, 6.4}, {20.5, 7.8}, {20.6, 9}},
+        -- rua da descida: reta dentro da faixa x19-22, encontra o Marco no
+        -- eixo ao entrar na praça.
+        {w = 3.0, main = true, {20.6, 9.5}, {21, 12}, {20.6, 15},
+            {20.5, 18}, {20.7, 20.5}},
+        -- praça → adro: pelo portão da mureta (10,18-19) à porta da capela.
+        {w = 2.7, {19, 19.4}, {15, 19.2}, {11.5, 18.8}, {9, 18}, {7.3, 17.3}},
+        -- rua do poço → cozinha/horta: faixa horizontal na frente das casas.
+        {w = 2.9, {18, 23.5}, {16, 24.6}, {12, 25}, {8, 25.1}, {5, 25.2}},
+        -- praça → escada baixa: a lingueta sul da praça leva ao vão.
+        {w = 2.8, {24.5, 22}, {25.5, 24.5}, {26, 27}, {26.2, 29.5},
             {26.3, 31.5}},
-        -- rua leste → beco apertado atrás da forja → fundo → quintal de
-        -- cascalho: a perna estreita do loop, nunca radial.
-        {w = 2.6, {28.5, 20.4}, {31.5, 20.8}, {35, 21.2}, {38.5, 21.2},
-            {40.6, 21.8}, {41.2, 24}, {41.3, 26.5}, {43.5, 27.6},
-            {46.5, 28.2}, {48.5, 26.8}},
-        -- rampa de serviço → terraço: volta por outra borda e fecha o loop.
-        {w = 2.5, {50.2, 27.3}, {48.5, 29.2}, {47.2, 31}, {45, 32.5},
-            {43.5, 33.5}},
-        -- terraço: porta da escola → passeio do parapeito sobre o vale.
-        {w = 2.7, {26.3, 31.5}, {29, 31.8}, {32.5, 31.4}, {35, 31.2},
-            {37.5, 31.3}, {40.5, 32.2}, {42.5, 34}, {39, 35.2}, {32, 35.4},
-            {25, 35.3}},
+        -- rua leste → beco → quintal de cascalho: a perna de serviço do loop.
+        {w = 2.6, {27, 20.5}, {31, 20.6}, {35, 20.8}, {39, 21.2},
+            {40.3, 22.5}, {40.5, 24.5}, {40.8, 26.8}, {43, 27.7}, {47, 27.8}},
+        -- rampa de serviço → passeio do terraço → escola → escada baixa:
+        -- uma faixa só na cabeceira do terraço.
+        {w = 2.7, {48.5, 27.8}, {48, 30}, {46.5, 31.3}, {42, 31.4},
+            {37, 31.3}, {32, 31.4}, {26.5, 31.4}},
+        -- beirada sul do terraço: trilha de contemplação junto ao parapeito.
+        {w = 2.5, {42, 32.5}, {39, 34}, {34, 35.2}, {28, 35.3}, {23, 35},
+            {20, 34.8}},
     },
     props = {
         -- Massas por função (tabela rev3): tamanhos e situações diferentes;
@@ -119,10 +128,10 @@ return {
             solid = true},
         {id = 'caixasCozinha', kind = 'caixas', x = 10, y = 27, solid = true},
         {id = 'espantalhoHorta', kind = 'espantalho', x = 5, y = 22, solid = true},
-        {id = 'canteiroHortaA1', kind = 'canteiro', x = 4, y = 23, solid = true},
-        {id = 'canteiroHortaA2', kind = 'canteiro', x = 4, y = 24, solid = true},
-        {id = 'canteiroHortaB1', kind = 'canteiro_b', x = 6, y = 23, solid = true},
-        {id = 'canteiroHortaB2', kind = 'canteiro_b', x = 6, y = 24, solid = true},
+        {id = 'canteiroHortaA1', kind = 'canteiro', x = 4, y = 22, solid = true},
+        {id = 'canteiroHortaA2', kind = 'canteiro', x = 4, y = 23, solid = true},
+        {id = 'canteiroHortaB1', kind = 'canteiro_b', x = 6, y = 22, solid = true},
+        {id = 'canteiroHortaB2', kind = 'canteiro_b', x = 6, y = 23, solid = true},
         {id = 'varalPensao', kind = 'varal', x = 33, y = 17, w = 1, h = 2},
         {id = 'cartazPraca', kind = 'cartaz', x = 17, y = 21, solid = true},
         -- Adro murado (o muro baixo que o galpão dava pela shell; dentro da
