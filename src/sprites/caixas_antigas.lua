@@ -7,6 +7,9 @@
 --   f3 = revistado: caixa tombada de lado com pano saindo da boca,
 --        fardo solto ao lado — metade do depósito revirada
 -- Relevo: caixas 6-8, fardos 8-9, cordas 9, chão 1.
+-- v3: peças engordadas ~15% (silhuetas maiores) e traços estruturais
+-- com 2px — sarrafos 'v' das caixas, sarrafos horizontais da tombada
+-- e cordas 'r' dos fardos. Os 3 arranjos e a origem não mudam.
 
 local function grid(rows) return table.concat(rows, '\n') end
 local function vazio()
@@ -24,17 +27,20 @@ local function monta(f)
     local function box(x0, y0, x1, y1, ch)
         for y = y0, y1 do for x = x0, x1 do set(x, y, ch) end end
     end
-    -- caixa de tábuas: corpo, filete do topo, sarrafos verticais, face
+    -- caixa de tábuas: corpo, filete do topo, sarrafos verticais de
+    -- 2px, face
     local function caixa(x0, y0, x1, y1)
         box(x0, y0, x1, y0 + 1, 'W')
         box(x0, y0 + 2, x1, y1 - 3, 'w')
-        for x = x0 + 3, x1 - 2, 6 do
-            for y = y0 + 3, y1 - 4 do set(x, y, 'v') end
+        for x = x0 + 3, x1 - 3, 7 do
+            for y = y0 + 3, y1 - 4 do
+                set(x, y, 'v'); set(x + 1, y, 'v')
+            end
         end
         box(x0, y1 - 2, x1, y1 - 1, 'F')
         box(x0, y1, x1, y1, 'k')
     end
-    -- fardo de tecido: domo com pregas e corda cruzada
+    -- fardo de tecido: domo com pregas e corda cruzada de 2px
     local function fardo(x0, y0, x1, y1, c, C)
         box(x0 + 2, y0, x1 - 2, y0 + 1, C)
         box(x0, y0 + 2, x1, y0 + 3, c)
@@ -42,20 +48,23 @@ local function monta(f)
         for x = x0 + 3, x1 - 2, 5 do
             for y = y0 + 4, y1 - 3 do set(x, y, C) end
         end
-        -- corda em cruz
-        for y = y0 + 2, y1 - 2 do set(x0 + 4, y, 'r'); set(x1 - 4, y, 'r') end
-        for x = x0, x1 do set(x, y0 + 6, 'r') end
+        -- corda em cruz, 2px
+        for y = y0 + 2, y1 - 2 do
+            set(x0 + 4, y, 'r'); set(x0 + 5, y, 'r')
+            set(x1 - 4, y, 'r'); set(x1 - 5, y, 'r')
+        end
+        for x = x0, x1 do set(x, y0 + 6, 'r'); set(x, y0 + 7, 'r') end
         set(x0 + 4, y0 + 5, 'R'); set(x0 + 5, y0 + 6, 'R')  -- nó
         box(x0 - 1, y1 - 1, x1 + 1, y1, 'D')
     end
-    -- caixa tombada de lado: sarrafos horizontais, boca aberta no
-    -- canto direito-alto com pano escapando para fora
+    -- caixa tombada de lado: sarrafos horizontais de 2px, boca aberta
+    -- no canto direito-alto com pano escapando para fora
     local function caixa_lado(x0, y0, x1, y1)
         box(x0, y0 + 2, x1 - 2, y1 - 3, 'w')          -- corpo
         box(x0, y0, x0 + 1, y1 - 3, 'W')            -- filete do fundo (esq.)
         box(x0, y1 - 2, x1, y1, 'k')                -- base sombreada
-        for y = y0 + 4, y1 - 6, 6 do
-            box(x0 + 2, y, x1 - 4, y, 'v')          -- sarrafos horizontais
+        for y = y0 + 4, y1 - 7, 7 do
+            box(x0 + 2, y, x1 - 4, y + 1, 'v')      -- sarrafos horizontais
         end
         -- boca aberta: ombreira escura no topo-direito
         box(x1 - 3, y0, x1, y0 + 3, 'k')
@@ -67,7 +76,8 @@ local function monta(f)
         end
         box(x1 - 6, y0 + 2, x1 - 3, y0 + 7, 'D')    -- ponta pendurada
     end
-    -- fardo solto: uma corda só, sem nó, aba de pano aberta na base
+    -- fardo solto: uma corda só de 2px, sem nó, aba de pano aberta na
+    -- base
     local function fardo_solto(x0, y0, x1, y1, c, C)
         box(x0 + 2, y0, x1 - 2, y0 + 1, C)
         box(x0, y0 + 2, x1, y0 + 3, c)
@@ -75,7 +85,9 @@ local function monta(f)
         for x = x0 + 3, x1 - 2, 5 do
             for y = y0 + 4, y1 - 4 do set(x, y, C) end
         end
-        for y = y0 + 2, y1 - 3 do set(x0 + 4, y, 'r') end -- corda frouxa
+        for y = y0 + 2, y1 - 3 do
+            set(x0 + 4, y, 'r'); set(x0 + 5, y, 'r')   -- corda frouxa 2px
+        end
         box(x0 - 1, y1 - 2, x1 + 1, y1, 'D')
         box(x0 - 3, y1 - 7, x0, y1 - 1, 'D')             -- aba solta à esq.
         set(x0 - 3, y1 - 8, c)
@@ -84,26 +96,26 @@ local function monta(f)
 
     if f == 1 then
         -- pilha: caixão de baixo + caixa menor + fardo jade no topo
-        caixa(8, 62, 56, 90)
-        caixa(14, 40, 50, 61)
-        fardo(18, 22, 44, 39, 'c', 'C')
+        caixa(6, 60, 58, 90)
+        caixa(12, 38, 52, 59)
+        fardo(15, 16, 47, 37, 'c', 'C')
     elseif f == 2 then
         -- lado a lado + fardo alto de pano quente à direita
-        caixa(6, 58, 34, 90)
-        caixa(36, 66, 58, 90)
-        fardo(38, 34, 54, 65, 't', 'T')
+        caixa(4, 56, 36, 90)
+        caixa(38, 62, 61, 90)
+        fardo(39, 30, 57, 61, 't', 'T')
         -- pano solto caído por cima da caixa esquerda
-        box(10, 48, 26, 58, 'c')
-        for y = 50, 56, 3 do for x = 11, 25 do set(x, y, 'C') end end
-        for x = 10, 26 do set(x, 57, 'D'); set(x, 58, 'D') end
-        for x = 12, 24, 5 do set(x, 59, 'D') end
+        box(8, 46, 27, 57, 'c')
+        for y = 48, 55, 3 do for x = 9, 26 do set(x, y, 'C') end end
+        for x = 8, 27 do set(x, 56, 'D'); set(x, 57, 'D') end
+        for x = 10, 25, 5 do set(x, 58, 'D') end
     else
         -- revistado: caixa tombada com pano saindo, fardo solto ao lado
-        caixa_lado(4, 64, 42, 90)
-        fardo_solto(46, 62, 60, 88, 't', 'T')
+        caixa_lado(2, 60, 44, 90)
+        fardo_solto(46, 58, 62, 88, 't', 'T')
         -- retalho de pano caído no chão entre os dois
-        box(34, 86, 45, 89, 'D')
-        for x = 36, 44, 4 do set(x, 85, 'c') end
+        box(33, 85, 46, 90, 'D')
+        for x = 35, 45, 4 do set(x, 84, 'c') end
     end
 
     -- contato com o chão

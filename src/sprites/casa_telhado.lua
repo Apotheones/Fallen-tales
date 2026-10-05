@@ -54,13 +54,17 @@ A.rect(1, 53, 128, 1, 'x')
 A.rect(1, 54, 128, 3, 'R')
 
 -- Beirada de sombra: contato duro e dissolução em pontos — cai sobre o
--- que estiver embaixo sem virar tarja.
+-- que estiver embaixo sem virar tarja. Validada composta sobre reboco
+-- real (rua_preview): o rabo em 'k' puro lia como sujeira salpicada;
+-- os pontos mais distantes caem um degrau para 'd' (plasterDark), a
+-- mesma voz da sombra de beiral das fachadas — a sombra some, não
+-- polui a parede.
 A.rect(1, 57, 128, 1, 'k')
 for x = 1, 128 do
     if hsh(x, 58) < 9 then A.set(x, 58, 'k') end
-    if hsh(x, 59) < 6 then A.set(x, 59, 'k') end
-    if hsh(x, 60) < 4 then A.set(x, 60, 'k') end
-    if hsh(x, 61) < 2 then A.set(x, 61, 'k') end
+    if hsh(x, 59) < 6 then A.set(x, 59, 'd') end
+    if hsh(x, 60) < 4 then A.set(x, 60, 'd') end
+    if hsh(x, 61) < 2 then A.set(x, 61, 'd') end
 end
 
 return {
@@ -68,6 +72,13 @@ return {
     w = 128, h = 64,
     origin = 'topleft',
     legend = Lib.legend(),
+    -- caixas 1-based p/ o workbench (--region) e revisão futura
+    regions = {
+        cumeeira = { x = 1, y = 1, w = 128, h = 2 },
+        campo = { x = 1, y = 3, w = 128, h = 48 },
+        beiral = { x = 1, y = 51, w = 128, h = 6 },
+        sombra = { x = 1, y = 57, w = 128, h = 8 },
+    },
     layers = {
         { name = 'telhado', h = 12, albedo = A:out() },
     },
