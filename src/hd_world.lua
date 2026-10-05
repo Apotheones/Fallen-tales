@@ -594,6 +594,48 @@ local function tileOccluders(map)
     return o
 end
 
+-- Prop caster → occluder (mesma forma usada no passe por frame e no bake
+-- da máscara do sol). cy de shadowCaster vem em px-32 → *2 = px-64.
+local function propCasterOcc(prop)
+    local cx, cy, w2, hgt = Props.shadowCaster(prop)
+    if not cx then return nil end
+    return {x = (prop.x - 1) * CELL, y = cy * 2 - 8,
+        w = (prop.w or 1) * CELL, h = 16, height = hgt * 2}
+end
+
+-- Máscara de sombra da dominante (sol) por mapa — megaplan §3.3 "máscara
+-- assada por fonte estática". Tiles + casters ativos entram no bake; se a
+-- contagem de casters muda (prop 'taken'), re-assa uma vez. Retorna nil
+-- sem GPU/shader — o sol cai no caminho vivo de shadow quads.
+local sunMaskCache = setmetatable({}, {__mode = 'k'})
+local function sunMaskFor(L, map)
+    if not L.enabled then return nil end
+    local m = sunMaskCache[map]
+    local sig = 0
+    for _, prop in ipairs(map.props or {}) do
+        if Props.shadowCaster(prop) then sig = sig + 1 end
+    end
+    if m == false then return nil end -- bake falhou antes: fica na sombra viva
+    if m and m.sig == sig then return m end
+    if m and m.canvas then m.canvas:release() end
+    local occ = {}
+    for _, o in ipairs(tileOccluders(map)) do occ[#occ + 1] = o end
+    for _, prop in ipairs(map.props or {}) do
+        local po = propCasterOcc(prop)
+        if po then occ[#occ + 1] = po end
+    end
+    local sunRef = {x = -640, y = map.h * CELL + 560, z = 460}
+    local baked = L:bakeShadowMask(sunRef, occ,
+        -2 * CELL, -2 * CELL, (map.w + 4) * CELL, (map.h + 4) * CELL, 0.5)
+    if not baked then
+        sunMaskCache[map] = false
+        return nil
+    end
+    baked.sig = sig
+    sunMaskCache[map] = baked
+    return baked
+end
+
 function HDWorld.draw(renderer, campaign, v, map, shake)
     local tFrame = love.timer.getTime()
     shake = shake or {0, 0}
@@ -949,9 +991,12 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
             refugio = {c = {1.0, .76, .44}, i = 6.5},
             colina = {c = {.62, .70, 1.0}, i = 3.2},
         })[region] or {c = {1.0, .76, .44}, i = 6.5}
+        -- Sol projeta via máscara assada (§3.3): as sombras longas para NE
+        -- da especificação ambiental sem custo de occluder por frame. Sem
+        -- máscara (falha de bake/GPU) a mesma fonte projeta ao vivo.
         L:addLight({x = -640, y = map.h * CELL + 560, z = 460,
             color = sun.c, intensity = sun.i, radius = 8600,
-            shadow = false})
+            shadow = true, mask = sunMaskFor(L, map), prio = 0})
     else
         -- Interior sem dominante: o ambiente É a luz — frio-neutro legível
         -- (escuro legível != preto, Calina), os pools de brasa aquecem.
@@ -1012,16 +1057,16 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                         or {1.0, .58, .24},
                     intensity = 1.6, radius = math.max((r or 14) * 2, 140),
                     flicker = {amp = .05, speed = 4, phase = prop.x * 1.7},
-                    shadow = false})
+                    shadow = false, prio = 3})
             end
         end
     end
-    -- Cull de luz fora da vista (margem ~2 cél) — nem entra no compose.
-    -- Occluder só se colhe quando alguma luz projeta (padrão-ouro: tudo
-    -- shadow=false no hub → coleta zerada, custo do passe só batch).
+    -- Occluder só se coleta quando alguma luz projeta AO VIVO — a
+    -- dominante carrega máscara assada (não precisa do passe) e as
+    -- quietas têm shadow=false. Sobram os fogos com flicker.
     local wantsShadow = false
     for _, l in ipairs(L.lights) do
-        if l.shadow ~= false then wantsShadow = true break end
+        if l.shadow ~= false and not l.mask then wantsShadow = true break end
     end
     -- Occluders: muros (merge em fileiras), pilares, props com altura.
     -- Só coleta quando alguma luz ainda projeta. A parte de tiles é

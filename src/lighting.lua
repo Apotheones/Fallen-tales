@@ -25,7 +25,7 @@ local G = love.graphics
 local Lighting = {}
 Lighting.__index = Lighting
 
-local MAX_LIGHTS = 8
+local MAX_LIGHTS = 12
 
 -- ── Shaders ──────────────────────────────────────────────────────────
 -- Dois shaders de luz: um com uniform array (fast-path, todas as fontes sem
@@ -33,7 +33,7 @@ local MAX_LIGHTS = 8
 -- multiplicar — sombra é por fonte, então a contribuição precisa vir isolada).
 
 local SHADER_ALL = [[
-#define MAXLIGHTS 8
+#define MAXLIGHTS 12
 uniform Image normalTex;
 uniform vec3 lightPos[MAXLIGHTS];    // x,y em px de VISTA; z = altura
 uniform vec3 lightColor[MAXLIGHTS];  // cor*intensity*flicker, resolvido na CPU
@@ -320,13 +320,20 @@ function Lighting:beginFrame()
 end
 
 function Lighting:addLight(l)
-    if #self.lights >= MAX_LIGHTS then return end -- orçamento §3.3: ~8 fontes
+    if #self.lights >= MAX_LIGHTS then return end -- orçamento §3.3
     local c = l.color or { 1, 1, 1 }
     local inten = l.intensity or 1
     self.lights[#self.lights + 1] = {
         x = l.x or 0, y = l.y or 0, z = l.z or 30,
         color = c, radius = l.radius or 220, intensity = inten,
         flicker = l.flicker, shadow = l.shadow,
+        -- mask = máscara de sombra assada (§3.3, fonte estática tipo sol):
+        -- substitui os shadow quads por 1 multiply de textura por frame.
+        mask = l.mask,
+        -- prio desempata o corte no MAX_LIGHTS: 0 máscara/dominante,
+        -- 1 flicker (drama), 2 compostas, 3 âncoras genéricas de prop.
+        prio = l.prio or (l.mask and 0 or (l.flicker and 1 or 2)),
+        _seq = #self.lights + 1,
         -- valores resolvidos em update(); defaults aqui caso update não rode.
         _f = 1, _r = c[1] * inten, _g = c[2] * inten, _b = c[3] * inten,
     }
@@ -373,6 +380,75 @@ end
 
 function Lighting:lightCount()
     return #self.lights
+end
+
+-- Assa a máscara de sombra de UMA fonte estática contra a lista completa
+-- de occluders (§3.3 "máscara assada por fonte estática"). O canvas cobre
+-- o retângulo mundo (x,y,w,h) a `scale`× — sombras longas do sol nascem
+-- prontas; por frame resta 1 multiply de textura sobre a contribuição
+-- isolada da fonte, que ainda passa pelo normal map (atores inclusos).
+-- Retorna {canvas, x, y, scale} ou nil (sem shader/GPU → caller decide
+-- se cai no caminho vivo de shadow quads).
+function Lighting:bakeShadowMask(light, occluders, x, y, w, h, scale)
+    scale = scale or 0.5
+    if not self.shaderShadow then return nil end
+    local mw = math.max(1, math.floor(w * scale))
+    local mh = math.max(1, math.floor(h * scale))
+    local ok, canvas = pcall(G.newCanvas, mw, mh, {format = 'rgba8'})
+    if not (ok and canvas) then return nil end
+    canvas:setFilter('linear', 'linear')
+
+    local prevCanvas = G.getCanvas()
+    local prevShader = G.getShader()
+    local prevBM, prevAM = G.getBlendMode()
+    local pr, pg, pb, pa = G.getColor()
+    G.push('all')
+    G.origin()
+    G.setCanvas(canvas)
+    G.clear(1, 1, 1, 1) -- 1 = sem sombra; o multiply escurece onde projeta
+    G.setBlendMode('multiply', 'premultiplied')
+    local sh = self.shaderShadow
+    G.setShader(sh)
+    local sv, dv = {}, {}
+    for _, o in ipairs(occluders) do
+        local verts, ccx, ccy, ocx, ocy, dx, dy, len =
+            shadowPoly(o, light, x, y) -- cam=origem da máscara → espaço mundo
+        if verts then
+            for k = 1, #verts do sv[k] = verts[k] * scale end
+            for k = #verts + 1, #sv do sv[k] = nil end
+            local cx2, cy2 = ccx * scale, ccy * scale
+            sh:send('occC', {ocx * scale, ocy * scale})
+            sh:send('sdir', {dx, dy})
+            sh:send('slen', math.max(len * scale, 1))
+            sh:send('core', 0.70)
+            G.polygon('fill', dilate(sv, cx2, cy2, 1.24, dv))
+            sh:send('core', 0.24)
+            G.polygon('fill', sv)
+        end
+    end
+    G.pop()
+    G.setCanvas(prevCanvas)
+    G.setShader(prevShader)
+    G.setBlendMode(prevBM, prevAM)
+    G.setColor(pr, pg, pb, pa)
+    return {canvas = canvas, x = x, y = y, scale = scale}
+end
+
+-- Ordem de trabalho por frame: sort estável por prio (0 máscara, 1 flicker,
+-- 2 composta, 3 âncora) com _seq de desempate — luz igual não troca de
+-- lugar quando o array lota, senão âncoras piscariam ao mover a câmera.
+local ordScratch = {}
+local function sortedLights(self)
+    local n = #self.lights
+    for i = 1, n do ordScratch[i] = self.lights[i] end
+    for i = n + 1, #ordScratch do ordScratch[i] = nil end
+    if n > 1 then
+        table.sort(ordScratch, function(a, b)
+            if a.prio ~= b.prio then return a.prio < b.prio end
+            return a._seq < b._seq
+        end)
+    end
+    return ordScratch
 end
 
 -- Desenha uma fonte isolada no canvas atual (já bound pelo compose).
@@ -422,7 +498,8 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
     end
 
     self._normal = normalCanvas or self.dummyNormal
-    local nLights = math.min(#self.lights, MAX_LIGHTS)
+    local ord = sortedLights(self)
+    local nLights = math.min(#ord, MAX_LIGHTS)
     local shadowQuads = 0
 
     -- Occluders relevantes por luz: só projetam sombra se a luz está acima
@@ -430,11 +507,12 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
     -- alongada ainda cair dentro do raio).
     local occSets, anyShadow = {}, false
     for i = 1, nLights do
-        local l = self.lights[i]
+        local l = ord[i]
         local set = {}
         -- shadow=false: a fonte dominante (sol/céu) modela por normal
         -- map + ambiente, sem sombra geométrica — drama é das pontuais.
-        if l.z > 4 and l.shadow ~= false then
+        -- l.mask: fonte com máscara assada não coleta occluder por frame.
+        if l.z > 4 and l.shadow ~= false and not l.mask then
             local rr = l.radius * 1.3
             for j = 1, #self.occluders do
                 local o = self.occluders[j]
@@ -444,7 +522,7 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
             end
         end
         occSets[i] = set
-        if #set > 0 then anyShadow = true end
+        if #set > 0 or l.mask then anyShadow = true end
     end
 
     -- Polígonos de sombra visíveis por luz: hull e AABB computados uma
@@ -456,7 +534,7 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
             local list = {}
             for j = 1, #occSets[i] do
                 local verts, ccx, ccy, ocx, ocy, dx, dy, len =
-                    shadowPoly(occSets[i][j], self.lights[i], camX, camY)
+                    shadowPoly(occSets[i][j], ord[i], camX, camY)
                 if verts and hullVisible(verts, self.w, self.h) then
                     list[#list + 1] = {verts = verts, cx = ccx, cy = ccy,
                         ocx = ocx, ocy = ocy, dx = dx, dy = dy, len = len}
@@ -479,7 +557,7 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
         if nLights > 0 then
             local pos, col, rad = {}, {}, {}
             for i = 1, nLights do
-                local l = self.lights[i]
+                local l = ord[i]
                 pos[i] = { (l.x - camX) * ls, (l.y - camY) * ls, l.z * ls }
                 col[i] = { l._r, l._g, l._b }
                 rad[i] = l.radius * ls
@@ -501,12 +579,14 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
         -- paga o lightTmp isolado.
         local free = {}
         for i = 1, nLights do
-            if #polys[i] == 0 then free[#free + 1] = i end
+            if #polys[i] == 0 and not ord[i].mask then
+                free[#free + 1] = i
+            end
         end
         if #free > 0 then
             local pos, col, rad = {}, {}, {}
             for k = 1, #free do
-                local l = self.lights[free[k]]
+                local l = ord[free[k]]
                 pos[k] = { (l.x - camX) * ls, (l.y - camY) * ls, l.z * ls }
                 col[k] = { l._r, l._g, l._b }
                 rad[k] = l.radius * ls
@@ -523,9 +603,9 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
             G.rectangle('fill', 0, 0, self.lw, self.lh)
         end
         for i = 1, nLights do
+            local l = ord[i]
             local set = polys[i]
-            if set and #set > 0 then
-                local l = self.lights[i]
+            if l.mask or (set and #set > 0) then
                 -- Contribuição isolada em lightTmp → sombra multiplica →
                 -- soma no lightmap. Sombra da luz A não toca a luz B.
                 G.setCanvas(self.lightTmp)
@@ -533,6 +613,16 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
                 drawSingle(self, l, camX, camY, 'replace')
                 G.setShader()
                 G.setBlendMode('multiply', 'premultiplied')
+                if l.mask then
+                    -- Máscara assada (§3.3): 1 multiply de textura cobre
+                    -- todos os occluders estáticos da fonte — o N·L do
+                    -- pixel segue vivo no drawSingle acima.
+                    local m = l.mask
+                    local ms = ls / m.scale
+                    G.setColor(1, 1, 1, 1)
+                    G.draw(m.canvas, (m.x - camX) * ls,
+                        (m.y - camY) * ls, 0, ms, ms)
+                else
                 for j = 1, #set do
                     local p = set[j]
                     local verts = p.verts
@@ -567,6 +657,7 @@ function Lighting:compose(albedoCanvas, normalCanvas, emissiveCanvas, camX, camY
                         G.polygon('fill', sv)
                     end
                     shadowQuads = shadowQuads + 1
+                end
                 end
                 G.setCanvas(self.lightmap)
                 G.setShader()
