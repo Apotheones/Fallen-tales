@@ -45,12 +45,43 @@ def parse_region(path):
                         continue
                 holes.append((x, y))
     data = {"holes": holes}
+
+    # Seções são tabelas Lua aninhadas — regex de um nível quebrava em
+    # entries com sub-tabelas próprias (ex.: npc.posts = {{...},{...}})
+    # ou formatação fora do padrão. Extrai o bloco casando chaves e
+    # splita só as entradas de nível mais externo.
+    def extract_table(key):
+        m = re.search(rf"{key}\s*=\s*\{{", text)
+        if not m:
+            return None
+        depth = 0
+        for j in range(m.end() - 1, len(text)):
+            if text[j] == '{':
+                depth += 1
+            elif text[j] == '}':
+                depth -= 1
+                if depth == 0:
+                    return text[m.end():j]
+        return None
+
+    def split_entries(body):
+        out, depth, start = [], 0, -1
+        for i, ch in enumerate(body):
+            if ch == '{':
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    out.append(body[start + 1:i])
+        return out
+
     for section in ("carve", "walls", "pillars", "props", "npcs", "hotspots", "exits", "encounters"):
-        m = re.search(rf"{section}\s*=\s*\{{(.*?)\n    \}},", text, re.S)
         entries = []
-        if m:
-            for em in re.finditer(r"\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\},?", m.group(1)):
-                b = em.group(1)
+        body = extract_table(section)
+        if body:
+            for b in split_entries(body):
                 if "x" not in b and "id" not in b:
                     continue
                 entries.append(b)
@@ -92,17 +123,19 @@ def main():
         x, y = num(b, "x"), num(b, "y")
         closed = "open = false" in b
         put(x, y, "portal", "floor")
+        mto = re.search(r"to = '(\w+)'", b)
         exits.append({"x": x, "y": y, "closed": closed,
-                      "to": re.search(r"to = '(\w+)'", b).group(1)})
+                      "to": mto.group(1) if mto else "?"})
 
     solid = {}
     for b in d["props"]:
         x, y = num(b, "x"), num(b, "y")
         w, h = num(b, "w", 1), num(b, "h", 1)
-        if "solid = true" in b:
+        mid = re.search(r"id = '(\w+)'", b)
+        if "solid = true" in b and mid:
             for yy in range(y, y + h):
                 for xx in range(x, x + w):
-                    solid[(xx, yy)] = re.search(r"id = '(\w+)'", b).group(1)
+                    solid[(xx, yy)] = mid.group(1)
     # --taken=propId simula o estado pós-interação (setProp 'taken'): as
     # células sólidas do prop param de bloquear, como na campanha.
     for arg in sys.argv:
@@ -146,14 +179,16 @@ def main():
     print(f"== {rid} == spawn ({sx},{sy}) -> {len(seen)} células alcançáveis")
     fails = 0
     for b in d["hotspots"]:
-        hid = re.search(r"id = '(\w+)'", b).group(1)
+        mh = re.search(r"id = '(\w+)'", b)
+        hid = mh.group(1) if mh else "?"
         x, y = num(b, "x"), num(b, "y")
         rng = num(b, "range", 1.45) or 1.45
         ok = covered(x, y, rng)
         fails += not ok
         print(f"  hotspot {hid:18s} ({x:2},{y:2}) range {rng}: {'OK' if ok else 'FALHOU'}")
     for b in d["npcs"]:
-        nid = re.search(r"id = '(\w+)'", b).group(1)
+        mn = re.search(r"id = '([\w-]+)'", b)
+        nid = mn.group(1) if mn else "?"
         x, y = num(b, "x"), num(b, "y")
         tr = num(b, "talkRange", 1.7) or 1.7
         foot = (x, y) in seen
@@ -163,12 +198,10 @@ def main():
             fails += 1
         print(f"  npc     {nid:18s} ({x:2},{y:2}) alcançável {tag}")
     encs = []
-    sec = re.search(r"encounters\s*=\s*\{(.*?)\n    \},", path.read_text(encoding="utf-8"), re.S)
-    if sec:
-        for line in sec.group(1).splitlines():
-            m = re.search(r"\{id = '([\w-]+)'", line)
-            if m:
-                encs.append((m.group(1), num(line, "x"), num(line, "y")))
+    for b in d["encounters"]:
+        me = re.search(r"id = '([\w-]+)'", b)
+        if me:
+            encs.append((me.group(1), num(b, "x"), num(b, "y")))
     for eid, x, y in encs:
         ok = (x, y) in seen
         fails += not ok
