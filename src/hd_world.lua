@@ -535,11 +535,13 @@ local ZONE_SURFACE = {stone = 'laje', grass = 'grama', gravel = 'terra',
     earth = 'terra'}
 
 -- Decals de textura por região (Traço, terra_mancha): posições seedadas
--- — f1/f2 desgaste junto a exits/paths/polos (bancada, marco), f3 seixo
--- na beira de muro, f4 tufos sob fachada, f5 umidade junto a água, f6
--- faixa longa. Miolo quieto fica limpo. Topleft, px-64.
+-- por CONTEXTO — f1/f2 desgaste junto a porta/bancada/fogo, f3 seixo na
+-- beira de muro, f4 tufos sob fachada, f5 umidade junto a água. Miolo
+-- quieto e corredor principal da rua ficam limpos. Topleft, px-64.
 local POLOS = {bancada = 1, banco = 1, bancoMadeira = 1, bancoPedra = 1,
     bancoSerra = 1, mesa = 1, marco = 1, bigorna = 1}
+local FOGO = {braseiro = 1, tocha = 1, lampiao = 1, vela = 1, velas = 1,
+    fogao = 1, chamine = 1, brasaForja = 1, postoVigia = 1}
 local AGUA = {poco = 1, cisterna = 1, canaleta = 1}
 local manchaCache = setmetatable({}, {__mode = 'k'})
 local function manchaOverlay(map)
@@ -548,10 +550,13 @@ local function manchaOverlay(map)
     L = {}
     local set = beiradaSet(map)
     local exits = map.exits or {}
-    -- polos de uso e pontos de água
+    -- polos de uso real: bancada/marco/mesa + bocas de porta + fogo —
+    -- o decal de desgaste nasce onde a vida passa ou apoia, nunca
+    -- espalhado pela terra toda.
     local polos, aguas = {}, {}
     for _, pr in ipairs(map.props or {}) do
-        if POLOS[pr.kind] or POLOS[pr.id] then
+        if POLOS[pr.kind] or POLOS[pr.id]
+            or FOGO[pr.kind] or FOGO[pr.id] then
             polos[#polos + 1] = {x = pr.x + (pr.w or 1) / 2,
                 y = pr.y + (pr.h or 1)}
         elseif AGUA[pr.kind] then
@@ -565,28 +570,29 @@ local function manchaOverlay(map)
             if dx * dx + dy * dy < d2 then return true end
         end
     end
-    -- candidatos: células de terra a cada 2 (o decal cobre 2×2)
+    -- candidatos: células de terra a cada 2 (o decal cobre 2×2).
+    -- Corredor da rua NUNCA recebe decal (precedente da Trilha): frac
+    -- <1.2 = dentro da faixa pintada + margem, suprime qualquer frame.
     for key, tile in pairs(map.tiles or {}) do
         local x, y = key:match('(%-?%d+):(%-?%d+)')
         x, y = tonumber(x), tonumber(y)
         if tile.ground ~= 'hole' and not tile.piece
             and floorKind(map, x, y) == 'terra' and (x + y) % 2 == 0 then
             local pf = pathFrac(map, x, y)
-            local h = Kit.hash(x, y, 61)
-            local fr
-            if near(exits, x, y, 6) or near(polos, x, y, 6)
-                or (pf and pf < 1.4) then
-                fr = h < .55 and 1 or 2              -- desgaste de uso
-            elseif pf and pf < 2.1 then
-                fr = h < .5 and 2 or 6               -- margem/faixa longa
-            elseif set[x .. ':' .. y] then
-                fr = h < .55 and 3 or 4              -- seixo/tufos no muro
-            elseif near(aguas, x, y, 8) then
-                fr = 5                               -- umidade
-            end
-            if fr and h > .18 then -- ~18% dos pontos ficam sem mancha
-                L[#L + 1] = {frame = fr,
-                    x = (x - 1) * CELL - 12, y = (y - 1) * CELL - 20}
+            if not (pf and pf < 1.2) then
+                local h = Kit.hash(x, y, 61)
+                local fr
+                if near(aguas, x, y, 8) then
+                    fr = 5                           -- umidade junto à água
+                elseif near(exits, x, y, 5) or near(polos, x, y, 5) then
+                    fr = h < .55 and 1 or 2          -- desgaste de uso real
+                elseif set[x .. ':' .. y] then
+                    fr = h < .55 and 3 or 4          -- seixo/tufo no muro
+                end
+                if fr and h > .18 then -- ~18% dos pontos ficam sem mancha
+                    L[#L + 1] = {frame = fr,
+                        x = (x - 1) * CELL - 12, y = (y - 1) * CELL - 20}
+                end
             end
         end
     end
