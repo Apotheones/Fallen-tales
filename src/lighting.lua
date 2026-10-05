@@ -168,19 +168,21 @@ end
 -- Polígono de sombra de um occluder para uma luz, já em espaço de vista.
 -- Retorna vértices achatados + centro, direção e comprimento (o shader usa
 -- direção/comprimento para o esmaecimento longitudinal).
-local function shadowPoly(o, l, camX, camY)
+local function shadowPoly(o, l, camX, camY, capAbs, capRel)
     local cx, cy = o.x + o.w / 2, o.y + o.h / 2
     local dx, dy = cx - l.x, cy - l.y
     local dl = math.sqrt(dx * dx + dy * dy)
     if dl < 0.001 then dx, dy, dl = 0, 1, 1 end -- luz exatamente acima: direção arbitrária estável
     dx, dy = dx / dl, dy / dl
     local H = o.height or 32
-    -- Comprimento físico h × distância-chão/z, dupla trava: ~2× a altura
-    -- do occluder E teto absoluto de 3 células (192px) — parede de 340px
-    -- não vira faixa de 680px atravessando a praça; a sombra de pontual
-    -- fica próxima do pé (drama, não listra).
+    -- Comprimento físico h × distância-chão/z, dupla trava: ~capRel× a
+    -- altura do occluder E teto absoluto capAbs (default 192px = 3 cél) —
+    -- parede de 340px não vira faixa de 680px atravessando a praça; a
+    -- sombra de pontual fica próxima do pé (drama, não listra). O sol de
+    -- fim de tarde pede capas mais longas: o caller de bake passa mais.
     local len = H * dl / math.max(l.z, 20)
-    len = math.max(H * 0.5, math.min(len, H * 2, 192))
+    len = math.max(H * 0.5,
+        math.min(len, H * (capRel or 2), capAbs or 192))
     local sx, sy = dx * len, dy * len
     local pts = {
         { x = o.x,         y = o.y },
@@ -389,7 +391,7 @@ end
 -- isolada da fonte, que ainda passa pelo normal map (atores inclusos).
 -- Retorna {canvas, x, y, scale} ou nil (sem shader/GPU → caller decide
 -- se cai no caminho vivo de shadow quads).
-function Lighting:bakeShadowMask(light, occluders, x, y, w, h, scale)
+function Lighting:bakeShadowMask(light, occluders, x, y, w, h, scale, cap)
     scale = scale or 0.5
     if not self.shaderShadow then return nil end
     local mw = math.max(1, math.floor(w * scale))
@@ -412,7 +414,8 @@ function Lighting:bakeShadowMask(light, occluders, x, y, w, h, scale)
     local sv, dv = {}, {}
     for _, o in ipairs(occluders) do
         local verts, ccx, ccy, ocx, ocy, dx, dy, len =
-            shadowPoly(o, light, x, y) -- cam=origem da máscara → espaço mundo
+            shadowPoly(o, light, x, y,
+                cap and cap.abs, cap and cap.rel) -- cam=origem da máscara
         if verts then
             for k = 1, #verts do sv[k] = verts[k] * scale end
             for k = #verts + 1, #sv do sv[k] = nil end
@@ -420,9 +423,11 @@ function Lighting:bakeShadowMask(light, occluders, x, y, w, h, scale)
             sh:send('occC', {ocx * scale, ocy * scale})
             sh:send('sdir', {dx, dy})
             sh:send('slen', math.max(len * scale, 1))
-            sh:send('core', 0.70)
+            -- cap.pen/core: fonte pode pedir sombra mais funda (sol de
+            -- fim de tarde) que o default das pontuais (.70/.24).
+            sh:send('core', cap and cap.pen or 0.70)
             G.polygon('fill', dilate(sv, cx2, cy2, 1.24, dv))
-            sh:send('core', 0.24)
+            sh:send('core', cap and cap.core or 0.24)
             G.polygon('fill', sv)
         end
     end

@@ -1,11 +1,12 @@
--- O VIAJANTE — walk SUL, 4 frames, poses reais:
--- f1 CONTACT (perna esquerda do sprite à frente: plantada e estendida,
--- direita recolhe na ponta), f2 RECOIL (juntas, baixo +1), f3 PASSING
--- (juntas, alto -1), f4 CONTACT oposto. Punho direito balança, aba do
--- casaco balança (hshift), arco firme na mão esquerda.
+-- V03_C01_WALK_S — protagonista C01, walk SUL 4 frames (caminha de
+-- frente p/ o observador). Fases por perna: plant (pé cheio no chão),
+-- lift (calcanhar sobe, só bico toca), swing (joelho alto, pé no ar).
+-- Tronco/cabeça = idle_s estável; casaco balança a saia; arco rígido
+-- na mão esquerda (direita da tela). 64x96 feet.
+local K = require 'src.pixel_kit'
 
 local function L(s)
-    assert(#s <= 64, 'linha de sprite > 64 colunas')
+    assert(#s <= 64, 'linha > 64')
     return s .. string.rep('.', 64 - #s)
 end
 local E = string.rep('.', 64)
@@ -17,547 +18,269 @@ local function R(map)
     end
     return table.concat(t, '\n')
 end
-local function shift(map, dy, rmin, rmax)
-    local t = {}
-    for r, s in pairs(map) do
-        if rmin and r >= rmin and r <= rmax and s then t[r + dy] = s
-        else t[r] = s end
-    end
-    return t
-end
-local function hshift(map, dx, rmin, rmax)
-    local t = {}
-    for r, s in pairs(map) do
-        if rmin and r >= rmin and r <= rmax and s then
-            if dx > 0 then t[r] = string.rep('.', dx) .. s
-            else t[r] = s:sub(-dx + 1) end
-        else t[r] = s end
-    end
-    return t
-end
-local function overlay(ga, gb)
-    local A, B, out = {}, {}, {}
-    for l in ga:gmatch('[^\n]+') do A[#A + 1] = l end
-    for l in gb:gmatch('[^\n]+') do B[#B + 1] = l end
-    for i = 1, #A do
-        local a, b, row = A[i], B[i] or '', {}
-        for x = 1, 64 do
-            local cb = b:sub(x, x)
-            row[x] = (cb ~= '.' and cb ~= ' ' and cb ~= '') and cb
-                or a:sub(x, x)
+
+local function tronco(g)
+    local T = {
+        [9]  = '.............................kkkkkk',
+        [10] = '............................khhhhhhk',
+        [11] = '...........................khhhhhhhhk',
+        [12] = '...........................khhhhhhhhk',
+        [13] = '...........................khhssssssk',
+        [14] = '...........................khssssssssk',
+        [15] = '...........................khssesssesk',
+        [16] = '...........................khssssssssk',
+        [17] = '...........................khssssssssk',
+        [18] = '...........................khsssssddsk',
+        [19] = '...........................khssssddssk',
+        [20] = '...........................khssggggssk',
+        [21] = '...........................khsgggggggk',
+        [22] = '...........................kksgggggggk',
+        [23] = '............................ksggggggk',
+        [24] = '............................ksssssk',
+        [25] = '...........................khkkssk',
+        [26] = '...........................khhk',
+        [27] = '............................kssk',
+        [28] = '...........................kllllllk',
+        [29] = '..........................kllssslllk',
+        [30] = '..........................klllvvvlk',
+        [31] = '.........................klllvvvvvlk',
+        [32] = '.........................kllvvvvvvvlk',
+        [33] = '.........................klvvvvvvvvk',
+        [34] = '.........................klvvvvvvvvk',
+        [35] = '.........................kVvvvvvvvvk',
+        [36] = '.........................kVvvvvvvvvk',
+        [37] = '.........................kVVvvvvvvk',
+        [38] = '........................ksskvvvvvvkssk',
+        [39] = '........................ksskvvvvvvkssk',
+        [40] = '........................kssskvvvvksssk',
+        [41] = '.........................kssskvvksssk',
+        [42] = '.........................kssskkkssssk',
+        [43] = '.........................ksssk.kssssk',
+        [44] = '.........................ksssk..ksssk',
+        [45] = '.........................kssk...ksssk',
+        [46] = '.........................kssk....kssk',
+        [47] = '.........................ksk.....kssk',
+        [48] = '.........................kppppppppk',
+        [49] = '.........................kppppppppk',
+        [50] = '.........................kppppppppk',
+    }
+    for y, ln in pairs(T) do
+        for x = 1, #ln do
+            local c = ln:sub(x, x)
+            if c ~= '.' then g.rows[y][x] = c end
         end
-        out[i] = table.concat(row)
     end
-    return table.concat(out, '\n')
 end
 
---------------------------------------------------------------------------------
--- UPPER (igual idle sul): cabeça limpa + tronco. Boba ±1 por frame.
---------------------------------------------------------------------------------
-local upper = {
-    [8]  = '.................................kkkk',
-    [9]  = '................................khhhhhhk',
-    [10] = '...............................khhhhhhhhk',
-    [11] = '..............................khhhhhHhhhhk',
-    [12] = '.............................khhhhhhhhhhhhk',
-    [13] = '............................khhhhhhhhhhhhhhk',
-    [14] = '............................khhhhhhhhhhhhhhk',
-    [15] = '..........................khsssssssssssssshk',
-    [16] = '..........................khsssssssssssssshk',
-    [17] = '..........................khsssssssssssssshk',
-    [18] = '..........................khsseesssssseesshk',
-    [19] = '..........................khsseesssssseesshk',
-    [20] = '.........................khhssssssssssssshhk',
-    [21] = '.........................khhssssssdssssssshhk',
-    [22] = '.........................khhssssssdssssssshhk',
-    [23] = '.........................khhssssssssssssshhk',
-    [24] = '.........................khhssssssddsssssshk',
-    [25] = '.........................khdsssssssssssssdhk',
-    [26] = '.........................khhddsssssddsssddhhk',
-    [27] = '.........................khhddshshssshshddhhk',
-    [28] = '..........................khdhshhhhshshdhk',
-    [29] = '...........................khhkhhhhhhkhhk',
-    [30] = '...........................khhkddhhddkhhk',
-    [31] = '............................khhkddkhhk',
-    [32] = '............................khhsssshhk',
-    [33] = '............................khhsssshhk',
-    [34] = '............................khdssssdhk',
-    [35] = '.............................kssssk',
-    [36] = '.............................kssssk',
-    [37] = '.............................kssssk',
-    [38] = '..........................kllllllllllllllk',
-    [39] = '.........................klllllllllllllllllk',
-    [40] = '........................klllllllllllllllllllk',
-    [41] = '........................kllllllvvvvvvvllllllk',
-    [42] = '........................kllllvvvvvvvvvvvllllk',
-    [43] = '........................kllvvvvvvvvvvvvvvvllk',
-    [44] = '........................kllvvvvvvvvvvvvvvvllk',
-    [45] = '........................kllvvvvvvvvvvvvvvvllk',
-    [46] = '........................kllvvvvvvvvvvvvvvvllk',
-    [47] = '........................kllvvvvvvvvvvvvvvvllk',
-    [48] = '........................kllvvvvvvvvvvvvvvvllk',
-    [49] = '........................kllvvvvvvvvvvvvvvvllk',
-    [50] = '........................kllvvvvvvvvvvvvvvvllk',
-    [51] = '........................kllvvvvvvvvvvvvvvvllk',
-    [52] = '........................kllvvvvvvvvvvvvvvvllk',
-    [53] = '........................kllvvvvvvvvvvvvvvvllk',
-    [54] = '........................kllvvvvvvvvvvvvvvvllk',
-    [55] = '.........................klvvvvvvvvvvvvvvvlk',
-    [56] = '.........................klvvvvvvvvvvvvvvvlk',
+-- perna frontal: coluna de 3px, joelheira 'K', bota no pé
+local function pernaS(g, cx, fase)
+    local peTop = 87
+    if fase == 'lift' then peTop = 89 end
+    if fase == 'swing' then peTop = 84 end
+    for y = 51, 57 do
+        K.pixel(g, cx - 1, y, 'p'); K.pixel(g, cx, y, 'p')
+        K.pixel(g, cx + 1, y, 'p')
+    end
+    -- joelheira
+    K.rect(g, cx - 1, 58, 3, 2, 'K')
+    -- canela até o tornozelo
+    for y = 60, peTop - 8 do
+        K.pixel(g, cx - 1, y, 'p'); K.pixel(g, cx, y, 'p')
+        K.pixel(g, cx + 1, y, 'p')
+    end
+    for y = peTop - 8, peTop - 5 do
+        K.pixel(g, cx, y, 'p'); K.pixel(g, cx + 1, y, 'p')
+    end
+    -- bota: plant=chão cheio, lift=só o bico (calcanhar 'd' sobe),
+    -- swing=pé no ar um passo adiante
+    if fase == 'plant' then
+        K.rect(g, cx - 2, peTop - 5, 5, 8, 'b')
+        K.rect(g, cx - 2, peTop + 3, 6, 1, 'd')
+    elseif fase == 'lift' then
+        K.rect(g, cx - 2, peTop - 5, 5, 5, 'b')
+        K.rect(g, cx + 1, peTop, 4, 3, 'b')
+        K.rect(g, cx + 1, peTop + 3, 4, 1, 'd')
+    else
+        K.rect(g, cx - 2, peTop - 5, 5, 6, 'b')
+        K.rect(g, cx - 1, peTop + 1, 5, 1, 'd')
+    end
+end
+
+local function monta(fl, fr, bobY)
+    local g = K.new(64, 96)
+    tronco(g)
+    pernaS(g, 28, fl)   -- perna esquerda do corpo (esq. da tela)
+    pernaS(g, 35, fr)   -- perna direita do corpo (dir. da tela)
+    if bobY ~= 0 then
+        -- desloca conteúdo inteiro bobY
+        local rows = {}
+        for y = 1, 96 do rows[y] = {} end
+        for y = 1, 96 do for x = 1, 64 do
+            rows[y][x] = K.get(g, x, y - bobY)
+        end end
+        for y = 1, 96 do for x = 1, 64 do
+            g.rows[y][x] = rows[y][x]
+        end end
+    end
+    return K.string(g)
+end
+
+-- f1: esquerda plantada, direita levanta
+-- f2: juntas baixas (+1)
+-- f3: direita plantada, esquerda no ar
+-- f4: juntas altas
+local frames = {
+    monta('plant', 'lift', 0),
+    monta('plant', 'plant', 1),
+    monta('lift', 'plant', 0),
+    monta('swing', 'plant', -1),
 }
 
--- cinto + quadris: estáticos
-local belt = {
-    [57] = '........................krrrrrrrrnnrrrrrrrrk',
-    [58] = '........................krrrrrrrrnnrrrrrrrrk',
-    [59] = '........................krrrrrrrrnnrrrrrrrrk',
-    [60] = '.........................kpppppppppppppppppk',
-    [61] = '.........................kpppppppppppppppppk',
-    [62] = '.........................kpppppppppppppppppk',
-}
-
--- punho direito balança: f1 à frente/abaixo, f3 ao lado, f4 para fora
-local rightfist = {
-    [1] = {
-        [59] = '...............................................kssssk',
-        [60] = '...............................................kssssk',
-        [61] = '...............................................kssssk',
-        [62] = '...............................................kssssk',
-        [63] = '...............................................kkkkk',
-    },
-    [2] = {
-        [58] = '................................................kssssk',
-        [59] = '................................................kssssk',
-        [60] = '................................................kssssk',
-        [61] = '................................................kssssk',
-        [62] = '................................................kkkkk',
-    },
-    [3] = {
-        [57] = '................................................kssssk',
-        [58] = '................................................kssssk',
-        [59] = '................................................kssssk',
-        [60] = '................................................kssssk',
-        [61] = '................................................kkkkk',
-    },
-    [4] = {
-        [58] = '.................................................kssssk',
-        [59] = '.................................................kssssk',
-        [60] = '.................................................kssssk',
-        [61] = '.................................................kssssk',
-        [62] = '.................................................kkkkk',
-    },
-}
-
---------------------------------------------------------------------------------
--- PERNAS por frame (frontal: tesoura esquerda/direita)
---------------------------------------------------------------------------------
--- f1 CONTACT: esquerda à frente (joelho 'K', bota plantada), direita
--- recolhe na ponta do pé.
-local legs1 = {
-    [63] = '........................kppppppk..kpppppppk',
-    [64] = '........................kppppppk..kpppppppk',
-    [65] = '........................kppppppk..kpppppppk',
-    [66] = '........................kppppppk..kpppppppk',
-    [67] = '........................kppppppk..kpppppppk',
-    [68] = '........................kppppppk..kpppppppk',
-    [69] = '........................kppppppk..kpppppppk',
-    [70] = '........................kpKKKKpk..kpppppppk',
-    [71] = '........................kpKKKKpk..kpppppppk',
-    [72] = '........................kpKKKKpk..kpppppppk',
-    [73] = '........................kpKKKKpk..kpppppppk',
-    [74] = '........................kpKKKKpk..kpppppppk',
-    [75] = '........................kpKKKKpk..kpppppppk',
-    [76] = '.........................kpppppk..kppppppk',
-    [77] = '.........................kpppppk..kppppppk',
-    [78] = '.........................kpppppk..kppppppk',
-    [79] = '.........................kpppppk..kppppppk',
-    [80] = '.........................kpppppk..kppppppk',
-    [81] = '.........................kppppk...kppppk',
-    [82] = '.........................kppppk...kppppk',
-    [83] = '.........................kppppk...kppppk',
-    [84] = '.........................kppppk....kpppk',
-    [85] = '........................kbbbbbbbk....kbbbk',
-    [86] = '........................kbbbbbbbk....kbbbk',
-    [87] = '........................kbbbbbbbk....kbbbk',
-    [88] = '........................kbbbbbbbk....kbbbk',
-    [89] = '.......................kbbbbbbbbk.....kbbk',
-    [90] = '.......................kbbbbbbbbk.....kbbk',
-    [91] = '.......................kbbbbbbbbk.....kbbk',
-    [92] = '.......................kbbbbbbbbk.....kbbk',
-    [93] = '.......................koooooooooo.....koBk',
-    [94] = '.......................kkkkkkkkkkk.....kkkk',
-}
-
--- f2 RECOIL: juntas, joelhos flexionados nos dois lados
-local legs2 = {
-    [63] = '........................kpppppppk..kpppppppk',
-    [64] = '........................kpppppppk..kpppppppk',
-    [65] = '........................kpppppppk..kpppppppk',
-    [66] = '........................kpppppppk..kpppppppk',
-    [67] = '........................kpppppppk..kpppppppk',
-    [68] = '........................kpppppppk..kpppppppk',
-    [69] = '........................kpppppppk..kpppppppk',
-    [70] = '........................kpKKKKKpk..kpKKKKKpk',
-    [71] = '........................kpKKKKKpk..kpKKKKKpk',
-    [72] = '........................kpKKKKKpk..kpKKKKKpk',
-    [73] = '........................kpKKKKKpk..kpKKKKKpk',
-    [74] = '........................kpKKKKKpk..kpKKKKKpk',
-    [75] = '........................kpKKKKKpk..kpKKKKKpk',
-    [76] = '.........................kppppppk..kppppppk',
-    [77] = '.........................kppppppk..kppppppk',
-    [78] = '.........................kppppppk..kppppppk',
-    [79] = '.........................kppppppk..kppppppk',
-    [80] = '.........................kppppppk..kppppppk',
-    [81] = '.........................kppppppk..kppppppk',
-    [82] = '..........................kpppppk..kpppppk',
-    [83] = '..........................kpppppk..kpppppk',
-    [84] = '..........................kpppppk..kpppppk',
-    [85] = '.........................kbbbbbbbk..kbbbbbbbk',
-    [86] = '.........................kbbbbbbbk..kbbbbbbbk',
-    [87] = '.........................kbbbbbbbk..kbbbbbbbk',
-    [88] = '.........................kbbbbbbbk..kbbbbbbbk',
-    [89] = '.........................kbbbbbbbk..kbbbbbbbk',
-    [90] = '........................kbbbbbbbbk..kbbbbbbbbk',
-    [91] = '........................kbbbbbbbbk..kbbbbbbbbk',
-    [92] = '........................kbbbbbbbbk..kbbbbbbbbk',
-    [93] = '........................koooooooook..kBBBBBBBBk',
-    [94] = '........................kkkkkkkkkk..kkkkkkkkkk',
-}
-
--- f3 PASSING: pernas juntas, um pixel de vão
-local legs3 = {
-    [63] = '.........................kppppppk.kppppppk',
-    [64] = '.........................kppppppk.kppppppk',
-    [65] = '.........................kppppppk.kppppppk',
-    [66] = '.........................kppppppk.kppppppk',
-    [67] = '.........................kppppppk.kppppppk',
-    [68] = '.........................kppppppk.kppppppk',
-    [69] = '.........................kppppppk.kppppppk',
-    [70] = '.........................kpKKKKpk.kpKKKKpk',
-    [71] = '.........................kpKKKKpk.kpKKKKpk',
-    [72] = '.........................kpKKKKpk.kpKKKKpk',
-    [73] = '.........................kpKKKKpk.kpKKKKpk',
-    [74] = '.........................kpKKKKpk.kpKKKKpk',
-    [75] = '.........................kpppppk.kpppppk',
-    [76] = '.........................kpppppk.kpppppk',
-    [77] = '.........................kpppppk.kpppppk',
-    [78] = '.........................kpppppk.kpppppk',
-    [79] = '.........................kpppppk.kpppppk',
-    [80] = '.........................kpppppk.kpppppk',
-    [81] = '..........................kppppk.kppppk',
-    [82] = '..........................kppppk.kppppk',
-    [83] = '..........................kppppk.kppppk',
-    [84] = '..........................kppppk.kppppk',
-    [85] = '.........................kbbbbbbk.kbbbbbbk',
-    [86] = '.........................kbbbbbbk.kbbbbbbk',
-    [87] = '.........................kbbbbbbk.kbbbbbbk',
-    [88] = '.........................kbbbbbbk.kbbbbbbk',
-    [89] = '.........................kbbbbbbk.kbbbbbbk',
-    [90] = '.........................kbbbbbbk.kbbbbbbk',
-    [91] = '.........................kbbbbbbk.kbbbbbbk',
-    [92] = '.........................kbbbbbbk.kbbbbbbk',
-    [93] = '.........................kooooook.kooooook',
-    [94] = '.........................kkkkkkkk.kkkkkkkk',
-}
-
--- f4 CONTACT oposto: direita à frente, esquerda na ponta
-local legs4 = {
-    [63] = '........................kpppppppk..kppppppk',
-    [64] = '........................kpppppppk..kppppppk',
-    [65] = '........................kpppppppk..kppppppk',
-    [66] = '........................kpppppppk..kppppppk',
-    [67] = '........................kpppppppk..kppppppk',
-    [68] = '........................kpppppppk..kppppppk',
-    [69] = '........................kpppppppk..kppppppk',
-    [70] = '........................kpppppppk..kpKKKKpk',
-    [71] = '........................kpppppppk..kpKKKKpk',
-    [72] = '........................kpppppppk..kpKKKKpk',
-    [73] = '........................kpppppppk..kpKKKKpk',
-    [74] = '........................kpppppppk..kpKKKKpk',
-    [75] = '........................kpppppppk..kpKKKKpk',
-    [76] = '.........................kppppppk..kpppppk',
-    [77] = '.........................kppppppk..kpppppk',
-    [78] = '.........................kppppppk..kpppppk',
-    [79] = '.........................kppppppk..kpppppk',
-    [80] = '.........................kppppppk..kpppppk',
-    [81] = '..........................kppppk...kppppk',
-    [82] = '..........................kppppk...kppppk',
-    [83] = '..........................kppppk...kppppk',
-    [84] = '...........................kpppk....kppppk',
-    [85] = '...........................kbbbk....kbbbbbbbk',
-    [86] = '...........................kbbbk....kbbbbbbbk',
-    [87] = '...........................kbbbk....kbbbbbbbk',
-    [88] = '...........................kbbbk....kbbbbbbbk',
-    [89] = '............................kbbk.....kbbbbbbbbk',
-    [90] = '............................kbbk.....kbbbbbbbbk',
-    [91] = '............................kbbk.....kbbbbbbbbk',
-    [92] = '............................kbbk.....kbbbbbbbbk',
-    [93] = '............................kBok.....koooooooooo',
-    [94] = '............................kkkk.....kkkkkkkkkkk',
-}
-
---------------------------------------------------------------------------------
--- COAT (igual idle) + sway da aba (hshift r57-78)
---------------------------------------------------------------------------------
 local coat = {
-    [37] = '.......................kcccccccccccccccccccccck',
-    [38] = '......................kcccccccccccccccccccccccck',
-    [39] = '......................kcmmmmcccccccccccccccccck',
-    [40] = '.....................kccmmmmmcccccccccccccccccck',
-    [41] = '.....................kccmmmmmmccccccccccccxcck',
-    [42] = '.....................kccmmmmmmccccccccccccxcck',
-    [43] = '.....................kcccmmmccccccccccccccxcck',
-    [44] = '.....................kccccccccccnccccccccxcck',
-    [45] = '.................kccckkcccx..................xcccckcck',
-    [46] = '.................kccckkcccx..................xcccckcck',
-    [47] = '.............kccck.kccccx...............xcccckcck',
-    [48] = '.............kccck.kccccx...............xcccckcck',
-    [49] = '.............kccck.kccccx...............xcccckcck',
-    [50] = '.............kccck.kccccx...............xcccckcck',
-    [51] = '.............kccck.kccccx...............xcccckcck',
-    [52] = '.............kccck.kccccx...............xcccckCCk',
-    [53] = '.............kccck.kccccx...............xcccckCCk',
-    [54] = '.............kCCCk..kccccx...............xcccckCCk',
-    [55] = '.............kCCCk..kccccx...............xcccckCCk',
-    [56] = '.............kCCCk..kccccx...............xcccckCCk',
-    [57] = '....................kccccx...............xcccck',
-    [58] = '....................kccccx...............xcccck',
-    [59] = '....................kccccx...............xcccck',
-    [60] = '....................kccccx...............xcccck',
-    [61] = '....................kccccx...............xcccck',
-    [62] = '....................kccccx...............xcccck',
-    [63] = '....................kccccx...............xCCCCnk',
-    [64] = '....................kccccx',
-    [65] = '....................kccccx',
-    [66] = '....................kccccx',
-    [67] = '....................kccccx',
-    [68] = '....................kccccx',
-    [69] = '....................kccccx',
-    [70] = '....................kccccx',
-    [71] = '....................kccccx',
-    [72] = '....................kccccx',
-    [73] = '....................kccccx',
-    [74] = '....................kccccx',
-    [75] = '....................kccccx',
-    [76] = '....................kccccx',
-    [77] = '....................kCCCCx',
-    [78] = '....................kxxxx',
+    [30] = '........................kcckvvvkcck',
+    [31] = '.......................kccckvvkccck',
+    [32] = '......................kcccckvkcccck',
+    [33] = '......................kccccknnkcccck',
+    [34] = '......................kccccnnnkcccck',
+    [35] = '......................kccccknnkcccck',
+    [36] = '......................kccccc.kccccc',
+    [37] = '......................kccccc.kccccc',
+    [38] = '......................kccccc...kccc',
+    [39] = '......................kcccccF..kccc',
+    [40] = '......................kcccccF..kccc',
+    [41] = '......................kccccc....kcc',
+    [42] = '......................kccccc....kcc',
+    [43] = '......................kccccc....kcc',
+    [44] = '......................kccccc.....kc',
+    [45] = '......................kccccc.....kc',
+    [46] = '......................kccccc......k',
+    [47] = '......................kccccc',
+    [48] = '......................kccccc',
+    [49] = '......................kcccck',
+    [50] = '......................kcccck',
+    [51] = '......................kcccck',
+    [52] = '......................kcccck',
+    [53] = '......................kccxck',
+    [54] = '......................kccxck',
+    [55] = '......................kccxck',
+    [56] = '......................kccxck',
+    [57] = '......................kccxck',
+    [58] = '......................kccxxk',
+    [59] = '......................kcxxxk',
+    [60] = '......................kxxxk',
 }
 
---------------------------------------------------------------------------------
--- GEAR (igual idle sul): arco, punho da empunhadura, pingente, aljava.
---------------------------------------------------------------------------------
-local bow = {
-    [5]  = '.....................wt',
-    [6]  = '.....................wt',
-    [7]  = '....................wwt',
-    [8]  = '....................wwt',
-    [9]  = '....................wwt',
-    [10] = '...................ww.t',
-    [11] = '...................ww.t',
-    [12] = '...................ww.t',
-    [13] = '...................ww.t',
-    [14] = '..................ww..t',
-    [15] = '..................ww..t',
-    [16] = '..................ww..t',
-    [17] = '..................ww..t',
-    [18] = '..................ww..t',
-    [19] = '..................ww..t',
-    [20] = '.................ww...t',
-    [21] = '.................ww...t',
-    [22] = '.................ww...t',
-    [23] = '.................ww...t',
-    [24] = '.................ww...t',
-    [25] = '.................ww...t',
-    [26] = '.................ww...t',
-    [27] = '.................ww...t',
-    [28] = '................ww....t',
-    [29] = '................ww....t',
-    [30] = '................ww....t',
-    [31] = '................ww....t',
-    [32] = '................ww....t',
-    [33] = '................ww....t',
-    [34] = '................ww....t',
-    [35] = '................ww....t',
-    [36] = '................ww....t',
-    [37] = '................ww....t',
-    [38] = '................ww....t',
-    [39] = '...............ww.....t',
-    [40] = '...............ww.....t',
-    [41] = '...............ww.....t',
-    [42] = '...............ww.....t',
-    [43] = '...............ww.....t',
-    [44] = '...............ww.....t',
-    [45] = '...............ww.....t',
-    [46] = '...............ww.....t',
-    [47] = '...............WW.....t',
-    [48] = '...............WW.....t',
-    [49] = '...............WW.....t',
-    [50] = '...............WW.....t',
-    [51] = '...............WW.....t',
-    [52] = '...............WW.....t',
-    [53] = '...............WW.....t',
-    [54] = '...............WW.....t',
-    [55] = '...............WWj....t',
-    [56] = '...............ww.....t',
-    [57] = '...............ww.....t',
-    [58] = '...............ww.....t',
-    [59] = '...............ww.....t',
-    [60] = '...............ww.....t',
-    [61] = '...............ww.....t',
-    [62] = '...............ww.....t',
-    [63] = '................ww....t',
-    [64] = '................ww....t',
-    [65] = '................ww....t',
-    [66] = '................ww....t',
-    [67] = '................ww....t',
-    [68] = '................ww....t',
-    [69] = '................ww....t',
-    [70] = '................ww....t',
-    [71] = '.................ww...t',
-    [72] = '.................ww...t',
-    [73] = '.................ww...t',
-    [74] = '.................ww...t',
-    [75] = '.................ww...t',
-    [76] = '..................ww..t',
-    [77] = '..................ww..t',
-    [78] = '..................ww..t',
-    [79] = '...................ww.t',
-    [80] = '...................ww.t',
-    [81] = '....................wwt',
-    [82] = '....................wwt',
+local function swing(map, dy, dx)
+    local t = {}
+    for r, s in pairs(map) do
+        if r >= 48 and r <= 60 then
+            local s2 = s
+            if dx and dx ~= 0 then
+                s2 = dx > 0 and (string.rep('.', dx) .. s) or s:sub(-dx + 1)
+            end
+            t[r + dy] = s2
+        else t[r] = s end
+    end
+    return t
+end
+local coatF = {
+    swing(coat, 0, 1), swing(coat, 1, 0), swing(coat, 0, -1), coat,
 }
 
-local gripfist = {
-    [50] = '..............kssssk',
-    [51] = '..............kssssk',
-    [52] = '..............kssssk',
-    [53] = '..............kssssk',
-    [54] = '..............kddsdk',
-    [55] = '..............kkkkk',
-}
+local gear = {}
+for y = 12, 78 do
+    local t = (y - 12) / 66
+    local bx = math.floor(48 - math.sin(t * math.pi) * 3 + .5)
+    gear[y] = { [bx] = 'W', [bx + 1] = 'w', [bx + 2] = 't' }
+end
+gear[11] = { [48] = 'W', [49] = 'w' }
+gear[79] = { [48] = 'W', [49] = 'w' }
+gear[80] = { [49] = 't' }
+for y = 42, 46 do
+    local bx = math.floor(48 - math.sin((y - 12) / 66 * math.pi) * 3 + .5)
+    gear[y][bx - 1] = 'w'
+    if y >= 43 and y <= 45 then
+        for x = 38, bx - 2 do gear[y][x] = 's' end
+    end
+end
+gear[43][39] = 'S'
+gear[26] = { [25] = 'a', [26] = 'a', [28] = 'f', [29] = 'f' }
+gear[27] = { [24] = 'a', [25] = 'f', [26] = 'f', [27] = 'a' }
+for y = 28, 44 do
+    gear[y] = gear[y] or {}
+    gear[y][24] = 'q'; gear[y][25] = 'Q'; gear[y][26] = 'q'
+end
+gear[48] = gear[48] or {}
+gear[48][26] = 'm'; gear[48][27] = 'm'
+gear[49] = gear[49] or {}
+gear[49][26] = 'm'; gear[49][27] = 'm'; gear[49][28] = 'm'
+gear[50] = gear[50] or {}
+gear[50][26] = 'm'; gear[50][27] = 'm'
 
-local pendant = {
-    [45] = '.................................T..T',
-    [46] = '..................................T.T',
-    [47] = '...................................T',
-    [48] = '..................................jjj',
-    [49] = '...................................j',
-}
-
-local quiver = {
-    [52] = '......................................................f.f.f',
-    [53] = '......................................................f.f.f',
-    [54] = '......................................................a.a.a',
-    [55] = '......................................................a.a.a',
-    [56] = '......................................................a.a.a',
-    [57] = '......................................................a.a.a',
-    [58] = '......................................................a.a.a',
-    [59] = '......................................................a.a.a',
-    [60] = '......................................................kQQQQk',
-    [61] = '......................................................kQqqQk',
-    [62] = '......................................................kQqqQk',
-    [63] = '......................................................kQqqQk',
-    [64] = '......................................................kQqqQk',
-    [65] = '......................................................kQqqQk',
-    [66] = '......................................................kQqqQk',
-    [67] = '......................................................kQqqQk',
-    [68] = '......................................................kQqqQk',
-    [69] = '......................................................kQqqQk',
-    [70] = '......................................................kQqqQk',
-    [71] = '......................................................kQqqQk',
-    [72] = '......................................................kQqqQk',
-    [73] = '.......................................................kQQk',
-    [74] = '.......................................................kQQk',
-    [75] = '.......................................................kQQk',
-    [76] = '.......................................................kQQk',
-    [77] = '........................................................kQk',
-    [78] = '........................................................kQk',
-}
-
-local gear = overlay(R(bow), overlay(R(quiver),
-    overlay(R(pendant), R(gripfist))))
-
-local bob  = { 0, 1, -1, 0 }
-local sway = { -1, 0, 0, 1 }     -- aba acompanha a passada
-local legs = { legs1, legs2, legs3, legs4 }
-
-local function bodyFrame(i)
-    local g = R(shift(upper, bob[i], 8, 56))
-    g = overlay(g, R(belt))
-    g = overlay(g, R(legs[i]))
-    g = overlay(g, R(rightfist[i]))
-    return g
+local gearS = {}
+for y, row in pairs(gear) do
+    local xs = {}
+    for x = 1, 64 do xs[x] = row[x] or '.' end
+    gearS[y] = table.concat(xs)
 end
 
-local function coatFrame(i)
-    local m = hshift(coat, sway[i], 57, 78)
-    m = shift(m, bob[i], 37, 56)
-    return R(m)
+local function bobM(map, dy)
+    local t = {}
+    for r, s in pairs(map) do t[r + dy] = s end
+    return t
 end
-
-local emi = R {
-    [48] = '..................................jjj',
-    [49] = '...................................j',
-    [55] = '..................j',
-}
+local gearF = { gearS, bobM(gearS, 1), gearS, bobM(gearS, -1) }
 
 local legend = {
-    k = {spec = 'ink', h = 4},
-    h = {ramp = 'hair', step = 1, h = 11},
-    H = {ramp = 'hair', step = 4, h = 12},
-    s = {ramp = 'skin', step = 4, h = 11},
-    S = {ramp = 'skin', step = 5, h = 12},
-    d = {ramp = 'skin', step = 3, h = 10},
-    e = {spec = 'ink', h = 12},
-    l = {ramp = 'plaster', step = 5, h = 6},
-    v = {ramp = 'moss', step = 3, h = 6},
-    r = {ramp = 'earth', step = 2, h = 5},
-    n = {ramp = 'gold', step = 5, h = 7},
-    p = {ramp = 'iron', step = 2, h = 4},
-    K = {ramp = 'iron', step = 3, h = 5},
-    b = {ramp = 'earth', step = 2, h = 2},
-    B = {ramp = 'earth', step = 4, h = 3},
-    o = {ramp = 'earth', step = 5, h = 2},
-    c = {ramp = 'earth', step = 3, h = 7},
-    x = {ramp = 'earth', step = 2, h = 6},
-    C = {ramp = 'earth', step = 5, h = 7},
-    m = {ramp = 'gold', step = 5, h = 7},
-    w = {ramp = 'wood', step = 3, h = 5},
-    W = {ramp = 'wood', step = 5, h = 6},
-    t = {ramp = 'bone', step = 4, h = 4},
-    T = {ramp = 'earth', step = 2, h = 9},
-    q = {ramp = 'earth', step = 4, h = 7},
-    Q = {ramp = 'earth', step = 2, h = 7},
-    a = {ramp = 'wood', step = 5, h = 7},
-    f = {ramp = 'bone', step = 5, h = 7},
-    j = {spec = 'jade', h = 9, e = 'jadeLight', ei = 0.8},
+    k = { spec = 'ink', h = 4 },
+    h = { ramp = 'hair', step = 2, h = 11 },
+    g = { ramp = 'hair', step = 3, h = 10 },
+    s = { ramp = 'skin', step = 4, h = 11 },
+    S = { ramp = 'skin', step = 5, h = 12 },
+    d = { ramp = 'skin', step = 3, h = 10 },
+    e = { spec = 'ink', h = 12 },
+    l = { ramp = 'bone', step = 5, h = 6 },
+    v = { ramp = 'moss', step = 4, h = 6 },
+    V = { ramp = 'moss', step = 3, h = 6 },
+    c = { ramp = 'earth', step = 4, h = 7 },
+    x = { ramp = 'earth', step = 2, h = 6 },
+    n = { ramp = 'gold', step = 4, h = 8 },
+    F = { ramp = 'gold', step = 5, h = 8 },
+    p = { ramp = 'iron', step = 2, h = 4 },
+    K = { ramp = 'iron', step = 3, h = 5 },
+    b = { ramp = 'earth', step = 3, h = 3 },
+    o = { ramp = 'earth', step = 5, h = 3 },
+    w = { ramp = 'wood', step = 3, h = 5 },
+    W = { ramp = 'wood', step = 5, h = 6 },
+    t = { ramp = 'bone', step = 4, h = 4 },
+    q = { ramp = 'earth', step = 4, h = 7 },
+    Q = { ramp = 'earth', step = 2, h = 7 },
+    a = { ramp = 'wood', step = 5, h = 7 },
+    f = { ramp = 'bone', step = 5, h = 7 },
+    m = { ramp = 'earth', step = 4, h = 7 },
 }
 
 return {
-    name = 'viajante_walk_s',
-    w = 64, h = 96,
-    origin = 'feet',
+    name = 'viajante_walk_s', w = 64, h = 96, origin = 'feet',
     legend = legend,
-    -- Metadados W4: f1/f4 são os contatos (ver cabeçalho); 1/9s por frame
-    -- = o t*9 do hd_world; ancora 'pe' segue o pé plantado de cada frame.
     anchors = {
-        pe = {{31, 94}, {34, 94}, {33, 94}, {41, 94}},
-        cabeca = {37, 20},
-        ferramenta = {16, 51},               -- punhadura do arco
-        emissao = {35, 48},                  -- pingente jade
+        pe = { 32, 94 },
+        cabeca = { 33, 15 },
+        ferramenta = { 47, 44 },
+        mao_arco = { 44, 44 },
     },
-    markers = { contact = {1, 4} },
-    sequences = { walk = {1, 4, loop = true} },
-    frameDuration = 1 / 9,
+    sequences = { walk = { 1, 2, 3, 4, loop = true } },
+    frameDuration = { 0.09, 0.09, 0.09, 0.09 },
+    regions = {
+        rosto = { x = 26, y = 9, w = 14, h = 18 },
+        arco = { x = 40, y = 8, w = 14, h = 73 },
+    },
     layers = {
-        {name = 'body', h = 4, albedo = {
-            bodyFrame(1), bodyFrame(2), bodyFrame(3), bodyFrame(4),
-        }},
-        {name = 'coat', h = 7, albedo = {
-            coatFrame(1), coatFrame(2), coatFrame(3), coatFrame(4),
-        }},
-        {name = 'gear', h = 6, albedo = {gear, gear, gear, gear},
-            emissive = {emi, emi, emi, emi}},
+        { name = 'body', h = 4,
+          albedo = { frames[1], frames[2], frames[3], frames[4] } },
+        { name = 'coat', h = 7,
+          albedo = { R(coatF[1]), R(coatF[2]), R(coatF[3]), R(coatF[4]) } },
+        { name = 'gear', h = 6,
+          albedo = { R(gearF[1]), R(gearF[2]), R(gearF[3]), R(gearF[4]) } },
     },
 }

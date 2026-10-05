@@ -37,7 +37,7 @@ local PROP_SPRITE = {
     caixas = 'caixas_antigas', carteiras = 'carteiras', cipo = 'cipo',
     cova = 'cova', divisoria = 'divisoria', entulho = 'entulho',
     espantalho = 'espantalho', fardos = 'fardos', flores = 'flores_adro',
-    fogao = 'fogao', lapide = 'lapide_a', sepultura = 'lapide_b',
+    fogao = 'fogao', lapide = 'lapide_a', sepultura = 'sepultura',
     mureta = 'mureta_adro', muro = 'muro_colina', parapeito = 'parapeito',
     pertences = 'pertences', lenha = 'pilha_lenha',
     pilhaLenha = 'pilha_lenha', portao = 'portao_adro', quadro = 'quadro',
@@ -48,6 +48,7 @@ local PROP_SPRITE = {
     varal = 'varal', varalTerraco = 'varal_terraco', vela = 'vela_votiva',
     velas = 'velas', oferenda = 'oferenda', brinquedo = 'brinquedo',
     marcaImpro = 'marca_impro', pecaInacabada = 'peca_inacabada',
+    marcaPartida = 'marca_partida',
     baldeTempera = 'balde_tempera', brasaForja = 'brasa_forja',
     canteiro = 'canteiro_a',
     -- Bancos por feitio (Botica pediu divergência):
@@ -123,6 +124,11 @@ local function sheetsFor(self)
     -- só existe se o def do Traço estiver assado (senão, sem overlay).
     local tb = Kit.bakeViaDSL('piso_terra_borda')
     if tb then s.trans_terra = tb; s.trans_terra_q = Kit.quads(tb) end
+    local tl = Kit.bakeViaDSL('trans_laje')
+    if tl then s.trans_laje = tl; s.trans_laje_q = Kit.quads(tl) end
+    -- Colina: pisos frios por kind dedicado (grama morta / laje funerária)
+    put('colina_grama', Kit.sheet('piso_colina_grama', 64, 64, nil))
+    put('colina_laje', Kit.sheet('piso_colina', 64, 64, nil))
     -- Decal de uso do Traço (terra_mancha 128x128): textura por BLOCO,
     -- não por célula — posições seedadas por contexto do mapa.
     s.mancha = Kit.bakeViaDSL('terra_mancha')
@@ -166,11 +172,74 @@ local CASA_FACHADA = {
     forjaCasa = 'casa_forja',
 }
 
+-- Ambiente outdoor calibrado por região (padrão-ouro, DIRECAO §2): o
+-- violeta-azul mora na sombra — a mesa de dusk vira vinho. Kit.ambient
+-- segue como piso de regiões sem tune próprio.
+local AMBIENT_TUNE = {
+    hub = {.30, .25, .37},
+    refugio = {.30, .25, .37},
+}
+
+-- Ambiente interior por mapa: casas do Refúgio ficam no neutro legível;
+-- a cripta da Colina é quase sem luz natural (velas carregam a leitura).
+local INTERIOR_AMBIENT = {
+    default = {.42, .41, .46},
+    colina = {.27, .25, .35},
+}
+
+-- Mapa de luzes autorado por mapa (layout-refugio-hd §6 + DIRECAO §2).
+-- Coordenadas em célula, z/raio em px-64. Hub: vivas = fogo real com
+-- flicker suave; quietas = janela/lampião/jade, estáveis. Cripta da
+-- Colina: quase sem luz natural — vela/tocha marcam leitura, a descida
+-- esquenta rumo à saída, a marca partida respira violeta residual
+-- (ei~0.3, não é farol). shadow=false explícito: interior = pool, não
+-- drama — sem fresta, sem projeção.
+local MAP_LIGHTS = {
+    hub = {
+        {x = 24, y = 6, c = {1.0, .55, .22}, i = 1.7, r = 260, z = 92,
+            flicker = {amp = .05, speed = 4, phase = .3}},        -- braseiro
+        {x = 22, y = 19, c = {1.0, .62, .30}, i = 1.2, r = 192, z = 110}, -- lampião
+        {x = 21, y = 17.4, c = {.25, .85, .70}, i = .65, r = 173, z = 80}, -- jade
+        {x = 28, y = 16, c = {1.0, .72, .38}, i = .8, r = 160, z = 120}, -- janela pensão
+        {x = 31, y = 16, c = {1.0, .72, .38}, i = .7, r = 160, z = 120}, -- janela 2
+        {x = 15, y = 25.5, c = {1.0, .72, .38}, i = .7, r = 160, z = 120}, -- varanda
+        {x = 50, y = 25, c = {1.0, .50, .20}, i = 1.2, r = 192, z = 92,
+            flicker = {amp = .05, speed = 5, phase = 2.4}},       -- brasa forja
+    },
+    colina = {
+        {x = 4.6, y = 4.4, c = {1.0, .68, .30}, i = .85, r = 140, z = 70,
+            shadow = false,
+            flicker = {amp = .04, speed = 3.5, phase = 1.2}},  -- velaVigilia
+        {x = 10.4, y = 13.4, c = {1.0, .66, .28}, i = .70, r = 145, z = 70,
+            shadow = false,
+            flicker = {amp = .04, speed = 4.0, phase = .6}},   -- velasVelorio
+        {x = 4.5, y = 15.4, c = {1.0, .60, .26}, i = 1.05, r = 175, z = 95,
+            shadow = false,
+            flicker = {amp = .06, speed = 4.6, phase = 2.0}},  -- tochaDescida
+        {x = 9.5, y = 19.4, c = {1.0, .68, .30}, i = .60, r = 120, z = 70,
+            shadow = false,
+            flicker = {amp = .04, speed = 3.8, phase = 3.1}},  -- mesaVelas
+        {x = 7, y = 21.4, c = {1.0, .74, .42}, i = 1.6, r = 360, z = 110,
+            shadow = false},                                 -- saída: esquenta
+        {x = 7.4, y = 2.5, c = {.55, .45, .85}, i = .35, r = 95, z = 60,
+            shadow = false},                                 -- marca partida
+        -- Rebordo rompido (W02/W04): rim frio fraquíssimo no limite leste
+        -- o escuro ainda deixa ler cerca de ferro e lápide, e o void além.
+        {x = 18.4, y = 14, c = {.45, .50, .78}, i = .42, r = 215, z = 85,
+            shadow = false},                                 -- rim do void
+        -- Depósito (quest 'BUSQUE SEUS PERTENCES'): fresta fria de luz
+        -- que escoa pela face sul desabada — leitura da loja funerária
+        -- sem vela de mentira (Mira r1: conteúdo autoral tem de ler).
+        {x = 23.5, y = 12, c = {.55, .60, .82}, i = .55, r = 220, z = 140,
+            shadow = false},                                 -- fresta depósito
+    },
+}
+
 -- Figurantes ambientes por mapa (apresentação só — sem colisão/sim;
 -- a Botica pediu "+figurante" nas cenas de vida). Âncora em célula.
 local FIGURANTES = {
     hub = {
-        {sprite = 'npc_jardineiro_s', x = 8, y = 19, fps = 4},
+        {sprite = 'npc_jardineiro_s', x = 7, y = 19, fps = 4},
         {sprite = 'npc_jardineiro_trabalho', x = 5, y = 23, fps = 4},
         {sprite = 'sit_contemplacao', x = 26, y = 34.8, fps = 3},
         {sprite = 'varanda_ocupada', x = 32, y = 18, fps = 3,
@@ -511,6 +580,9 @@ floorKind = function(map, x, y)
     for _, z in ipairs(map.zones or {}) do
         if x >= z.x and x < z.x + z.w and y >= z.y and y < z.y + z.h then
             local zk = ZONE_SURFACE[z.surface]
+            if zk and map.id == 'colina' then
+                zk = ({grama = 'colina_grama', laje = 'colina_laje'})[zk] or zk
+            end
             if zk then return zk end
         end
     end
@@ -518,7 +590,7 @@ floorKind = function(map, x, y)
         return Kit.hash(math.floor(x / 3), math.floor(y / 3), 21) < .30
             and 'terra' or 'laje'
     elseif id == 'colina' then
-        return Kit.hash(x, y, 22) < .55 and 'grama' or 'terra'
+        return Kit.hash(x, y, 22) < .55 and 'colina_grama' or 'terra'
     elseif id == 'oficinas' or id == 'mercado' or id == 'reservatorio'
         or id == 'saloes' or id == 'fundacao' then
         return 'laje'
@@ -647,7 +719,8 @@ local function sunMaskFor(L, map)
     end
     local sunRef = {x = -640, y = map.h * CELL + 560, z = 460}
     local baked = L:bakeShadowMask(sunRef, occ,
-        -2 * CELL, -2 * CELL, (map.w + 4) * CELL, (map.h + 4) * CELL, 0.5)
+        -2 * CELL, -2 * CELL, (map.w + 4) * CELL, (map.h + 4) * CELL, 0.5,
+        {abs = 320, rel = 3.5, pen = .62, core = .17}) -- sol baixo: longas
     if not baked then
         sunMaskCache[map] = false
         return nil
@@ -753,20 +826,32 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
             local x0 = math.floor((vL - CELL) / CELL) * CELL
             local x1 = vR + CELL
             local horizon = 2.45 * CELL
-            -- céu: lavanda alta → rosa → creme-areia no horizonte
-            -- Gradiente mais alto (iteração Mira): 7 faixas, topo mais
-            -- frio — o void norte inteiro é céu, não faixa fina.
-            local bands = {
-                {.44, .38, .58}, {.52, .45, .65}, {.60, .52, .71},
-                {.70, .60, .75}, {.79, .68, .76}, {.86, .76, .74},
-                {.93, .85, .72},
+            -- Céu lavanda→âmbar CONTÍNUO (Mira r2: faixas discretas liam
+            -- como flat fill): strips finas lerpadas entre stops — topo
+            -- lavanda fria, rosa-violeta no meio, âmbar no horizonte.
+            local SKY_STOPS = {
+                {0.00, .40, .34, .56},  -- lavanda alta, fria
+                {0.42, .60, .50, .68},  -- rosa-violeta
+                {0.72, .86, .64, .58},  -- âmbar-rosa
+                {1.00, .99, .78, .50},  -- âmbar no horizonte
             }
             local top = -8 * CELL
-            for i, c in ipairs(bands) do
-                G.setColor(c[1], c[2], c[3], 1)
-                local y = top + (i - 1) * (horizon - top) / #bands
-                G.rectangle('fill', x0, y, x1 - x0,
-                    (horizon - top) / #bands + 1)
+            local span = horizon - top
+            for i = 1, 24 do
+                local t = (i - 0.5) / 24
+                local a, b = SKY_STOPS[1], SKY_STOPS[#SKY_STOPS]
+                for si = 1, #SKY_STOPS - 1 do
+                    if t >= SKY_STOPS[si][1] then
+                        a, b = SKY_STOPS[si], SKY_STOPS[si + 1]
+                    end
+                end
+                local f = math.min(1, math.max(0,
+                    (t - a[1]) / math.max(b[1] - a[1], 1e-6)))
+                G.setColor(a[2] + (b[2] - a[2]) * f,
+                    a[3] + (b[3] - a[3]) * f,
+                    a[4] + (b[4] - a[4]) * f, 1)
+                local y = top + (i - 1) * span / 24
+                G.rectangle('fill', x0, y, x1 - x0, span / 24 + 1)
             end
             -- Cordilheiras em duas profundidades: a mais longe, pálida e
             -- alta (nevoeiro do vale); a próxima, escura e baixa, colada
@@ -849,15 +934,16 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
                     end
                 end
                 G.draw(sh[ch], s[kind .. '_q'][qi], px, py)
-                -- Transição de terreno (W5): vizinho com overlay invade a
-                -- aresta — terra sobre laje, nunca o contrário. Cantos
-                -- internos (2 vizinhos ortogonais iguais) usam frame de
-                -- canto; arestas soltas usam frame direcional n/e/s/w.
+                -- Transição de terreno (W5/Mira r1): vizinho com overlay
+                -- invade a aresta em AMBOS os lados — terra invade laje
+                -- (trans_terra) e laje invade terra (trans_laje). Sem o
+                -- suppression antigo o corte de zona lia como faca.
+                -- Cantos internos (2 vizinhos ortogonais iguais) usam frame
+                -- de canto; arestas soltas usam frame direcional n/e/s/w.
                 local dir = {}
                 for d, o in ipairs({{0, -1}, {1, 0}, {0, 1}, {-1, 0}}) do
                     local nk = floorKind(map, tile.x + o[1], tile.y + o[2])
-                    if nk ~= kind and s['trans_' .. nk]
-                        and not s['trans_' .. kind] then
+                    if nk ~= kind and s['trans_' .. nk] then
                         dir[d] = nk
                     end
                 end
@@ -1014,66 +1100,63 @@ function HDWorld.draw(renderer, campaign, v, map, shake)
     local L = hd.lighting
     L:beginFrame()
     if map.outdoor then
-        L:setAmbient(Kit.ambient(region))
+        -- Ambiente calibrado no padrão-ouro (DIRECAO_AMBIENTAL §2): o
+        -- fim de tarde do Refúgio é QUENTE — o violeta-azul mora só na
+        -- sombra. Kit.ambient era concreto azulado de cripta; a mesa de
+        -- dusk vira vinho sem lavar o piso (sombra segue legível).
+        L:setAmbient(AMBIENT_TUNE[region] or Kit.ambient(region))
         -- Dominante por região (DIRECAO_AMBIENTAL): Refúgio pôr-do-sol
         -- âmbar do SO; Colina é crepúsculo — lume alto, pálido e frio.
         local sun = ({
-            hub = {c = {1.0, .76, .44}, i = 6.5},
-            refugio = {c = {1.0, .76, .44}, i = 6.5},
+            hub = {c = {1.0, .82, .60}, i = 5.9},
+            refugio = {c = {1.0, .82, .60}, i = 5.9},
             colina = {c = {.62, .70, 1.0}, i = 3.2},
-        })[region] or {c = {1.0, .76, .44}, i = 6.5}
+        })[region] or {c = {1.0, .82, .60}, i = 5.9}
         -- Sol projeta via máscara assada (§3.3): as sombras longas para NE
         -- da especificação ambiental sem custo de occluder por frame. Sem
         -- máscara (falha de bake/GPU) a mesma fonte projeta ao vivo.
+        -- capAbs/rel mais altos que o default: sol baixo = sombra longa.
         L:addLight({x = -640, y = map.h * CELL + 560, z = 460,
             color = sun.c, intensity = sun.i, radius = 8600,
             shadow = true, mask = sunMaskFor(L, map), prio = 0})
     else
         -- Interior sem dominante: o ambiente É a luz — frio-neutro legível
         -- (escuro legível != preto, Calina), os pools de brasa aquecem.
-        L:setAmbient({.42, .41, .46})
+        -- A cripta da Colina é o escuro autoral: quase sem luz natural,
+        -- os pools de vela carregam a leitura (DIRECAO §2 colina).
+        L:setAmbient(INTERIOR_AMBIENT[map.id] or INTERIOR_AMBIENT.default)
     end
-    -- Mapa de luzes do Pátio (layout-refugio-hd §6): vivas = fogo real e
-    -- piscam suave (≤2 por tela); quietas = janela/lampião/jade, estáveis.
-    -- Coordenadas em célula do mapa 54×40, z/raio já em px-64.
-    local HUB_LIGHTS = map.id == 'hub' and {
-        {x = 24, y = 6, c = {1.0, .55, .22}, i = 1.7, r = 260, z = 92,
-            flicker = {amp = .05, speed = 4, phase = .3}},        -- braseiro
-        {x = 22, y = 19, c = {1.0, .62, .30}, i = 1.2, r = 192, z = 110}, -- lampião
-        {x = 21, y = 17.4, c = {.25, .85, .70}, i = .65, r = 173, z = 80}, -- jade
-        {x = 28, y = 16, c = {1.0, .72, .38}, i = .8, r = 160, z = 120}, -- janela pensão
-        {x = 31, y = 16, c = {1.0, .72, .38}, i = .7, r = 160, z = 120}, -- janela 2
-        {x = 15, y = 25.5, c = {1.0, .72, .38}, i = .7, r = 160, z = 120}, -- varanda
-        {x = 50, y = 25, c = {1.0, .50, .20}, i = 1.2, r = 192, z = 92,
-            flicker = {amp = .05, speed = 5, phase = 2.4}},       -- brasa forja
-    } or nil
     -- Cull de luz: fora da vista (margem de 1 raio) nem entra na lista.
     local vL, vT = v.left, v.top
     local vR, vB = v.left + v.w, v.top + v.h
     local function lightVisible(x, y, r)
         return x + r > vL and x - r < vR and y + r > vT and y - r < vB
     end
-    if HUB_LIGHTS then
-        for _, ls in ipairs(HUB_LIGHTS) do
+    if MAP_LIGHTS[map.id] then
+        for _, ls in ipairs(MAP_LIGHTS[map.id]) do
             local lx, ly = ls.x * CELL - 32, ls.y * CELL - 32
             if lightVisible(lx, ly, ls.r) then
-                -- Só as 2 vivas projetam (Mira perdeu o drama junto ao
-                -- braseiro): drama curto perto do fogo, quietas ficam fora.
+                -- Hub: as 2 vivas projetam (Mira perdeu o drama junto ao
+                -- braseiro); quietas ficam fora. Cripta: velas/tocha têm
+                -- shadow=false explícito — luz de interior é pool, não
+                -- drama de janela (DIRECAO §2). O default sem flag segue
+                -- flicker ~= nil (o fogo que pisca é o que projeta).
+                local shFlag = ls.shadow
+                if shFlag == nil then shFlag = ls.flicker ~= nil end
                 L:addLight({x = lx, y = ly, z = ls.z,
                     color = ls.c, intensity = ls.i, radius = ls.r,
-                    flicker = ls.flicker,
-                    shadow = ls.flicker ~= nil})
+                    flicker = ls.flicker, shadow = shFlag})
             end
         end
     end
     for _, prop in ipairs(map.props or {}) do
         local ax, ay, tint, r = Props.lightAnchor(prop)
         if ax then
-            -- Sem duplicar: âncoras próximas do mapa do Pátio já estão
-            -- representadas (o braseiro do mirante é o mesmo (24,6)).
+            -- Sem duplicar: âncoras próximas do mapa de luzes autorado já
+            -- estão representadas (o braseiro do mirante é o mesmo (24,6)).
             local dup = false
-            if HUB_LIGHTS then
-                for _, ls in ipairs(HUB_LIGHTS) do
+            if MAP_LIGHTS[map.id] then
+                for _, ls in ipairs(MAP_LIGHTS[map.id]) do
                     local dx = ax * 2 - (ls.x * CELL - 32)
                     local dy = ay * 2 - (ls.y * CELL - 32)
                     if dx * dx + dy * dy < 96 * 96 then dup = true break end

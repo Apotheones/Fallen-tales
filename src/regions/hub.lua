@@ -72,7 +72,7 @@ return {
         -- cascalho: a perna estreita do loop, nunca radial.
         {w = 2.6, {28.5, 20.4}, {31.5, 20.8}, {35, 21.2}, {38.5, 21.2},
             {40.6, 21.8}, {41.2, 24}, {41.3, 26.5}, {43.5, 27.6},
-            {46.5, 28.2}, {49.5, 27}, {50.5, 26}},
+            {46.5, 28.2}, {48.5, 26.8}},
         -- rampa de serviço → terraço: volta por outra borda e fecha o loop.
         {w = 2.5, {50.2, 27.3}, {48.5, 29.2}, {47.2, 31}, {45, 32.5},
             {43.5, 33.5}},
@@ -93,9 +93,9 @@ return {
         {id = 'escadaMirante', kind = 'escadaria', x = 19, y = 8, w = 4, h = 2},
         {id = 'escadaBaixa', kind = 'escadaria', x = 25, y = 29, w = 3, h = 2},
         {id = 'rampaForja', kind = 'escadaria', x = 46, y = 29, w = 3, h = 2},
-        {id = 'parapeito', kind = 'parapeito', x = 14, y = 7, w = 5},
-        {id = 'parapeitoB', kind = 'parapeito', x = 23, y = 7, w = 5},
-        {id = 'parapeitoTerraco', kind = 'parapeito', x = 16, y = 36, w = 32},
+        {id = 'parapeito', kind = 'parapeito', x = 14, y = 7, w = 5, solid = true},
+        {id = 'parapeitoB', kind = 'parapeito', x = 23, y = 7, w = 5, solid = true},
+        {id = 'parapeitoTerraco', kind = 'parapeito', x = 16, y = 36, w = 32, solid = true},
         {id = 'mesa', kind = 'mesa', x = 24, y = 21, w = 2, solid = true},
         {id = 'cisterna', kind = 'cisterna', x = 26, y = 20, w = 2, h = 2, solid = true},
         {id = 'caixas', kind = 'caixas', x = 52, y = 25, solid = true},
@@ -119,58 +119,66 @@ return {
             solid = true},
         {id = 'caixasCozinha', kind = 'caixas', x = 10, y = 27, solid = true},
         {id = 'espantalhoHorta', kind = 'espantalho', x = 5, y = 22, solid = true},
-        {id = 'canteiroHortaA1', kind = 'canteiroA', x = 4, y = 23},
-        {id = 'canteiroHortaA2', kind = 'canteiroA', x = 4, y = 24},
-        {id = 'canteiroHortaB1', kind = 'canteiroB', x = 6, y = 23},
-        {id = 'canteiroHortaB2', kind = 'canteiroB', x = 6, y = 24},
+        {id = 'canteiroHortaA1', kind = 'canteiro', x = 4, y = 23, solid = true},
+        {id = 'canteiroHortaA2', kind = 'canteiro', x = 4, y = 24, solid = true},
+        {id = 'canteiroHortaB1', kind = 'canteiro_b', x = 6, y = 23, solid = true},
+        {id = 'canteiroHortaB2', kind = 'canteiro_b', x = 6, y = 24, solid = true},
         {id = 'varalPensao', kind = 'varal', x = 33, y = 17, w = 1, h = 2},
-        {id = 'cartazPraca', kind = 'cartaz', x = 19, y = 21, solid = true},
+        {id = 'cartazPraca', kind = 'cartaz', x = 17, y = 21, solid = true},
         -- Adro murado (o muro baixo que o galpão dava pela shell; dentro da
         -- massa única, a borda é prop): portão único a leste (10,18-19).
-        {id = 'muretaAdroN', kind = 'parapeito', x = 5, y = 12, w = 5, h = 1, solid = true},
-        {id = 'muretaAdroS', kind = 'parapeito', x = 5, y = 20, w = 5, h = 1, solid = true},
-        {id = 'muretaAdroE', kind = 'parapeito', x = 10, y = 12, w = 1, h = 6, solid = true},
+        {id = 'muretaAdroN', kind = 'mureta', x = 5, y = 12, w = 5, h = 1, solid = true},
+        {id = 'muretaAdroS', kind = 'mureta', x = 5, y = 20, w = 5, h = 1, solid = true},
+        {id = 'muretaAdroE', kind = 'mureta', x = 10, y = 12, w = 1, h = 6, solid = true},
+        -- O portão do cortejo na passagem — raso, nunca bloqueia a entrada.
+        {id = 'portaoAdro', kind = 'portao', x = 10, y = 18, w = 1, h = 2},
         -- Afloramento da encosta no canto NW — o morro em que o adro se apoia.
         {id = 'rochaColina', kind = 'rocha', x = 5, y = 10, w = 2, h = 2, solid = true},
         -- TRAÇO: ocupação do terraço (vida do lugar) — painter pronto,
         -- posição revisável pelo Pátio.
-        {id = 'ervasRack', kind = 'ervasRack', x = 45, y = 35},
-        {id = 'varalTerraco', kind = 'varal', x = 30, y = 33, w = 2},
+        {id = 'ervasRack', kind = 'ervasRack', x = 44, y = 30},
+        {id = 'varalTerraco', kind = 'varalTerraco', x = 30, y = 33, w = 2},
         -- TRAÇO: posto de guarda do mirante — braseiro sempre aceso no
         -- flanco da escadaria + armaiote/escudo na ponta oeste da chegada.
         {id = 'braseiroMirante', kind = 'braseiro', x = 24, y = 6, solid = true},
         {id = 'postoVigia', kind = 'postoVigia', x = 12, y = 7, solid = true},
         -- TRAÇO: enche o terço sul — cargas do depósito junto à escola,
         -- cercado com a cabra no oeste e caixas sob a rampa de serviço.
-        {id = 'cargasOeste', kind = 'caixas', x = 32, y = 34, solid = true},
+        {id = 'cargasOeste', kind = 'cargas', x = 32, y = 34, solid = true},
         {id = 'fardosDeposito', kind = 'fardos', x = 39, y = 33, solid = true},
         {id = 'caixasRampa', kind = 'caixas', x = 48, y = 33, solid = true},
         -- Camada de memória (doc mapa-lugares + handoff Morada): kinds de
         -- placeholder onde o painter próprio ainda não existe; ids fixos
         -- servem de gancho p/ painters id-específicos do Traço.
         {id = 'pocoRua', kind = 'cisterna', x = 16, y = 23, solid = true},
-        {id = 'recipientesPoco', kind = 'caixas', x = 28, y = 22},
+        {id = 'recipientesPoco', kind = 'recipientes', x = 28, y = 22},
         {id = 'lampiaoPraca', kind = 'lampiao', x = 22, y = 19,
             solid = true},
         {id = 'bancoDivergente', kind = 'banco', x = 28, y = 19, solid = true},
         {id = 'bancoSerra', kind = 'bancoSerra', x = 19, y = 17, solid = true},
         {id = 'bancoPedra', kind = 'bancoPedra', x = 30, y = 19, solid = true},
-        {id = 'canteiroAdro', kind = 'sulcos', x = 8, y = 19},
-        {id = 'ervasSecas', kind = 'ervasRack', x = 30, y = 35},
+        {id = 'canteiroAdro', kind = 'canteiro', x = 8, y = 19},
+        {id = 'ervasSecas', kind = 'ervasRack', x = 30, y = 30},
         {id = 'cabra', kind = 'cabra', x = 19, y = 34, solid = true},
-        {id = 'cercadoN', kind = 'cercado', x = 17, y = 32, w = 5,
-            solid = true},
-        {id = 'cercadoO', kind = 'cercado', x = 17, y = 33, w = 1, h = 3,
-            solid = true},
-        {id = 'cercadoL', kind = 'cercado', x = 21, y = 33, w = 1, h = 2,
-            solid = true},
-        {id = 'cercadoS', kind = 'cercado', x = 18, y = 35, w = 2,
-            solid = true},
-        {id = 'baldeTempera', kind = 'caixas', x = 51, y = 25, solid = true},
-        {id = 'rodaRampa', kind = 'roda', x = 45, y = 26.4},
+        -- Cercado da cabra por célula (def 64×64: run w5 desenharia uma
+        -- tábua só). Abertura SE em (20–21,35) — o hotspot fica na boca.
+        {id = 'cercadoT1', kind = 'cercado', x = 17, y = 32, solid = true},
+        {id = 'cercadoT2', kind = 'cercado', x = 18, y = 32, solid = true},
+        {id = 'cercadoT3', kind = 'cercado', x = 19, y = 32, solid = true},
+        {id = 'cercadoT4', kind = 'cercado', x = 20, y = 32, solid = true},
+        {id = 'cercadoT5', kind = 'cercado', x = 21, y = 32, solid = true},
+        {id = 'cercadoO1', kind = 'cercado', x = 17, y = 33, solid = true},
+        {id = 'cercadoO2', kind = 'cercado', x = 17, y = 34, solid = true},
+        {id = 'cercadoO3', kind = 'cercado', x = 17, y = 35, solid = true},
+        {id = 'cercadoL1', kind = 'cercado', x = 21, y = 33, solid = true},
+        {id = 'cercadoL2', kind = 'cercado', x = 21, y = 34, solid = true},
+        {id = 'cercadoS1', kind = 'cercado', x = 18, y = 35, solid = true},
+        {id = 'cercadoS2', kind = 'cercado', x = 19, y = 35, solid = true},
+        {id = 'baldeTempera', kind = 'baldeTempera', x = 49, y = 25, solid = true},
+        {id = 'rodaRampa', kind = 'roda', x = 45, y = 27},
         {id = 'varandaPensao', kind = 'toldo', x = 28, y = 17, w = 4},
         {id = 'varandaCozinha', kind = 'toldo', x = 14, y = 25, w = 3},
-        {id = 'cadeiraVaranda', kind = 'banco', x = 32, y = 18, solid = true},
+        {id = 'cadeiraVaranda', kind = 'cadeira', x = 32, y = 18, solid = true},
         -- TRAÇO: restos da fatia I do Olhar sem lugar plantado ainda —
         -- posições provisórias; o Pátio revê/realoca na ficha.
         -- Oferenda sem nome junto à entrada da capela (Morada já espera
@@ -180,21 +188,29 @@ return {
         {id = 'marcaAdro', kind = 'marcaImpro', x = 5, y = 21},
         -- Remendo de alvenaria na face do arrimo sobre o terraço.
         {id = 'remendoArrimo', kind = 'remendoMuro', x = 29, y = 29},
+        -- Remendos de fachada — ruína recuperada dentro de parede velha
+        -- (spec: repairs retain different makers' finishes). Decais sobre a
+        -- face das massas, sem colisão própria.
+        {id = 'remendoCapela', kind = 'remendoMuro', x = 6, y = 16},
+        {id = 'remendoCozinha', kind = 'remendoMuro', x = 16, y = 26},
+        {id = 'remendoEscola', kind = 'remendoMuro', x = 34, y = 32},
+        -- Chaminé da cozinha: fumaça sobe quando o forno tem uso real.
+        {id = 'chamineCozinha', kind = 'chamine', x = 17, y = 26},
     },
     npcs = {
-        {id = 'sabela', x = 25, y = 19, act = 'write'},
+        {id = 'sabela', x = 24, y = 22, act = 'write'},
         {id = 'doro', x = 50, y = 26, act = 'hammer'},
         {id = 'aurel', x = 23, y = 20, act = 'tend'},
         {id = 'runa', x = 26, y = 6, act = 'watch'},
         -- Figurantes (Morada): chegam por marco real via people.location;
         -- posts por flag — último que casa vence, determinístico no enter.
         {id = 'anciao', x = 24, y = 20, dx = -1, act = 'sit'},
-        {id = 'lavadeira', x = 33, y = 20, dy = -1, act = 'wash',
+        {id = 'lavadeira', x = 33, y = 19, dy = -1, act = 'wash',
             posts = {{flag = 'aguaRefugio', x = 25, y = 22, act = 'fill'}}},
-        {id = 'carregador', x = 25, y = 26, act = 'carry',
+        {id = 'carregador', x = 24, y = 27, act = 'carry',
             posts = {{flag = 'aguaRefugio', x = 27, y = 23, act = 'help'}}},
         {id = 'lenhador', x = 49, y = 24, dy = -1, act = 'chop'},
-        {id = 'crianca', x = 34, y = 31, act = 'play',
+        {id = 'crianca', x = 28, y = 32, act = 'play',
             posts = {{flag = 'refugioConcluido', x = 22, y = 23}}},
     },
     hotspots = {
@@ -204,7 +220,7 @@ return {
         {id = 'hortaRefugio', x = 5, y = 25, label = 'EXAMINAR'},
         {id = 'terracoRefugio', x = 26, y = 35, label = 'CONTEMPLAR'},
         {id = 'placaRotas', x = 23, y = 18, label = 'LER'},
-        {id = 'cartazRefugio', x = 19, y = 20, label = 'LER'},
+        {id = 'cartazRefugio', x = 17, y = 20, label = 'LER'},
         {id = 'cabraRefugio', x = 21, y = 35, label = 'EXAMINAR'},
     },
     exits = {

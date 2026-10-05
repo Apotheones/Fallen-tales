@@ -2,6 +2,12 @@
 -- Planta autoral por retângulos de piso; a casca de muros é gerada ao redor.
 -- Lugares garantidos da ficha: sepultura original, pátio do velório,
 -- depósito funerário, grade de Runa e a descida ao refúgio.
+--
+-- Reformulação ouro (spec W01–W06): rotas legíveis entre as portas (paths),
+-- clusters encostados, e o void da margem direita vira limite escrito —
+-- rebordo rompido do pátio, galeria desabada ao sul do depósito e massa de
+-- rocha junto ao salão (a passagem antiga é colapsada: nunca atalho).
+-- Toda célula nova de carve fica sob prop sólido: pegada caminhável intacta.
 return {
     id = 'colina', uid = 1, name = 'CRIPTA · COLINA DOS SEPULTADOS', realm = 'refugio', w = 28, h = 24,
     spawn = {x = 6, y = 4},
@@ -17,6 +23,33 @@ return {
         {x = 21, y = 9, w = 6, h = 6},   -- depósito funerário
         {x = 5, y = 16, w = 2, h = 2},   -- corredor da grade
         {x = 4, y = 18, w = 8, h = 4},   -- salão da descida
+        -- Rebordos do desabamento (spec W02/W04 — borda autoral do void):
+        -- cada célula abaixo recebe prop sólido; nada caminhável é criado.
+        {x = 18, y = 13, w = 1, h = 3},  -- rim a leste do pátio, sob o corredor
+        {x = 21, y = 15, w = 6, h = 1},  -- apron de escombro, face sul do depósito
+        {x = 12, y = 18, w = 1, h = 4},  -- massa selada a leste do salão
+    },
+    -- Silhueta profunda no void (segundo anel): tocos de parede e rocha que
+    -- o escuro ainda deixa ler — a "passagem antiga" que cedeu a leste.
+    walls = {
+        {x = 22, y = 16}, {x = 24, y = 16}, {x = 23, y = 17},
+        {x = 13, y = 19}, {x = 14, y = 19}, {x = 13, y = 20},
+        {x = 11, y = 3}, {x = 11, y = 5},
+    },
+    zones = {
+        {name = 'CÂMARA', x = 4, y = 2, w = 6, h = 4, surface = 'stone'},
+        {name = 'PÁTIO DO VELÓRIO', x = 4, y = 10, w = 14, h = 6, surface = 'grass'},
+        {name = 'DEPÓSITO', x = 21, y = 9, w = 6, h = 6, surface = 'stone'},
+        {name = 'SALÃO DA DESCIDA', x = 4, y = 18, w = 8, h = 4, surface = 'stone'},
+    },
+    -- Caminhos gastos da ficha W01: rotas mantidas entre a câmara, o pátio,
+    -- o depósito e a descida — a terra pisada le onde se anda de verdade.
+    paths = {
+        {w = 2.2, {6.4, 4.5}, {6.6, 6.5}, {6.4, 9.2}, {6.2, 11}},
+        {w = 2.4, {6.2, 11.4}, {9, 12}, {12.5, 11.9}, {16, 11.6},
+            {18.5, 11.6}, {21.5, 11.5}},
+        {w = 2.2, {6, 12.5}, {5.6, 15.5}, {5.6, 17.2}, {6.4, 19.2},
+            {7, 21.4}},
     },
     holes = {
         {x = 17, y = 14}, {x = 17, y = 15}, {x = 16, y = 15},
@@ -34,27 +67,64 @@ return {
         -- (ABERTURA_HD Ato 1: a vedação). Repintura HD — emissivo violeta
         -- ei~0.3 — fica com Traço/Prisma (doc §6); hoje herda a placa.
         {id = 'marcaPartida', kind = 'placa', x = 7, y = 2},
+        -- W02: alvenaria nova sobre velha + pano guardado — o quarto foi
+        -- preparado contra o retorno e alguém voltou a arrumá-lo.
+        {id = 'panoCamara', kind = 'pano', x = 9, y = 4, solid = true},
+        {id = 'entulhoCamara', kind = 'entulho', x = 9, y = 5, solid = true},
+        {id = 'velaVigilia', kind = 'velas', x = 4, y = 4},
         -- Lápides em mancha irregular (doc mapa-lugares: 2 agrupamentos,
         -- distâncias variadas) + marcas improvisadas das sepulturas recentes.
         {id = 'lapide1', kind = 'lapide', x = 5, y = 10, solid = true},
         {id = 'lapide2', kind = 'lapide', x = 7, y = 12, solid = true},
         {id = 'lapide3', kind = 'lapide', x = 14, y = 9, solid = true},
         {id = 'lapide4', kind = 'lapide', x = 16, y = 11, solid = true},
+        {id = 'lapide5', kind = 'lapide_b', x = 15, y = 13, solid = true},
         {id = 'marcaImpro1', kind = 'flores', x = 10, y = 11},
-        {id = 'marcaImpro2', kind = 'pano', x = 18, y = 10},
+        {id = 'marcaImpro2', kind = 'pano', x = 17, y = 11},
+        {id = 'marcaImpro3', kind = 'marcaImpro', x = 12, y = 14},
         {id = 'banco1', kind = 'banco', x = 8, y = 12, solid = true},
         {id = 'banco2', kind = 'banco', x = 9, y = 12, solid = true},
+        {id = 'bancoPatio', kind = 'banco', x = 14, y = 15, solid = true},
+        {id = 'velasVelorio', kind = 'velas', x = 10, y = 13},
         {id = 'pano', kind = 'pano', x = 13, y = 12, solid = true},
+        {id = 'cipoBorda', kind = 'cipo', x = 16, y = 13},
+        -- Depósito: loja funerária — caixão grande demais, pertences pequenos,
+        -- estoque encostado no canto norte; face sul desabou pra dentro.
         {id = 'bau', kind = 'bau', x = 23, y = 10, solid = true},
+        {id = 'panoDeposito', kind = 'pano', x = 25, y = 10, solid = true},
+        {id = 'caixasDeposito', kind = 'caixas', x = 26, y = 9, w = 1, h = 2, solid = true},
         -- O caixão vazio que Doro guardou no depósito (subquest D01).
         {id = 'caixao', kind = 'caixao', x = 24, y = 13, w = 2, solid = true},
+        {id = 'entulhoDepA', kind = 'entulho', x = 22, y = 14, solid = true},
+        {id = 'entulhoDepB', kind = 'entulho', x = 24, y = 14, solid = true},
+        {id = 'rochaDeposito', kind = 'rocha', x = 26, y = 14, solid = true},
+        -- Galeria colapsada sob a face sul do depósito (apron 100% sólido).
+        {id = 'escombroA', kind = 'entulho', x = 21, y = 15, solid = true},
+        {id = 'escombroB', kind = 'rocha', x = 22, y = 15, solid = true},
+        {id = 'escombroC', kind = 'entulho', x = 23, y = 15, solid = true},
+        {id = 'escombroD', kind = 'rocha', x = 24, y = 15, solid = true},
+        {id = 'escombroE', kind = 'entulho', x = 25, y = 15, solid = true},
+        {id = 'escombroF', kind = 'cipo', x = 26, y = 15, solid = true},
+        -- Rebordo rompido a leste do pátio: cerca de ferro partida + pedra —
+        -- o fim da encosta, não um corredor.
+        {id = 'cercaRimA', kind = 'cercado', x = 18, y = 13, solid = true},
+        {id = 'lapideRim', kind = 'lapide_c', x = 18, y = 14, solid = true},
+        {id = 'cercaRimB', kind = 'cercado', x = 18, y = 15, solid = true},
+        -- Massa selada a leste do salão: onde a passagem antiga seguia.
+        {id = 'rochaSalaoA', kind = 'rocha', x = 12, y = 18, solid = true},
+        {id = 'entulhoSalao', kind = 'entulho', x = 12, y = 19, solid = true},
+        {id = 'rochaSalaoB', kind = 'rocha', x = 12, y = 20, solid = true},
+        {id = 'muroSalao', kind = 'muro', x = 12, y = 21, solid = true},
         {id = 'grade', kind = 'grade', x = 5, y = 17, w = 2, solid = true},
         {id = 'flores', kind = 'flores', x = 14, y = 14},
+        -- Tocha na boca da descida: a única chama antes da grade.
+        {id = 'tochaDescida', kind = 'tocha', x = 4, y = 15, solid = true},
         -- Salão da descida: banco de vigia + placa da cripta — a sala onde
         -- quem vem do Refúgio desembarca não fica nua.
         {id = 'bancoDescida', kind = 'banco', x = 4, y = 20, w = 2, solid = true},
         {id = 'placaDescida', kind = 'placa', x = 7, y = 15, solid = true},
         {id = 'mesaVelas', kind = 'mesa', x = 9, y = 19, solid = true},
+        {id = 'pilarSalao', kind = 'pilar', x = 10, y = 18, solid = true},
     },
     npcs = {
         {id = 'doro', x = 8, y = 3, dx = -1, dy = 0},

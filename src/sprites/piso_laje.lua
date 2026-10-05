@@ -1,262 +1,169 @@
--- PISO_LAJE — lajes de pedra azul, tile 64x64, origem topleft.
--- Fase 1 TILES (docs/MEGAPLAN_VISUAL_HD.md §4-5). 4 frames = 4 variantes
--- de seed: cada uma redesenha placas e juntas, não embaralha ruído.
--- Placas irregulares DESENHADAS: juntas poligonais por traço 4-conectado,
--- tom de cada laje por flood fill, lascas em carimbo com filete claro.
--- Valor baixo e contraste calmo — o piso recua. h: junta 0, laje 1, fio
--- de desgaste 2.
--- v2: lascas engordadas (cunha 3-4 px + filete 'S' um degrau acima do
--- fio de desgaste) — a versão 2x2 sumia na leitura a 1x.
+-- V01_LAJE — pavimento de lajedo irregular da praça/mirante, re-autoria.
+-- Tile 64x64, topleft, 4 frames = variantes (frameUse='variant').
+-- Crazy paving: juntas 'j' sinuosas em polilinha 4-conectada fecham
+-- lajes de 12-22 px; cada laje recebe tom próprio por flood fill; a
+-- quina topo-esquerda de cada laje pega um filete claro 'L' e a base
+-- direita assenta em 'k' — relevo de pedra assentada, não malha plana.
+-- Juntas são terra compactada (barro entre pedras = praça gasta de
+-- povoado), com musgo raro 'g' nos nós e lasca 'k' ocasional.
+-- h: junta 0, laje 1, filete 2.
+local K = require 'src.pixel_kit'
 
 local W, H = 64, 64
 
-local function nova(fill)
-    local g = {}
-    for y = 1, H do
-        local r = {}
-        for x = 1, W do r[x] = fill end
-        g[y] = r
-    end
-    return g
-end
-
-local function set(g, x, y, ch)
-    if x >= 1 and x <= W and y >= 1 and y <= H then g[y][x] = ch end
-end
-
--- Traço por waypoints com elo de canto: nenhum vão diagonal, então a
--- junta veda o flood fill 4-conectado das lajes.
-local function traco(g, pts, ch)
+-- Polilinha com elo de canto: nenhum vão diagonal, a junta veda o
+-- flood fill 4-conectado das lajes.
+local function traco4(g, pts, c, mask)
     for i = 1, #pts - 2, 2 do
         local x0, y0, x1, y1 = pts[i], pts[i + 1], pts[i + 2], pts[i + 3]
         local dx, dy = math.abs(x1 - x0), math.abs(y1 - y0)
         local sx = x0 <= x1 and 1 or -1
         local sy = y0 <= y1 and 1 or -1
         local x, y, err = x0, y0, dx - dy
-        set(g, x, y, ch)
+        K.pixel(g, x, y, c, mask)
         while x ~= x1 or y ~= y1 do
             local e2 = 2 * err
             local nx, ny = x, y
             if e2 > -dy then err = err - dy; nx = nx + sx end
             if e2 < dx then err = err + dx; ny = ny + sy end
-            set(g, nx, y, ch) -- elo: mantém a linha 4-conectada no cotovelo
-            set(g, nx, ny, ch)
+            K.pixel(g, nx, y, c, mask)  -- elo: 4-conexo no cotovelo
+            K.pixel(g, nx, ny, c, mask)
             x, y = nx, ny
         end
     end
 end
 
--- Flood fill: pinta a laje que contém (x,y) com o tom ch; 'j' é fronteira.
-local function pinta(g, x, y, ch)
-    local alvo = g[y][x]
-    if alvo == 'j' or alvo == ch then return end
-    local stack = { { x, y } }
-    while #stack > 0 do
-        local p = table.remove(stack)
-        local px, py = p[1], p[2]
-        if px >= 1 and px <= W and py >= 1 and py <= H and g[py][px] == alvo then
-            g[py][px] = ch
-            stack[#stack + 1] = { px + 1, py }
-            stack[#stack + 1] = { px - 1, py }
-            stack[#stack + 1] = { px, py + 1 }
-            stack[#stack + 1] = { px, py - 1 }
+local function blob(g, cx, cy, rx, ry, c, rng, mask)
+    local pts, n = {}, 8
+    for i = 0, n - 1 do
+        local a = i / n * math.pi * 2
+        local j = 0.72 + rng.float() * 0.5
+        pts[#pts + 1] = math.floor(cx + math.cos(a) * rx * j + 0.5)
+        pts[#pts + 1] = math.floor(cy + math.sin(a) * ry * j + 0.5)
+    end
+    K.polygon(g, pts, c, mask)
+end
+
+-- Linha sinuosa entre dois pontos: waypoints a cada ~10px com jitter.
+local function sinuosa(x0, y0, x1, y1, amp, rng)
+    local pts = { x0, y0 }
+    local n = math.max(2, math.floor((math.abs(x1 - x0)
+        + math.abs(y1 - y0)) / 10))
+    for i = 1, n - 1 do
+        local t = i / n
+        pts[#pts + 1] = math.floor(x0 + (x1 - x0) * t
+            + rng.int(-amp, amp) + .5)
+        pts[#pts + 1] = math.floor(y0 + (y1 - y0) * t
+            + rng.int(-amp, amp) + .5)
+    end
+    pts[#pts + 1] = x1; pts[#pts + 1] = y1
+    return pts
+end
+
+local function laje(seed)
+    local rng = K.rng('v01_laje', seed)
+    local g = K.new(W, H)
+    K.rect(g, 1, 1, W, H, 's')
+    -- 3 juntas horizontais sinuosas atravessando o tile
+    local rows = {}
+    for _, y in ipairs({ 14 + rng.int(-2, 2), 31 + rng.int(-3, 3),
+        47 + rng.int(-2, 3) }) do
+        traco4(g, sinuosa(1, y, W, y, 3, rng), 'j')
+        rows[#rows + 1] = y
+    end
+    -- juntas verticais curtas por faixa (desencontradas entre faixas)
+    local faixas = { { 1, rows[1] }, { rows[1], rows[2] },
+        { rows[2], rows[3] }, { rows[3], H } }
+    for bi, faixa in ipairs(faixas) do
+        local nv = rng.int(2, 3)
+        for _ = 1, nv do
+            local x = rng.int(10, W - 10)
+            local y0 = math.max(1, faixa[1] + rng.int(-2, 0))
+            local y1 = math.min(H, faixa[2] + rng.int(0, 2))
+            traco4(g, sinuosa(x, y0, x + rng.int(-4, 4), y1, 2, rng), 'j')
         end
     end
-end
-
--- Carimbo de lasca/mancha: '.' é transparente no desenho.
-local function carimbo(g, x, y, forma)
-    for j = 1, #forma do
-        local linha = forma[j]
-        for i = 1, #linha do
-            local c = linha:sub(i, i)
-            if c ~= '.' then set(g, x + i - 1, y + j - 1, c) end
+    -- tom por laje: UM tom por componente 's' (laje), via sel_component —
+    -- fill de 's' para 's' seria no-op e vazaria para a laje vizinha.
+    local tons = { 's', 's', 'S', 'S', 'w', 'w', 'V' } -- sol gasta algumas, sombra outras
+    local marcada = K.new(W, H)
+    for y = 1, H do for x = 1, W do
+        if K.get(g, x, y) == 's' and K.get(marcada, x, y) == '.' then
+            local comp = K.sel_component(g, x, y)
+            local tom = rng.pick(tons)
+            for yy = 1, H do for xx = 1, W do
+                if K.get(comp, xx, yy) ~= '.' then
+                    marcada.rows[yy][xx] = 'x'
+                    if tom ~= 's' then K.pixel(g, xx, yy, tom) end
+                end
+            end end
+        end
+    end end
+    -- filete claro na quina topo-esquerda e assento escuro na base
+    -- direita de cada laje — relevo de pedra assentada.
+    local rr = K.rng('v01_laje_borda', seed)
+    for y = 1, H do for x = 1, W do
+        local ch = K.get(g, x, y)
+        if ch == 's' or ch == 'S' or ch == 'w' then
+            local n = K.get(g, x, y - 1)
+            local o = K.get(g, x - 1, y)
+            local s2 = K.get(g, x, y + 1)
+            local l = K.get(g, x + 1, y)
+            if (n == 'j' or o == 'j') and rr.chance(.55) then
+                K.pixel(g, x, y, 'L')
+            elseif (s2 == 'j' or l == 'j') and rr.chance(.45) then
+                K.pixel(g, x, y, 'k')
+            end
+        end
+    end end
+    -- terra pisada nos nós das juntas + musgo raro
+    for y = 2, H - 1 do for x = 2, W - 1 do
+        if K.get(g, x, y) == 'j' then
+            local cruz = (K.get(g, x - 1, y) == 'j' or K.get(g, x + 1, y) == 'j')
+                and (K.get(g, x, y - 1) == 'j' or K.get(g, x, y + 1) == 'j')
+            if cruz and rr.chance(.035) then
+                blob(g, x, y, rng.int(2, 3), 2, 'g', rr)
+            elseif cruz and rr.chance(.04) then
+                K.pixel(g, x, y, 'e')
+                K.pixel(g, x + 1, y, 'e')
+            end
+        end
+    end end
+    -- lasca de quina: canto de laje lascado (junta nos dois vizinhos
+    -- externos) — cunha 'k' de 2-3 px na quina oposta à luz
+    for _ = 1, rng.int(1, 2) do
+        local x, y = rng.int(3, W - 3), rng.int(3, H - 3)
+        local ehQuina = K.get(g, x, y) ~= 'j'
+            and K.get(g, x, y + 1) == 'j' and K.get(g, x + 1, y) == 'j'
+        if ehQuina then
+            K.pixel(g, x, y, 'k')
+            K.pixel(g, x - 1, y + 1, 'k')
+            K.pixel(g, x, y + 1, 'k')
+            if rng.chance(.5) then K.pixel(g, x + 1, y - 1, 'k') end
         end
     end
+    return g
 end
 
-local function str(g)
-    local t = {}
-    for y = 1, H do t[y] = table.concat(g[y]) end
-    return table.concat(t, '\n')
-end
-
--- Lascas: entalhe escuro na laje + filete claro na aresta oposta.
--- v2: as lascas de 2x2 sumiam a 1x — filete engordado ('S' = stone.6,
--- um degrau acima do fio de desgaste) e cunha escura com corpo.
-local LASCA_A = {
-    'ddd.',
-    'dd..',
-    'd.S.',
-    '.SS.',
-}
-local LASCA_B = {
-    '.ddd',
-    '..dd',
-    '.Sd.',
-    '.SS.',
-}
-local LASCA_C = {
-    'Sdd.',
-    'ddd.',
-    'dd..',
-    'd...',
-}
-local LASCA_D = {
-    '..dd.',
-    '.ddd.',
-    'ddSS.',
-    'dS...',
-}
--- Fio de desgaste: topo da laje lavado pela luz (h=2, bem raro).
-local FIO = { 'sss' }
-local FIO2 = { '.ss' }
--- Tufo orgânico nascendo na junta (v4 ouro): g = base escura, t = lâminas.
-local TUFO = {
-    't.t',
-    'tgt',
-    'ggg',
-}
-local TUFO2 = {
-    '.t',
-    'gt',
-    'gg',
-}
-
-local function laje(spec)
-    local g = nova('a')
-    for _, j in ipairs(spec.j) do traco(g, j, 'j') end
-    for _, t in ipairs(spec.tons) do pinta(g, t[1], t[2], t[3]) end
-    for _, c in ipairs(spec.carimbos) do carimbo(g, c[1], c[2], c[3]) end
-    return str(g)
-end
-
--- Cada variante: j = polilinhas de junta, tons = sementes de flood fill
--- por laje ('a' base, 'l' clara, 'd' sombreada), carimbos = lascas/fios.
-local V1 = {
-    j = {
-        { 1, 14, 12, 14, 21, 13, 31, 15, 45, 14, 63, 15 },
-        { 1, 32, 14, 31, 25, 33, 39, 32, 51, 34, 63, 33 },
-        { 1, 48, 11, 47, 25, 49, 38, 48, 51, 46, 63, 47 },
-        { 23, 1, 23, 13 }, { 47, 1, 46, 14 },
-        { 15, 14, 16, 31 }, { 37, 15, 36, 32 }, { 55, 15, 54, 33 },
-        { 9, 32, 9, 47 }, { 30, 33, 30, 48 }, { 50, 34, 50, 46 },
-        { 20, 49, 20, 63 }, { 41, 48, 40, 63 }, { 57, 47, 57, 63 },
-    },
-    tons = {
-        { 12, 7, 'a' }, { 35, 7, 'l' }, { 56, 7, 'a' },
-        { 7, 23, 'a' }, { 26, 23, 'd' }, { 45, 23, 'a' }, { 59, 23, 'a' },
-        { 4, 40, 'a' }, { 19, 40, 'a' }, { 40, 40, 'l' }, { 57, 40, 'd' },
-        { 10, 56, 'd' }, { 30, 56, 'a' }, { 49, 56, 'a' }, { 61, 56, 'a' },
-    },
-    carimbos = {
-        { 18, 22, LASCA_A }, { 44, 54, LASCA_B }, { 33, 38, LASCA_C },
-        { 56, 20, LASCA_D },
-        { 27, 6, FIO }, { 51, 27, FIO2 }, { 6, 44, FIO2 },
-        { 22, 13, TUFO },   -- na junta horizontal y~14, cruzando a vertical x~23
-    },
-}
-
-local V2 = {
-    j = {
-        { 1, 11, 16, 11, 28, 13, 42, 12, 55, 14, 63, 13 },
-        { 1, 28, 13, 29, 26, 27, 40, 29, 52, 28, 63, 30 },
-        { 1, 45, 15, 46, 27, 44, 41, 46, 54, 45, 63, 46 },
-        { 1, 58, 20, 57, 36, 59, 50, 58, 63, 59 },
-        { 30, 1, 30, 12 }, { 52, 1, 51, 13 },
-        { 10, 11, 11, 28 }, { 44, 13, 43, 28 }, { 57, 14, 58, 29 },
-        { 22, 29, 22, 45 }, { 47, 30, 46, 45 },
-        { 12, 46, 13, 57 }, { 33, 46, 33, 58 }, { 50, 46, 49, 57 },
-    },
-    tons = {
-        { 15, 6, 'a' }, { 40, 6, 'a' }, { 58, 6, 'd' },
-        { 6, 20, 'a' }, { 27, 20, 'a' }, { 51, 20, 'l' }, { 61, 20, 'a' },
-        { 11, 37, 'd' }, { 34, 37, 'a' }, { 55, 37, 'a' },
-        { 7, 52, 'a' }, { 23, 52, 'a' }, { 41, 52, 'd' }, { 56, 52, 'a' },
-        { 10, 61, 'a' }, { 28, 61, 'l' }, { 45, 61, 'a' }, { 58, 61, 'a' },
-    },
-    carimbos = {
-        { 36, 18, LASCA_B }, { 16, 50, LASCA_C }, { 54, 52, LASCA_A },
-        { 6, 34, LASCA_D },
-        { 7, 24, FIO }, { 48, 37, FIO }, { 30, 61, FIO2 },
-        { 43, 27, TUFO2 },  -- junta horizontal y~29, encosta na vertical x~43
-    },
-}
-
-local V3 = {
-    j = {
-        { 1, 16, 10, 15, 22, 17, 34, 15, 48, 17, 63, 16 },
-        { 1, 35, 12, 34, 24, 36, 37, 35, 49, 37, 63, 36 },
-        { 1, 52, 14, 53, 28, 51, 42, 53, 55, 52, 63, 53 },
-        { 18, 1, 17, 15 }, { 41, 1, 42, 15 },
-        { 8, 16, 8, 34 }, { 28, 17, 29, 35 }, { 51, 17, 50, 36 },
-        { 18, 36, 18, 52 }, { 38, 36, 39, 52 }, { 56, 37, 55, 52 },
-        { 10, 53, 11, 63 }, { 30, 52, 30, 63 }, { 47, 53, 48, 63 },
-    },
-    tons = {
-        { 9, 8, 'a' }, { 30, 8, 'd' }, { 53, 8, 'a' },
-        { 4, 25, 'a' }, { 18, 25, 'a' }, { 40, 25, 'a' }, { 57, 25, 'l' },
-        { 9, 44, 'a' }, { 28, 44, 'd' }, { 48, 44, 'a' }, { 60, 44, 'a' },
-        { 6, 58, 'a' }, { 21, 58, 'a' }, { 39, 58, 'a' }, { 56, 58, 'd' },
-    },
-    carimbos = {
-        { 24, 24, LASCA_C }, { 58, 42, LASCA_A }, { 12, 58, LASCA_B },
-        { 44, 30, LASCA_D },
-        { 46, 8, FIO }, { 33, 45, FIO2 }, { 59, 26, FIO2 },
-        { 8, 15, TUFO },    -- junta horizontal y~16, junto à vertical x~8
-    },
-}
-
-local V4 = {
-    j = {
-        { 1, 9, 14, 10, 27, 8, 40, 10, 54, 9, 63, 10 },
-        { 1, 25, 15, 26, 29, 24, 43, 26, 56, 25, 63, 26 },
-        { 1, 40, 12, 41, 26, 39, 40, 41, 53, 40, 63, 41 },
-        { 1, 55, 16, 54, 30, 56, 44, 55, 57, 56, 63, 55 },
-        { 20, 1, 21, 9 }, { 45, 1, 44, 9 },
-        { 12, 10, 13, 25 }, { 34, 10, 33, 25 }, { 55, 10, 54, 25 },
-        { 8, 26, 8, 40 }, { 27, 26, 28, 40 }, { 46, 26, 45, 40 }, { 60, 26, 60, 40 },
-        { 18, 41, 19, 54 }, { 36, 41, 35, 55 }, { 52, 41, 53, 55 },
-    },
-    tons = {
-        { 10, 5, 'd' }, { 32, 5, 'a' }, { 55, 5, 'a' },
-        { 6, 17, 'a' }, { 24, 17, 'a' }, { 44, 17, 'a' }, { 59, 17, 'd' },
-        { 4, 33, 'a' }, { 18, 33, 'l' }, { 37, 33, 'a' }, { 53, 33, 'a' }, { 62, 33, 'a' },
-        { 9, 48, 'a' }, { 28, 48, 'a' }, { 44, 48, 'd' }, { 58, 48, 'a' },
-        { 8, 60, 'a' }, { 27, 60, 'a' }, { 44, 60, 'a' }, { 58, 60, 'l' },
-    },
-    carimbos = {
-        { 47, 18, LASCA_A }, { 22, 32, LASCA_B }, { 6, 48, LASCA_C },
-        { 38, 44, LASCA_D },
-        { 14, 60, FIO }, { 38, 33, FIO2 }, { 59, 5, FIO },
-        { 34, 9, TUFO2 },   -- junta horizontal y~10
-    },
+local legend = {
+    s = { ramp = 'stone', step = 4, h = 1 }, -- laje, tom base
+    S = { ramp = 'stone', step = 5, h = 1 }, -- laje clara
+    w = { ramp = 'stone', step = 3, h = 1 }, -- laje fria/úmida
+    L = { ramp = 'stone', step = 6, h = 2 }, -- filete da quina
+    V = { ramp = 'stone', step = 6, h = 1 }, -- laje lavada de sol
+    k = { ramp = 'stone', step = 2, h = 0 }, -- assento/lasca
+    j = { ramp = 'earth', step = 2, h = 0 }, -- junta de terra
+    e = { ramp = 'earth', step = 4, h = 0 }, -- barro acumulado no nó
+    g = { ramp = 'moss',  step = 2, h = 0 }, -- musgo no nó
 }
 
 return {
-    name = 'piso_laje',
-    w = 64, h = 64,
-    origin = 'topleft',
-    frameUse = 'variant', -- 4 frames = variantes por seed, nunca animação
-
-    legend = {
-        -- v3: faixa da rampa subiu ~2 degraus — a calçada lia quase-preta
-        -- contra a terra em luz plena do pátio (missão padrão-ouro, hub).
-        j = { ramp = 'stone', step = 2, h = 0 }, -- junta rebaixada
-        a = { ramp = 'stone', step = 5, h = 1 }, -- laje base
-        l = { ramp = 'stone', step = 6, h = 1 }, -- laje clara
-        d = { ramp = 'stone', step = 4, h = 1 }, -- laje sombreada / lasca
-        s = { ramp = 'stone', step = 7, h = 2 }, -- fio de desgaste
-        S = { ramp = 'stone', step = 8, h = 2 }, -- filete claro da lasca
-        g = { ramp = 'moss',  step = 2, h = 1 }, -- tufinho na junta
-        t = { ramp = 'moss',  step = 4, h = 2 }, -- lâmina do tufo
-    },
-
-    layers = {
-        {
-            name = 'piso',
-            h = 1,
-            albedo = { laje(V1), laje(V2), laje(V3), laje(V4) },
-        },
-    },
+    name = 'piso_laje', w = W, h = H, origin = 'topleft',
+    frameUse = 'variant',
+    legend = legend,
+    layers = { {
+        name = 'piso',
+        albedo = { K.string(laje(201)), K.string(laje(211)),
+                   K.string(laje(223)), K.string(laje(229)) },
+    } },
 }
