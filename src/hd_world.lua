@@ -676,7 +676,11 @@ local function tileOccluders(map)
     o = {}
     local wallRuns = {}
     for _, tile in pairs(map.tiles or {}) do
-        if tile.piece == 'wall' or tile.piece == 'portal' then
+        -- Portal é família de passagem, nunca de bloqueio (precedente da
+        -- Trilha): fora do occluder vivo e do bake da máscara do sol —
+        -- a célula da porta abre fresta na fileira em vez de virar muro
+        -- de height=192 projetando faixa.
+        if tile.piece == 'wall' then
             wallRuns[#wallRuns + 1] = tile
         end
     end
@@ -1001,9 +1005,23 @@ local function fillGBuffer(renderer, hd, s, campaign, v, map, t)
                 local tile = p.t2
                 local key = tile.piece == 'pillar' and 'pilar'
                     or tile.piece == 'portal' and 'porta' or 'parede'
-                local sh = s[key]
-                G.draw(sh[ch],
-                    s[key .. '_q'][Kit.variant(sh, tile.x, tile.y)],
+                local sh, qs = s[key], s[key .. '_q']
+                -- Arrimo vs arquitetura (separação do Pátio): a face de
+                -- rocha de cota — encosta norte do mirante, arrimos
+                -- y8-9/y29, bordas do mapa — é o muro do shell do
+                -- Region.build (marca protected=true); def.walls dentro
+                -- da massa são mureta/fachada. O sheet do Traço entra
+                -- POR NOME ('arrimo_face' ou 'parede_arrimo'); sem def
+                -- assada cai na 'parede' de sempre.
+                if tile.piece == 'wall' and tile.protected then
+                    if s.arrimo == nil then
+                        s.arrimo = Kit.bakeViaDSL('arrimo_face')
+                            or Kit.bakeViaDSL('parede_arrimo') or false
+                        s.arrimo_q = s.arrimo and Kit.quads(s.arrimo)
+                    end
+                    if s.arrimo then sh, qs = s.arrimo, s.arrimo_q end
+                end
+                G.draw(sh[ch], qs[Kit.variant(sh, tile.x, tile.y)],
                     (tile.x - 1) * CELL, (tile.y - 1) * CELL - (sh.h - CELL))
             elseif p.kind == 'prop' then
                 local sh, q = propQuad(renderer, s, p.p)
@@ -1757,6 +1775,18 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
             color(C.ink, .5)
             G.rectangle('fill', f.x * 2 - 2, f.y * 2 - 2, f.w * 2 + 4, 4)
             G.rectangle('fill', f.x * 2 - 2, f.y * 2 - 2, 4, f.h * 2 + 4)
+            -- Grade de célula (auditoria Bigorna): sob as pools de tocha
+            -- a borda de célula quase sumia — fio fino de tinta devolve
+            -- a leitura de alcance sem virar tabuleiro de xadrez.
+            color(C.ink, .38)
+            for gx = 1, f.w / 32 - 1 do
+                G.line(f.x * 2 + gx * 64, f.y * 2,
+                    f.x * 2 + gx * 64, (f.y + f.h) * 2)
+            end
+            for gy = 1, f.h / 32 - 1 do
+                G.line(f.x * 2, f.y * 2 + gy * 64,
+                    (f.x + f.w) * 2, f.y * 2 + gy * 64)
+            end
         end
         if not s.brazier then
             s.brazier = Kit.sheet('braseiro', 64, 96, nil)
@@ -1782,6 +1812,16 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
             if p.kind == 'tile' then
                 local tile = p.t2
                 if tile.piece == 'pillar' then
+                    if ch == 'albedo' then
+                        -- Célula ocupada (Bigorna): o pilar ganha o
+                        -- contorno de footprint que faltava no tabuleiro.
+                        color(C.ink, .22)
+                        G.rectangle('fill', (tile.x - 1) * CELL + 2,
+                            (tile.y - 1) * CELL + 2, CELL - 4, CELL - 4)
+                        color(C.ink, .5)
+                        G.rectangle('line', (tile.x - 1) * CELL + 2,
+                            (tile.y - 1) * CELL + 2, CELL - 4, CELL - 4)
+                    end
                     local sh = s.pilar
                     G.draw(sh[ch], s.pilar_q[1], (tile.x - 1) * CELL,
                         (tile.y - 1) * CELL - (sh.h - CELL))
@@ -1814,8 +1854,13 @@ function HDWorld.drawBattle(renderer, campaign, v, map, battle, shake)
                 end
                 if p.alpha then G.setColor(1, 1, 1, p.alpha) end
                 if ch == 'albedo' then
-                    color(C.ink, .34)
+                    -- Ocupação sob os pés (Bigorna): mancha de contato
+                    -- mais marcada + anel de célula — a unidade lê onde
+                    -- pisa mesmo dentro da pool de tocha.
+                    color(C.ink, .5)
                     G.ellipse('fill', p.fx, p.fy - 2, 15, 5)
+                    color(C.ink, .35)
+                    G.ellipse('line', p.fx, p.fy - 2, 17, 7)
                     color({1, 1, 1})
                 end
                 Kit.drawFeet(sh, q, ch, p.fx, p.fy)
