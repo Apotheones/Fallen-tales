@@ -335,8 +335,7 @@ function CampaignTest.run()
     Save.file = 'test_campaign_save.lua'
     Save.clear()
     local c = Campaign.new({legacy = true})
-    check(c.dialogue and c.dialogue.lines == LoreC.intro.lines, 'Awakening opens with the intro narration')
-    advance(c)
+    check(c.dialogue == nil, 'Awakening grants immediate control — no narration modal')
     check(c:stepDone('P01-E01'), 'Awakening step is recorded')
     check(c.map.id == 'colina' and c.player.grid.x == 6 and c.player.grid.y == 4, 'Spawn at the grave')
 
@@ -377,17 +376,20 @@ function CampaignTest.run()
     c.player.grid.x, c.player.grid.y = 9, 11
     check(c:interact() and c.dialogue, 'Pátio headstone is readable')
     advance(c)
-    -- A tampa junto de Doro: na diagonal a fala dele não alcança e a
-    -- inspeção vence — o ponto continua acessível com o NPC parado em cima.
-    c.player.grid.x, c.player.grid.y = 9, 4
-    check(c:interact() and c.dialogue, 'Grave lid inspects beside Doro')
+    -- A tampa examina pela célula abaixo da de Doro (spot em 8,4): de
+    -- (8,5) ela é o único alvo no alcance — abre o node dela, não a fala
+    -- do ferreiro (distinção pelo título, não só pela abertura).
+    c.player.grid.x, c.player.grid.y = 8, 5
+    check(c:interact() and c.dialogue and c.dialogue.title == 'TAMPA DA COVA',
+        'Grave lid inspects beside Doro')
     advance(c)
     -- D01 (Doro's arc): the coffin question only exists before the grade,
-    -- behind the metDoroFirst introduction.
-    c.player.grid.x, c.player.grid.y = 8, 4
+    -- behind the metDoroFirst introduction. De (9,3) Doro vence o placar —
+    -- o spot da tampa fica na diagonal e perde em qualquer facing.
+    c.player.grid.x, c.player.grid.y = 9, 3
     check(c:interact() and c.dialogue, 'Doro answers beside the grave')
     runTalk(c)
-    c.player.grid.x, c.player.grid.y = 8, 4
+    c.player.grid.x, c.player.grid.y = 9, 3
     check(c:interact() and c.dialogue, 'Doro takes the coffin question')
     runTalk(c, {1})
     check(c:stepDone('D01'), 'D01 completes on the coffin question')
@@ -892,9 +894,15 @@ function CampaignTest.run()
 
     -- Font coverage ------------------------------------------------------------------
     local list = {}
-    strings(LoreC.intro, list); strings(LoreC.hubArrival, list)
+    strings(LoreC.hubArrival, list)
+    for _, q in ipairs(LoreC.introCutscene) do strings(q, list) end
+    for _, beat in ipairs(LoreC.miranteReveal) do strings(beat, list) end
+    -- Node de resposta extraído pro módulo: dentro de option.action o
+    -- coletor não alcança (a cobertura passa por aqui).
+    strings(LoreC.runaConfrontoResposta, list)
     local probe = Campaign.new({legacy = true})
     probe.dialogue = nil
+    strings(LoreC.hotspot(probe, {id = 'marcaPartida'}), list)
     for id in pairs(LoreC.npcs) do
         local node = LoreC.talk(probe, id)
         if node then strings(node, list) end
@@ -1077,9 +1085,11 @@ function CampaignTest.percurso()
         runTalk(c)
         check(c:flag('casaco') and c:stepDone('P01-E02'), 'Belongings record the step')
         check(LoreC.objective(c):match('Runa'), 'Objective points at Runa')
-        c.player.grid.x, c.player.grid.y = 8, 4
+        -- De (9,3) Doro vence o placar do interact — o spot da tampa em
+        -- (8,4) fica na diagonal e perde em qualquer facing.
+        c.player.grid.x, c.player.grid.y = 9, 3
         c:interact(); runTalk(c) -- metDoroFirst introduction
-        c.player.grid.x, c.player.grid.y = 8, 4
+        c.player.grid.x, c.player.grid.y = 9, 3
         c:interact(); runTalk(c, {1}) -- E O CAIXÃO QUE SOBROU?
         check(c:stepDone('D01'), 'D01 through the real coffin question')
         c.player.grid.x, c.player.grid.y = 6, 16.4
@@ -1094,7 +1104,7 @@ function CampaignTest.percurso()
         end
         check(c.map.id == 'hub' and c:stepDone('P01-E04'),
             'Walking the descent lands at the refuge')
-        runTalk(c) -- hubArrival narration
+        runTalk(c) -- hubArrival narration (mapa legado; o refúgio novo revela no mirante)
         check(LoreC.objective(c):match('Refúgio'), 'Objective points inside the refuge')
     end
     local function hubLeg(c)
@@ -1481,16 +1491,16 @@ function CampaignTest.entrada()
     check(not Save.exists(), 'Só a confirmação do NOVA apaga o save')
 
     -- (3) Intro: introSeen persiste — 1x na campanha nova, nunca no volta --
-    check(#LoreC.introCutscene == 7, 'Abertura autoral: sete quadros')
+    check(#LoreC.introCutscene == 2, 'Abertura autoral: dois quadros')
     for _, q in ipairs(LoreC.introCutscene) do
         check(q.art ~= nil and q.lines and #q.lines > 0,
             'Quadro da abertura tem arte e legenda: ' .. tostring(q.art))
     end
     check((function()
-        for _, q in ipairs(LoreC.introCutscene) do
-            if q.art == 'viajante' then return true end
-        end
-    end)(), 'Abertura mostra a protagonista (quadro viajante)')
+        local arts = {}
+        for _, q in ipairs(LoreC.introCutscene) do arts[q.art] = true end
+        return arts.caixao and arts.tampa
+    end)(), 'Abertura cobre o caixão e a frincha da tampa')
     local c2 = Campaign.new({legacy = true})
     drain(c2)
     check(not c2:flag('introSeen'), 'Campanha nova arma a abertura uma vez')
@@ -1590,6 +1600,30 @@ function CampaignTest.entrada()
         'A rendição abre a grade — o acordo fica registrado')
     check(cR.data.people.runa.location == 'hub',
         'A Runa migra para o refúgio depois do acordo')
+
+    -- (8) Mirante HD (ABERTURA_HD, Ato 4) — refúgio novo: a chegada não
+    -- abre modal; as três inscrições disparam por distância no parapeito e
+    -- o panorama segura enquanto ela anda a cota.
+    cR:enter('hub', 'hub')
+    check(cR.map.id == 'hub' and cR.dialogue == nil,
+        'Refúgio novo: chegada ao mirante sem narração modal')
+    check(cR:stepDone('P01-E04'), 'P01-E04 registra a chegada ao refúgio')
+    local beats = 0
+    for _ = 1, 1200 do
+        if cR.dialogue then
+            beats = beats + 1
+            cR.dialogue.reveal = math.huge
+            cR:advanceDialogue()
+        else
+            cR:update(1 / 120, {dx = 1, dy = 0})
+        end
+        if beats >= 3 then break end
+    end
+    check(beats == 3, 'O mirante dispara as três inscrições por distância')
+    check(cR:flag('miranteVisto') and cR.data.flags.miranteBeat == 4,
+        'Mirante esgotado registra índice e flag de visto')
+    check((cR.panoramaTime or 0) > 0,
+        'O panorama segura enquanto ela anda a cota')
     Save.clear()
 
     print(string.format('%d ENTRADA ASSERTIONS PASSED', checks))
